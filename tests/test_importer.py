@@ -87,6 +87,14 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(keepout["owner"], "radio.U1")
         self.assertEqual(keepout["points_mm"], [[10,20],[10,18],[13,18]])
 
+    def test_pin_names_are_kept_for_labels_and_net_feedback(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) (net 1 "I2C_SCL")
+          (footprint "Sensor" (layer "F.Cu") (at 10 20) (property "Reference" "U1")
+            (pad "3" smd rect (at 1 0) (size 1 1) (layers "F.Cu") (net 1 "I2C_SCL") (pinfunction "SCL"))))'''
+        scene = import_pcb(data, "sensor.kicad_pcb")
+        self.assertEqual(scene["components"][0]["pads"][0]["pin_name"], "SCL")
+        self.assertEqual(scene["nets"][0]["pads"][0]["pin_name"], "SCL")
+
 
 if __name__ == "__main__":
     unittest.main()

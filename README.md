@@ -85,6 +85,12 @@ references, CopperScript paths, and net names are retained in both.
 - Toggle copper layers, reference labels, logical net guides, fills/zone intent,
   or isolate selected nets. Hidden layers remain in explicitly selected net
   snapshots; region queries use the visible layers recorded with the note.
+- Pad labels show the number and native pin name, falling back to the net name
+  when the PCB has no `pinfunction` field. Labels appear as you zoom in or focus
+  a component/net; pad hover always shows the full identity. Toggle them with
+  **Pad numbers / names**. Label text stays upright even on rotated pads.
+- Hover a pad, track, via, copper fill, or net in the explorer to highlight that
+  net's visible pads, tracks, vias, and fills without changing your selection.
 - Notes auto-save in browser local storage under the exact board hash. The same
   local port/browser profile is needed to reuse that storage. Export JSON for
   durable storage and sharing; local storage may be unavailable or reach quota.
@@ -103,6 +109,8 @@ and filled netted graphic copper exported by CopperScript. Curves are sampled
 with at most 0.01 mm chord error. Stored polygons are rendered as stored, including
 linked hole contours. Region intersections conservatively use pad bounding
 polygons and stroke-expanded boxes, so boundary hits can include nearby objects.
+Filled areas use even/odd hole rendering and are not outlined: the retraced
+connectors used to store hole contours are not physical edges or tracks.
 
 There is no DRC or connectivity solver. Logical net guides display membership,
 including already connected pads; they are not a verified ratsnest or open-net
@@ -133,6 +141,8 @@ node tests/browser.mjs "http://127.0.0.1:PORT/#token=TOKEN"
 The test verifies component/net/region annotations, geometry exports, edit/delete,
 review import, persistence, layer controls, and search. Artifacts go to ignored
 `test-results/`.
+`node tests/viewer-regressions.mjs "http://127.0.0.1:PORT/#token=TOKEN"` additionally
+checks linked-fill holes/connector pixels, pad labels, and transient whole-net hover.
 
 The project uses Python's standard library, buildless ES modules, and Canvas 2D.
 `copper_review/importer.py` is the file-to-scene adapter; `web/core.js` owns the

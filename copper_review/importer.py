@@ -208,6 +208,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
             if len(drill) == 1:
                 drill *= 2
             component["pads"].append({"id": identity(pad, f"pad:{index}:{pi}"), "number": pad[1], "net": net(pad),
+                "pin_name": first(pad, "pinfunction", ["pinfunction", ""])[1],
                 "position_mm": transform([number(pa[1]), number(pa[2])]), "size_mm": size,
                 "rotation_deg": number(pa[3]) if len(pa) > 3 else angle, "shape": pad[3], "kind": pad[2],
                 "layers": pad_layers, "drill_mm": drill[:2],
@@ -273,7 +274,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
     warnings.add("Curves are sampled to a maximum 0.01 mm chord error for display and region queries.")
     names = set(net_codes.values()) | {p["net"] for c in components for p in c["pads"]} | {t["net"] for t in tracks} | {v["net"] for v in vias} | {z["net"] for z in zones}
     nets = [{"name": name, "pads": [{"component": c["reference"], "source_path": c["source_path"],
-             "number": p["number"], "id": p["id"], "position_mm": p["position_mm"], "layers": p["layers"]}
+             "number": p["number"], "pin_name": p["pin_name"], "id": p["id"], "position_mm": p["position_mm"], "layers": p["layers"]}
              for c in components for p in c["pads"] if p["net"] == name]} for name in sorted(names) if name]
     return {"schema": SCENE_SCHEMA, "board": {"name": Path(filename).stem, "filename": Path(filename).name,
             "sha256": hashlib.sha256(data).hexdigest(), "stage": stage, "stage_evidence": "reviewer-declared; not connectivity validation",

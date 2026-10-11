@@ -32,6 +32,9 @@ Component `reference` is the native PCB label; `source_path` is the original
 paths and native reference spellings can differ. Net names remain exact,
 including hierarchy. Pad numbers are strings and repeated physical pads sharing
 one number remain distinguishable through IDs and positions.
+Pads may also contain `pin_name`, taken from the native `pinfunction` field.
+Missing/empty pin names use the exact net name for display; an electrical pin
+name is never inferred from a net name in the exported geometry.
 
 ## Each annotation
 

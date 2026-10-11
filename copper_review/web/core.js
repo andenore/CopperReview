@@ -3,6 +3,10 @@ export const REVIEW_SCHEMA = 'copper-review/v1';
 export const SCENE_SCHEMA = 'copper-review-scene/v1';
 export const round = value => Math.round(value * 1e6) / 1e6;
 export const clone = value => JSON.parse(JSON.stringify(value));
+export function padLabel(pad) {
+  const name=pad.pin_name || pad.net;
+  return name ? `${pad.number} · ${name}` : pad.number;
+}
 export function engineeringText(value) {
   // Format inherited scientific notation without floating-point rounding.
   return String(value).replace(/([+-]?)(\d+)(?:\.(\d*))?[eE]([+-]?\d+)/g,(_,sign,whole,fraction='',exponent)=>{
@@ -118,6 +122,7 @@ export function validateScene(scene) {
        !Array.isArray(c.graphics) || !c.graphics.every(gValid) || !Array.isArray(c.pads))fail();
     refs.add(c.reference);
     for(const p of c.pads)if(typeof p.id!=='string' || typeof p.number!=='string' || typeof p.net!=='string' ||
+       (p.pin_name!==undefined && typeof p.pin_name!=='string') ||
        !vector(p.position_mm) || !vector(p.size_mm) || p.size_mm.some(n=>n<=0) || !finite(p.rotation_deg) ||
        typeof p.shape!=='string' || !strings(p.layers) || !Array.isArray(p.drill_mm) ||
        ![0,2].includes(p.drill_mm.length) || !p.drill_mm.every(finite) || !finite(p.roundrect_ratio) || p.roundrect_ratio<0 || p.roundrect_ratio>.5)fail();

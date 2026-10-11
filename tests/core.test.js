@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {webcrypto} from 'node:crypto';
-import {engineeringText,segmentIntersectsBox,regionContext,makeAnnotation,makeReview,validateScene,validateReview,snapshotSelection} from '../copper_review/web/core.js';
+import {padLabel,engineeringText,segmentIntersectsBox,regionContext,makeAnnotation,makeReview,validateScene,validateReview,snapshotSelection} from '../copper_review/web/core.js';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const scene=JSON.parse(readFileSync(new URL('../examples/demo.scene.json',import.meta.url)));
+test('pad labels use pin names with truthful net and number fallbacks for older scenes',()=>{
+  assert.equal(padLabel({number:'3',pin_name:'SCL',net:'I2C_SCL'}),'3 · SCL');
+  assert.equal(padLabel({number:'3',net:'I2C_SCL'}),'3 · I2C_SCL');
+  assert.equal(padLabel({number:'NC',net:''}),'NC');
+});
 test('engineering labels display exact fixed-point fractions and units',()=>{
   assert.equal(engineeringText('1E+2 nF'),'100 nF');
   assert.equal(engineeringText('1.25E-3 mm'),'0.00125 mm');

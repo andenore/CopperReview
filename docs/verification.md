@@ -22,3 +22,16 @@
 These checks validate review-tool behavior and geometry extraction. They do not
 qualify the reviewed boards or establish electrical connectivity/DRC compliance.
 No input boards or CopperScript sources were modified by these checks.
+
+## Viewer fixes
+
+- Stored-fill contours now render filled areas and holes without stroking the
+  retraced connectors between contours. A pixel regression verifies that a long
+  horizontal connector matches the adjacent filled area and the hole stays empty.
+- Pad labels use the native pin name when available and the net name otherwise;
+  pad numbers remain visible, names stay upright, and labels can be toggled.
+- Net hover highlights every matching visible pad, track, via and fill in all
+  selection modes, and also works from the net explorer. Hover is transient,
+  preserves the annotation selection, and respects visible-layer filters.
+- 13 Python tests, 9 Node tests, the existing browser workflow, the viewer pixel
+  regression, and the real six-layer Tracker board browser check passed.
