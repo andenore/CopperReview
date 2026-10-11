@@ -35,3 +35,16 @@ No input boards or CopperScript sources were modified by these checks.
   preserves the annotation selection, and respects visible-layer filters.
 - 13 Python tests, 9 Node tests, the existing browser workflow, the viewer pixel
   regression, and the real six-layer Tracker board browser check passed.
+
+## Track joints
+
+- Tracks on each net/layer are rendered as one filled copper union, applying
+  opacity once across bends, branches, width changes and crossings. Physical
+  round-ended track geometry is preserved without overlapping stroke seams.
+- The geometry is cached per scene; canonical segment directions and duplicate
+  removal keep edge rendering stable for reversed/repeated source segments.
+- `tests/track-joints.mjs` passed pixel checks at device pixel ratios 1 and 2:
+  uniform interior colour, identical full-canvas raster for reordered/reversed
+  duplicates, zero-length segments, hover/dimming, zoom/pan and layer filtering.
+- The 9 Node tests, annotation browser workflow, fill/label/hover regression,
+  and real six-layer Tracker board browser check also passed after this change.

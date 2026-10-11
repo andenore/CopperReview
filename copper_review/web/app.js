@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
 const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
 const state={scene:null,selection:{components:[],nets:[],region:null},layers:[],annotations:[],tab:'components',mode:'component',
-  zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null};
+  zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[]};
 const palette=['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'];
 const copperColor = layer => palette[Math.max(0,state.scene.board.layers.indexOf(layer))%palette.length];
 const visible = layers => layers.some(l=>state.layers.includes(l));
@@ -27,6 +27,39 @@ function fit(bounds=state.scene?.board.bounds_mm) {
 function path(points,closed=false) {
   if(!points.length)return;
   ctx.beginPath();ctx.moveTo(...points[0]);for(const p of points.slice(1))ctx.lineTo(...p);if(closed)ctx.closePath();
+}
+function buildTrackCopper(tracks) {
+  const groups=new Map();
+  for(const track of tracks) {
+    const key=JSON.stringify([track.layer,track.net]);
+    if(!groups.has(key))groups.set(key,{layer:track.layer,net:track.net,path:new Path2D(),segments:new Map()});
+    const segments=groups.get(key).segments;
+    for(let i=1;i<track.points_mm.length;i++) {
+      let a=track.points_mm[i-1],b=track.points_mm[i];
+      if(a[0]>b[0] || (a[0]===b[0] && a[1]>b[1]))[a,b]=[b,a];
+      segments.set(JSON.stringify([track.width_mm,a,b]),{a,b,r:track.width_mm/2});
+    }
+  }
+  for(const group of groups.values()) {
+    const copper=group.path;
+    // A physical round-ended track is the union of capsules along its segments.
+    // All contours wind the same way, so one nonzero fill paints intersections
+    // once, even with different widths, branches, reversed or duplicate tracks.
+    // Canonical directions/order and duplicate removal also keep antialiasing
+    // stable when the source lists the same copper in a different order.
+    for(const [,segment] of [...group.segments].sort(([a],[b])=>a<b?-1:a>b?1:0)) {
+      const {a:[ax,ay],b:[bx,by],r}=segment;
+      const angle=Math.atan2(by-ay,bx-ax),start=angle-Math.PI/2;
+      copper.moveTo(ax+r*Math.cos(start),ay+r*Math.sin(start));
+      copper.lineTo(bx+r*Math.cos(start),by+r*Math.sin(start));
+      copper.arc(bx,by,r,start,start+Math.PI);
+      copper.lineTo(ax-r*Math.cos(start),ay-r*Math.sin(start));
+      copper.arc(ax,ay,r,start+Math.PI,start+2*Math.PI);
+      copper.closePath();
+    }
+    delete group.segments;
+  }
+  return [...groups.values()];
 }
 function isNetFocused(net) {return !!net && (net===state.hoverNet || state.selection.nets.includes(net));}
 function renderNet(net) {return !$('isolate').checked || !state.selection.nets.length || state.selection.nets.includes(net);}
@@ -93,11 +126,12 @@ function draw() {
     else {if(z.kind==='keepout'){ctx.globalAlpha*=.55;ctx.fill('evenodd');ctx.globalAlpha/= .55;}ctx.stroke();}
   }
   ctx.setLineDash([]);
-  for(const t of scene.tracks) {
+  for(const t of state.trackCopper) {
     if(!state.layers.includes(t.layer) || !renderNet(t.net))continue;
-    ctx.globalAlpha=opacity(t.net);ctx.strokeStyle=isNetFocused(t.net)?'#fff0b6':copperColor(t.layer);
-    ctx.lineWidth=t.width_mm;ctx.lineCap='round';ctx.lineJoin='round';path(t.points_mm);ctx.stroke();
+    ctx.globalAlpha=opacity(t.net);ctx.fillStyle=isNetFocused(t.net)?'#fff0b6':copperColor(t.layer);
+    ctx.fill(t.path,'nonzero');
   }
+  ctx.lineCap='round';ctx.lineJoin='round';
   for(const g of scene.drawings.filter(g=>g.layer!=='Edge.Cuts')) {
     const copper=g.layer.endsWith('.Cu');
     if(copper?!state.layers.includes(g.layer):g.layer.startsWith('B.')?!state.layers.includes('B.Cu'):g.layer.startsWith('F.')?!state.layers.includes('F.Cu'):false)continue;
@@ -230,7 +264,7 @@ function renderLayers() {
   }
 }
 function loadScene(scene) {
-  validateScene(scene);state.scene=scene;state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
+  validateScene(scene);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
   try{const saved=JSON.parse(localStorage.getItem(storageKey()) || 'null');if(saved){validateReview({schema:'copper-review/v1',board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=saved.annotations;$('summary').value=saved.summary || '';$('stage').value=saved.stage;}}catch{message('Saved local notes were invalid; load an exported review to recover them.',true);}
   $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
