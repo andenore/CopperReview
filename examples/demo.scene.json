@@ -1,0 +1,1170 @@
+{
+  "schema": "copper-review-scene/v1",
+  "board": {
+    "name": "demo",
+    "filename": "demo.kicad_pcb",
+    "sha256": "285a6e8932e10561bf8de9fca3783682b5eaeeff9734ebdfd5e18b9f5101b4f9",
+    "stage": "partially_routed",
+    "stage_evidence": "reviewer-declared; not connectivity validation",
+    "source": null,
+    "bounds_mm": [
+      0.0,
+      0.0,
+      50.0,
+      35.0
+    ],
+    "coordinates": {
+      "units": "mm",
+      "origin": "native PCB file origin",
+      "x_axis": "right",
+      "y_axis": "down",
+      "view": "front (back layers are not mirrored)",
+      "positive_rotation": "counterclockwise"
+    },
+    "layers": [
+      "F.Cu",
+      "B.Cu"
+    ]
+  },
+  "components": [
+    {
+      "id": "demo-u1",
+      "reference": "U1",
+      "source_path": "control.U1",
+      "value": "Controller",
+      "footprint": "Demo:Controller",
+      "position_mm": [
+        20.0,
+        17.0
+      ],
+      "rotation_deg": 0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "u1-p1",
+          "number": "1",
+          "net": "+3V3",
+          "position_mm": [
+            16.8,
+            15.0
+          ],
+          "size_mm": [
+            1.4,
+            0.7
+          ],
+          "rotation_deg": 0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.2
+        },
+        {
+          "id": "u1-p2",
+          "number": "2",
+          "net": "GND",
+          "position_mm": [
+            16.8,
+            17.0
+          ],
+          "size_mm": [
+            1.4,
+            0.7
+          ],
+          "rotation_deg": 0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.2
+        },
+        {
+          "id": "u1-p3",
+          "number": "3",
+          "net": "SENSOR_SCL",
+          "position_mm": [
+            23.2,
+            16.0
+          ],
+          "size_mm": [
+            1.4,
+            0.7
+          ],
+          "rotation_deg": 0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.2
+        },
+        {
+          "id": "u1-p4",
+          "number": "4",
+          "net": "SENSOR_SDA",
+          "position_mm": [
+            23.2,
+            18.0
+          ],
+          "size_mm": [
+            1.4,
+            0.7
+          ],
+          "rotation_deg": 0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.2
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              17.0,
+              14.0
+            ],
+            [
+              23.0,
+              14.0
+            ],
+            [
+              23.0,
+              20.0
+            ],
+            [
+              17.0,
+              20.0
+            ],
+            [
+              17.0,
+              14.0
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "bounds_mm": [
+        16.1,
+        14.0,
+        23.9,
+        20.0
+      ]
+    },
+    {
+      "id": "demo-u2",
+      "reference": "U2",
+      "source_path": "sensing.U2",
+      "value": "Sensor",
+      "footprint": "Demo:Sensor",
+      "position_mm": [
+        36.0,
+        17.0
+      ],
+      "rotation_deg": 0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "u2-p1",
+          "number": "1",
+          "net": "SENSOR_SCL",
+          "position_mm": [
+            34.0,
+            16.0
+          ],
+          "size_mm": [
+            1.2,
+            0.8
+          ],
+          "rotation_deg": 0,
+          "shape": "rect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "u2-p2",
+          "number": "2",
+          "net": "SENSOR_SDA",
+          "position_mm": [
+            34.0,
+            18.0
+          ],
+          "size_mm": [
+            1.2,
+            0.8
+          ],
+          "rotation_deg": 0,
+          "shape": "rect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "u2-p3",
+          "number": "3",
+          "net": "+3V3",
+          "position_mm": [
+            38.0,
+            16.0
+          ],
+          "size_mm": [
+            1.2,
+            0.8
+          ],
+          "rotation_deg": 0,
+          "shape": "rect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "u2-p4",
+          "number": "4",
+          "net": "GND",
+          "position_mm": [
+            38.0,
+            18.0
+          ],
+          "size_mm": [
+            1.2,
+            0.8
+          ],
+          "rotation_deg": 0,
+          "shape": "rect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              34.0,
+              15.0
+            ],
+            [
+              38.0,
+              15.0
+            ],
+            [
+              38.0,
+              19.0
+            ],
+            [
+              34.0,
+              19.0
+            ],
+            [
+              34.0,
+              15.0
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "bounds_mm": [
+        33.4,
+        15.0,
+        38.6,
+        19.0
+      ]
+    },
+    {
+      "id": "demo-c1",
+      "reference": "C1",
+      "source_path": "control.C1",
+      "value": "100 nF",
+      "footprint": "Demo:Capacitor",
+      "position_mm": [
+        13.0,
+        13.0
+      ],
+      "rotation_deg": 90.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "c1-p1",
+          "number": "1",
+          "net": "+3V3",
+          "position_mm": [
+            13.0,
+            14.0
+          ],
+          "size_mm": [
+            0.9,
+            0.8
+          ],
+          "rotation_deg": 90.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "c1-p2",
+          "number": "2",
+          "net": "GND",
+          "position_mm": [
+            13.0,
+            12.0
+          ],
+          "size_mm": [
+            0.9,
+            0.8
+          ],
+          "rotation_deg": 90.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              12.5,
+              14.0
+            ],
+            [
+              12.5,
+              12.0
+            ],
+            [
+              13.5,
+              12.0
+            ],
+            [
+              13.5,
+              14.0
+            ],
+            [
+              12.5,
+              14.0
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.1,
+          "filled": false
+        }
+      ],
+      "bounds_mm": [
+        12.5,
+        11.55,
+        13.5,
+        14.45
+      ]
+    },
+    {
+      "id": "demo-j1",
+      "reference": "J1",
+      "source_path": "power.J1",
+      "value": "Power in",
+      "footprint": "Demo:Connector",
+      "position_mm": [
+        7.0,
+        24.0
+      ],
+      "rotation_deg": 0,
+      "side": "back",
+      "locked": false,
+      "pads": [
+        {
+          "id": "j1-p1",
+          "number": "1",
+          "net": "+3V3",
+          "position_mm": [
+            7.0,
+            22.73
+          ],
+          "size_mm": [
+            2.0,
+            2.0
+          ],
+          "rotation_deg": 0,
+          "shape": "circle",
+          "kind": "thru_hole",
+          "layers": [
+            "F.Cu",
+            "B.Cu"
+          ],
+          "drill_mm": [
+            1.0,
+            1.0
+          ],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "j1-p2",
+          "number": "2",
+          "net": "GND",
+          "position_mm": [
+            7.0,
+            25.27
+          ],
+          "size_mm": [
+            2.0,
+            2.0
+          ],
+          "rotation_deg": 0,
+          "shape": "circle",
+          "kind": "thru_hole",
+          "layers": [
+            "F.Cu",
+            "B.Cu"
+          ],
+          "drill_mm": [
+            1.0,
+            1.0
+          ],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              5.0,
+              21.0
+            ],
+            [
+              9.0,
+              21.0
+            ],
+            [
+              9.0,
+              27.0
+            ],
+            [
+              5.0,
+              27.0
+            ],
+            [
+              5.0,
+              21.0
+            ]
+          ],
+          "layer": "B.SilkS",
+          "width_mm": 0.2,
+          "filled": false
+        }
+      ],
+      "bounds_mm": [
+        5.0,
+        21.0,
+        9.0,
+        27.0
+      ]
+    }
+  ],
+  "nets": [
+    {
+      "name": "+3V3",
+      "pads": [
+        {
+          "component": "U1",
+          "source_path": "control.U1",
+          "number": "1",
+          "id": "u1-p1",
+          "position_mm": [
+            16.8,
+            15.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U2",
+          "source_path": "sensing.U2",
+          "number": "3",
+          "id": "u2-p3",
+          "position_mm": [
+            38.0,
+            16.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "C1",
+          "source_path": "control.C1",
+          "number": "1",
+          "id": "c1-p1",
+          "position_mm": [
+            13.0,
+            14.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "J1",
+          "source_path": "power.J1",
+          "number": "1",
+          "id": "j1-p1",
+          "position_mm": [
+            7.0,
+            22.73
+          ],
+          "layers": [
+            "F.Cu",
+            "B.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GND",
+      "pads": [
+        {
+          "component": "U1",
+          "source_path": "control.U1",
+          "number": "2",
+          "id": "u1-p2",
+          "position_mm": [
+            16.8,
+            17.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U2",
+          "source_path": "sensing.U2",
+          "number": "4",
+          "id": "u2-p4",
+          "position_mm": [
+            38.0,
+            18.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "C1",
+          "source_path": "control.C1",
+          "number": "2",
+          "id": "c1-p2",
+          "position_mm": [
+            13.0,
+            12.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "J1",
+          "source_path": "power.J1",
+          "number": "2",
+          "id": "j1-p2",
+          "position_mm": [
+            7.0,
+            25.27
+          ],
+          "layers": [
+            "F.Cu",
+            "B.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SENSOR_SCL",
+      "pads": [
+        {
+          "component": "U1",
+          "source_path": "control.U1",
+          "number": "3",
+          "id": "u1-p3",
+          "position_mm": [
+            23.2,
+            16.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U2",
+          "source_path": "sensing.U2",
+          "number": "1",
+          "id": "u2-p1",
+          "position_mm": [
+            34.0,
+            16.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SENSOR_SDA",
+      "pads": [
+        {
+          "component": "U1",
+          "source_path": "control.U1",
+          "number": "4",
+          "id": "u1-p4",
+          "position_mm": [
+            23.2,
+            18.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U2",
+          "source_path": "sensing.U2",
+          "number": "2",
+          "id": "u2-p2",
+          "position_mm": [
+            34.0,
+            18.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "id": "scl-1",
+      "net": "SENSOR_SCL",
+      "points_mm": [
+        [
+          23.2,
+          16.0
+        ],
+        [
+          26.0,
+          18.8
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "scl-2",
+      "net": "SENSOR_SCL",
+      "points_mm": [
+        [
+          26.0,
+          18.8
+        ],
+        [
+          30.0,
+          18.8
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "scl-3",
+      "net": "SENSOR_SCL",
+      "points_mm": [
+        [
+          30.0,
+          18.8
+        ],
+        [
+          34.0,
+          16.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "sda-1",
+      "net": "SENSOR_SDA",
+      "points_mm": [
+        [
+          23.2,
+          18.0
+        ],
+        [
+          26.0,
+          15.2
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "sda-2",
+      "net": "SENSOR_SDA",
+      "points_mm": [
+        [
+          26.0,
+          15.2
+        ],
+        [
+          30.0,
+          15.2
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "sda-3",
+      "net": "SENSOR_SDA",
+      "points_mm": [
+        [
+          30.0,
+          15.2
+        ],
+        [
+          34.0,
+          18.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "power-1",
+      "net": "+3V3",
+      "points_mm": [
+        [
+          13.0,
+          14.0
+        ],
+        [
+          16.8,
+          15.0
+        ]
+      ],
+      "width_mm": 0.45,
+      "layer": "F.Cu"
+    }
+  ],
+  "vias": [
+    {
+      "id": "gnd-via",
+      "net": "GND",
+      "position_mm": [
+        15.0,
+        21.0
+      ],
+      "size_mm": 0.7,
+      "drill_mm": 0.3,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ]
+    }
+  ],
+  "zones": [
+    {
+      "id": "gnd-zone:0",
+      "net": "GND",
+      "points_mm": [
+        [
+          1.0,
+          1.0
+        ],
+        [
+          49.0,
+          1.0
+        ],
+        [
+          49.0,
+          34.0
+        ],
+        [
+          1.0,
+          34.0
+        ]
+      ],
+      "layers": [
+        "B.Cu"
+      ],
+      "kind": "intent"
+    },
+    {
+      "id": "gnd-zone:1",
+      "net": "GND",
+      "points_mm": [
+        [
+          5.0,
+          5.0
+        ],
+        [
+          45.0,
+          5.0
+        ],
+        [
+          45.0,
+          30.0
+        ],
+        [
+          5.0,
+          30.0
+        ]
+      ],
+      "layers": [
+        "B.Cu"
+      ],
+      "kind": "fill"
+    }
+  ],
+  "drawings": [
+    {
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          50.0,
+          0.0
+        ],
+        [
+          50.0,
+          35.0
+        ],
+        [
+          0.0,
+          35.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.1,
+      "filled": false
+    },
+    {
+      "points": [
+        [
+          4.2,
+          3.0
+        ],
+        [
+          4.176942336483877,
+          3.234108386419354
+        ],
+        [
+          4.108655439013544,
+          3.459220118838108
+        ],
+        [
+          3.9977635347630542,
+          3.6666842796235226
+        ],
+        [
+          3.848528137423857,
+          3.848528137423857
+        ],
+        [
+          3.6666842796235226,
+          3.9977635347630542
+        ],
+        [
+          3.459220118838108,
+          4.108655439013544
+        ],
+        [
+          3.234108386419354,
+          4.176942336483877
+        ],
+        [
+          3.0,
+          4.2
+        ],
+        [
+          2.765891613580646,
+          4.176942336483877
+        ],
+        [
+          2.5407798811618925,
+          4.108655439013544
+        ],
+        [
+          2.3333157203764774,
+          3.9977635347630547
+        ],
+        [
+          2.151471862576143,
+          3.848528137423857
+        ],
+        [
+          2.0022364652369453,
+          3.6666842796235226
+        ],
+        [
+          1.8913445609864556,
+          3.459220118838108
+        ],
+        [
+          1.8230576635161233,
+          3.2341083864193543
+        ],
+        [
+          1.7999999999999998,
+          3.0
+        ],
+        [
+          1.8230576635161233,
+          2.7658916135806457
+        ],
+        [
+          1.8913445609864556,
+          2.5407798811618925
+        ],
+        [
+          2.0022364652369453,
+          2.3333157203764774
+        ],
+        [
+          2.151471862576143,
+          2.151471862576143
+        ],
+        [
+          2.3333157203764774,
+          2.0022364652369458
+        ],
+        [
+          2.5407798811618916,
+          1.891344560986456
+        ],
+        [
+          2.7658916135806457,
+          1.8230576635161235
+        ],
+        [
+          3.0,
+          1.7999999999999998
+        ],
+        [
+          3.234108386419354,
+          1.8230576635161233
+        ],
+        [
+          3.459220118838108,
+          1.8913445609864559
+        ],
+        [
+          3.666684279623522,
+          2.0022364652369453
+        ],
+        [
+          3.848528137423857,
+          2.151471862576143
+        ],
+        [
+          3.9977635347630542,
+          2.3333157203764774
+        ],
+        [
+          4.108655439013544,
+          2.5407798811618916
+        ],
+        [
+          4.176942336483877,
+          2.7658916135806457
+        ],
+        [
+          4.2,
+          2.9999999999999996
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.1,
+      "filled": false
+    },
+    {
+      "points": [
+        [
+          48.2,
+          32.0
+        ],
+        [
+          48.176942336483876,
+          32.23410838641936
+        ],
+        [
+          48.108655439013546,
+          32.45922011883811
+        ],
+        [
+          47.99776353476306,
+          32.666684279623524
+        ],
+        [
+          47.84852813742386,
+          32.84852813742386
+        ],
+        [
+          47.666684279623524,
+          32.99776353476306
+        ],
+        [
+          47.45922011883811,
+          33.108655439013546
+        ],
+        [
+          47.23410838641936,
+          33.176942336483876
+        ],
+        [
+          47.0,
+          33.2
+        ],
+        [
+          46.76589161358064,
+          33.176942336483876
+        ],
+        [
+          46.54077988116189,
+          33.108655439013546
+        ],
+        [
+          46.333315720376476,
+          32.99776353476306
+        ],
+        [
+          46.15147186257614,
+          32.84852813742386
+        ],
+        [
+          46.00223646523694,
+          32.666684279623524
+        ],
+        [
+          45.891344560986454,
+          32.45922011883811
+        ],
+        [
+          45.823057663516124,
+          32.23410838641936
+        ],
+        [
+          45.8,
+          32.0
+        ],
+        [
+          45.823057663516124,
+          31.765891613580646
+        ],
+        [
+          45.891344560986454,
+          31.540779881161892
+        ],
+        [
+          46.00223646523694,
+          31.333315720376476
+        ],
+        [
+          46.15147186257614,
+          31.15147186257614
+        ],
+        [
+          46.333315720376476,
+          31.002236465236944
+        ],
+        [
+          46.54077988116189,
+          30.891344560986454
+        ],
+        [
+          46.76589161358064,
+          30.82305766351612
+        ],
+        [
+          47.0,
+          30.799999999999997
+        ],
+        [
+          47.23410838641936,
+          30.82305766351612
+        ],
+        [
+          47.45922011883811,
+          30.891344560986454
+        ],
+        [
+          47.666684279623524,
+          31.002236465236944
+        ],
+        [
+          47.848528137423855,
+          31.15147186257614
+        ],
+        [
+          47.99776353476306,
+          31.333315720376476
+        ],
+        [
+          48.108655439013546,
+          31.54077988116189
+        ],
+        [
+          48.176942336483876,
+          31.765891613580646
+        ],
+        [
+          48.2,
+          32.0
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.1,
+      "filled": false
+    }
+  ],
+  "warnings": [
+    "Curves are sampled to a maximum 0.01 mm chord error for display and region queries.",
+    "Filled polygons are displayed as stored; fills are not recomputed or electrically verified."
+  ]
+}

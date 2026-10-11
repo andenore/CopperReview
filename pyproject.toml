@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copper-review"
+version = "0.1.0"
+description = "Local PCB inspection and structured feedback for CopperScript"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+copper-review = "copper_review.__main__:main"
+
+[tool.setuptools.package-data]
+copper_review = ["web/*"]
+
+[tool.setuptools.packages.find]
+include = ["copper_review*"]

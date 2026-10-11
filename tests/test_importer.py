@@ -1,0 +1,92 @@
+import hashlib
+from pathlib import Path
+import unittest
+
+from copper_review.importer import import_pcb, parse, arc_points, rotate
+
+ROOT = Path(__file__).resolve().parents[1]
+DEMO = (ROOT / "examples/demo.kicad_pcb").read_bytes()
+
+
+class ImportTests(unittest.TestCase):
+    def test_actual_demo_identity_and_copper(self):
+        scene = import_pcb(DEMO, "demo.kicad_pcb", stage="partially_routed")
+        self.assertEqual(scene["board"]["sha256"], hashlib.sha256(DEMO).hexdigest())
+        self.assertEqual(scene["board"]["bounds_mm"], [0.0, 0.0, 50.0, 35.0])
+        self.assertEqual(len(scene["components"]), 4)
+        self.assertEqual(len(scene["tracks"]), 7)
+        self.assertEqual(scene["components"][0]["source_path"], "control.U1")
+        self.assertEqual({z["kind"] for z in scene["zones"]}, {"fill", "intent"})
+        self.assertEqual(scene["vias"][0]["net"], "GND")
+        self.assertEqual(len(next(n for n in scene["nets"] if n["name"] == "+3V3")["pads"]), 4)
+
+    def test_rotated_pad_positions_and_absolute_angles(self):
+        scene = import_pcb(DEMO, "demo.kicad_pcb")
+        cap = next(c for c in scene["components"] if c["reference"] == "C1")
+        self.assertEqual(cap["pads"][0]["position_mm"], [13.0, 14.0])
+        self.assertEqual(cap["pads"][0]["rotation_deg"], 90)
+        self.assertEqual(cap["pads"][1]["position_mm"], [13.0, 12.0])
+
+    def test_back_footprint_uses_file_reflection_once(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (net 1 "hierarchical.GND")
+          (footprint "X" (layer "B.Cu") (at 10 20 90)
+            (property "Reference" "B1") (property "CopperScriptPath" "power.input.B1")
+            (pad "A" smd rect (at 2 -3 45) (size 1 2) (layers "B.Cu") (net 1 "hierarchical.GND"))))'''
+        scene = import_pcb(data, "back.kicad_pcb")
+        c = scene["components"][0]
+        self.assertEqual(c["side"], "back")
+        self.assertEqual(c["pads"][0]["position_mm"], [7, 18])
+        self.assertEqual(c["pads"][0]["rotation_deg"], 45)
+        self.assertEqual(c["source_path"], "power.input.B1")
+
+    def test_through_hole_layers_and_blind_via_span(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (2 "In1.Cu" power) (4 "In2.Cu" power) (31 "B.Cu" signal))
+          (via blind (at 1 2) (size .6) (drill .3) (layers "F.Cu" "In2.Cu") (net 0)))'''
+        scene = import_pcb(data, "blind.kicad_pcb")
+        self.assertEqual(scene["vias"][0]["layers"], ["F.Cu", "In1.Cu", "In2.Cu"])
+        demo = import_pcb(DEMO, "demo.kicad_pcb")
+        j = next(c for c in demo["components"] if c["reference"] == "J1")
+        self.assertEqual(j["pads"][0]["layers"], ["F.Cu", "B.Cu"])
+
+    def test_arc_direction_and_error_bound(self):
+        points = arc_points([1, 0], [0, 1], [-1, 0])
+        self.assertEqual(points[0], [1, 0]); self.assertEqual(points[-1], [-1, 0])
+        self.assertTrue(all(p[1] >= -1e-9 for p in points))
+        for a,b in zip(points,points[1:]):
+            mid = [(a[0]+b[0])/2,(a[1]+b[1])/2]
+            self.assertLessEqual(1-(mid[0]**2+mid[1]**2)**.5, .0100001)
+        major = arc_points([1,0],[-1,0],[0,1])
+        self.assertTrue(any(p[1] < -.9 for p in major))
+
+    def test_names_and_invalid_input(self):
+        self.assertEqual(parse('(root "a \\"quoted\\" name" "path\\\\file")'), ['root', 'a "quoted" name', 'path\\file'])
+        for text in ['(bad', '()', '(root))', '(a)(b)', '"unterminated', '(' * 257 + ')' * 257]:
+            with self.subTest(text=text[:30]), self.assertRaises(ValueError):
+                import_pcb(text.encode(), "bad")
+        with self.assertRaises(ValueError):
+            import_pcb(b'(kicad_pcb (gr_line (start nan 0) (end 1 1)))', 'bad')
+
+    def test_stage_never_inferred_from_track_count(self):
+        scene = import_pcb(DEMO, "demo.kicad_pcb")
+        self.assertEqual(scene["board"]["stage"], "unknown")
+        self.assertIn("not connectivity validation", scene["board"]["stage_evidence"])
+
+    def test_netted_graphic_copper_and_rotated_footprint_keepout(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) (net 1 "GND")
+          (gr_poly (pts (xy 1 1) (xy 2 1) (xy 2 2)) (stroke (width 0) (type default))
+            (fill yes) (layer "F.Cu") (net 1) (uuid "polygon-id"))
+          (footprint "Test" (layer "B.Cu") (at 10 20 90) (property "Reference" "U1")
+            (property "CopperScriptPath" "radio.U1")
+            (zone (layer "B.Cu") (keepout (tracks not_allowed))
+              (polygon (pts (xy 0 0) (xy 2 0) (xy 2 3))))))'''
+        scene = import_pcb(data, "test.kicad_pcb")
+        copper = next(z for z in scene["zones"] if z["kind"] == "copper")
+        self.assertEqual(copper["net"], "GND")
+        keepout = next(z for z in scene["zones"] if z["kind"] == "keepout")
+        self.assertEqual(keepout["owner"], "radio.U1")
+        self.assertEqual(keepout["points_mm"], [[10,20],[10,18],[13,18]])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,654 @@
+{
+  "schema": "copper-review/v1",
+  "tool": {
+    "name": "CopperReview",
+    "version": "0.1.0"
+  },
+  "exported_at": "2026-10-11T14:18:18.533Z",
+  "board": {
+    "name": "demo",
+    "filename": "demo.kicad_pcb",
+    "sha256": "285a6e8932e10561bf8de9fca3783682b5eaeeff9734ebdfd5e18b9f5101b4f9",
+    "stage": "partially_routed",
+    "stage_evidence": "reviewer-declared; not connectivity validation",
+    "source": null,
+    "bounds_mm": [
+      0,
+      0,
+      50,
+      35
+    ],
+    "coordinates": {
+      "units": "mm",
+      "origin": "native PCB file origin",
+      "x_axis": "right",
+      "y_axis": "down",
+      "view": "front (back layers are not mirrored)",
+      "positive_rotation": "counterclockwise"
+    },
+    "layers": [
+      "F.Cu",
+      "B.Cu"
+    ]
+  },
+  "summary": "",
+  "geometry_counts": {
+    "components": 4,
+    "nets": 4,
+    "track_segments": 7,
+    "vias": 1,
+    "zone_polygons": 2
+  },
+  "inspection_limits": [
+    "Curves are sampled to a maximum 0.01 mm chord error for display and region queries.",
+    "Filled polygons are displayed as stored; fills are not recomputed or electrically verified.",
+    "Net guides show logical membership, not measured open connections.",
+    "Annotations are human observations and requests, not validated solver constraints or DRC results."
+  ],
+  "annotations": [
+    {
+      "id": "8358f57d-038b-49a6-b18e-71341a8bc4db",
+      "created_at": "2026-10-11T14:18:18.235Z",
+      "category": "placement",
+      "priority": "medium",
+      "status": "open",
+      "observation": "The package exits cross in front of U1.",
+      "desired_behavior": "Keep exit order while assigning routing corridors.",
+      "board_wide": false,
+      "selection": {
+        "components": [
+          "U1"
+        ],
+        "nets": [],
+        "region": null
+      },
+      "visible_layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "context": {
+        "components": [
+          {
+            "id": "demo-u1",
+            "reference": "U1",
+            "source_path": "control.U1",
+            "value": "Controller",
+            "footprint": "Demo:Controller",
+            "position_mm": [
+              20,
+              17
+            ],
+            "rotation_deg": 0,
+            "side": "front",
+            "locked": false,
+            "pads": [
+              {
+                "id": "u1-p1",
+                "number": "1",
+                "net": "+3V3",
+                "position_mm": [
+                  16.8,
+                  15
+                ],
+                "size_mm": [
+                  1.4,
+                  0.7
+                ],
+                "rotation_deg": 0,
+                "shape": "roundrect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.2
+              },
+              {
+                "id": "u1-p2",
+                "number": "2",
+                "net": "GND",
+                "position_mm": [
+                  16.8,
+                  17
+                ],
+                "size_mm": [
+                  1.4,
+                  0.7
+                ],
+                "rotation_deg": 0,
+                "shape": "roundrect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.2
+              },
+              {
+                "id": "u1-p3",
+                "number": "3",
+                "net": "SENSOR_SCL",
+                "position_mm": [
+                  23.2,
+                  16
+                ],
+                "size_mm": [
+                  1.4,
+                  0.7
+                ],
+                "rotation_deg": 0,
+                "shape": "roundrect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.2
+              },
+              {
+                "id": "u1-p4",
+                "number": "4",
+                "net": "SENSOR_SDA",
+                "position_mm": [
+                  23.2,
+                  18
+                ],
+                "size_mm": [
+                  1.4,
+                  0.7
+                ],
+                "rotation_deg": 0,
+                "shape": "roundrect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.2
+              }
+            ],
+            "graphics": [
+              {
+                "points": [
+                  [
+                    17,
+                    14
+                  ],
+                  [
+                    23,
+                    14
+                  ],
+                  [
+                    23,
+                    20
+                  ],
+                  [
+                    17,
+                    20
+                  ],
+                  [
+                    17,
+                    14
+                  ]
+                ],
+                "layer": "F.SilkS",
+                "width_mm": 0.15,
+                "filled": false
+              }
+            ],
+            "bounds_mm": [
+              16.1,
+              14,
+              23.9,
+              20
+            ]
+          }
+        ],
+        "nets": [],
+        "region": null
+      }
+    },
+    {
+      "id": "babd084f-b5b7-485a-bf6f-69e2120ff486",
+      "created_at": "2026-10-11T14:18:18.357Z",
+      "category": "routing",
+      "priority": "medium",
+      "status": "open",
+      "observation": "SCL takes a detour.",
+      "desired_behavior": "",
+      "board_wide": false,
+      "selection": {
+        "components": [],
+        "nets": [
+          "SENSOR_SCL"
+        ],
+        "region": null
+      },
+      "visible_layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "context": {
+        "components": [],
+        "nets": [
+          {
+            "name": "SENSOR_SCL",
+            "pads": [
+              {
+                "component": "U1",
+                "source_path": "control.U1",
+                "number": "3",
+                "id": "u1-p3",
+                "position_mm": [
+                  23.2,
+                  16
+                ],
+                "layers": [
+                  "F.Cu"
+                ]
+              },
+              {
+                "component": "U2",
+                "source_path": "sensing.U2",
+                "number": "1",
+                "id": "u2-p1",
+                "position_mm": [
+                  34,
+                  16
+                ],
+                "layers": [
+                  "F.Cu"
+                ]
+              }
+            ],
+            "tracks": [
+              {
+                "id": "scl-1",
+                "net": "SENSOR_SCL",
+                "points_mm": [
+                  [
+                    23.2,
+                    16
+                  ],
+                  [
+                    26,
+                    18.8
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "scl-2",
+                "net": "SENSOR_SCL",
+                "points_mm": [
+                  [
+                    26,
+                    18.8
+                  ],
+                  [
+                    30,
+                    18.8
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "scl-3",
+                "net": "SENSOR_SCL",
+                "points_mm": [
+                  [
+                    30,
+                    18.8
+                  ],
+                  [
+                    34,
+                    16
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              }
+            ],
+            "vias": [],
+            "zones": []
+          }
+        ],
+        "region": null
+      }
+    },
+    {
+      "id": "5d4e386d-ab7f-4cd3-94a9-d3e43b6837af",
+      "created_at": "2026-10-11T14:18:18.498Z",
+      "category": "routing",
+      "priority": "medium",
+      "status": "open",
+      "observation": "Reserve this region before area routing.",
+      "desired_behavior": "Add a corridor planning heuristic.",
+      "board_wide": false,
+      "selection": {
+        "components": [],
+        "nets": [],
+        "region": [
+          22.142256,
+          12.132155,
+          33.573232,
+          24.046295
+        ]
+      },
+      "visible_layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "context": {
+        "components": [],
+        "nets": [],
+        "region": {
+          "bounds_mm": [
+            22.142256,
+            12.132155,
+            33.573232,
+            24.046295
+          ],
+          "query_layers": [
+            "F.Cu",
+            "B.Cu"
+          ],
+          "query_precision": "conservative intersection; pad bounding polygons and stroke-expanded boxes; arcs sampled <=0.01 mm",
+          "context": {
+            "components": [
+              {
+                "reference": "U1",
+                "source_path": "control.U1",
+                "position_mm": [
+                  20,
+                  17
+                ],
+                "rotation_deg": 0,
+                "side": "front",
+                "locked": false,
+                "bounds_mm": [
+                  16.1,
+                  14,
+                  23.9,
+                  20
+                ]
+              },
+              {
+                "reference": "U2",
+                "source_path": "sensing.U2",
+                "position_mm": [
+                  36,
+                  17
+                ],
+                "rotation_deg": 0,
+                "side": "front",
+                "locked": false,
+                "bounds_mm": [
+                  33.4,
+                  15,
+                  38.6,
+                  19
+                ]
+              }
+            ],
+            "nets": [
+              "GND",
+              "SENSOR_SCL",
+              "SENSOR_SDA"
+            ],
+            "pads": [
+              {
+                "component": "U1",
+                "source_path": "control.U1",
+                "id": "u1-p3",
+                "number": "3",
+                "net": "SENSOR_SCL",
+                "position_mm": [
+                  23.2,
+                  16
+                ],
+                "size_mm": [
+                  1.4,
+                  0.7
+                ],
+                "rotation_deg": 0,
+                "shape": "roundrect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.2
+              },
+              {
+                "component": "U1",
+                "source_path": "control.U1",
+                "id": "u1-p4",
+                "number": "4",
+                "net": "SENSOR_SDA",
+                "position_mm": [
+                  23.2,
+                  18
+                ],
+                "size_mm": [
+                  1.4,
+                  0.7
+                ],
+                "rotation_deg": 0,
+                "shape": "roundrect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.2
+              },
+              {
+                "component": "U2",
+                "source_path": "sensing.U2",
+                "id": "u2-p1",
+                "number": "1",
+                "net": "SENSOR_SCL",
+                "position_mm": [
+                  34,
+                  16
+                ],
+                "size_mm": [
+                  1.2,
+                  0.8
+                ],
+                "rotation_deg": 0,
+                "shape": "rect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.25
+              },
+              {
+                "component": "U2",
+                "source_path": "sensing.U2",
+                "id": "u2-p2",
+                "number": "2",
+                "net": "SENSOR_SDA",
+                "position_mm": [
+                  34,
+                  18
+                ],
+                "size_mm": [
+                  1.2,
+                  0.8
+                ],
+                "rotation_deg": 0,
+                "shape": "rect",
+                "kind": "smd",
+                "layers": [
+                  "F.Cu"
+                ],
+                "drill_mm": [],
+                "roundrect_ratio": 0.25
+              }
+            ],
+            "tracks": [
+              {
+                "id": "scl-1",
+                "net": "SENSOR_SCL",
+                "points_mm": [
+                  [
+                    23.2,
+                    16
+                  ],
+                  [
+                    26,
+                    18.8
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "scl-2",
+                "net": "SENSOR_SCL",
+                "points_mm": [
+                  [
+                    26,
+                    18.8
+                  ],
+                  [
+                    30,
+                    18.8
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "scl-3",
+                "net": "SENSOR_SCL",
+                "points_mm": [
+                  [
+                    30,
+                    18.8
+                  ],
+                  [
+                    34,
+                    16
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "sda-1",
+                "net": "SENSOR_SDA",
+                "points_mm": [
+                  [
+                    23.2,
+                    18
+                  ],
+                  [
+                    26,
+                    15.2
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "sda-2",
+                "net": "SENSOR_SDA",
+                "points_mm": [
+                  [
+                    26,
+                    15.2
+                  ],
+                  [
+                    30,
+                    15.2
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              },
+              {
+                "id": "sda-3",
+                "net": "SENSOR_SDA",
+                "points_mm": [
+                  [
+                    30,
+                    15.2
+                  ],
+                  [
+                    34,
+                    18
+                  ]
+                ],
+                "width_mm": 0.25,
+                "layer": "F.Cu"
+              }
+            ],
+            "vias": [],
+            "zones": [
+              {
+                "id": "gnd-zone:0",
+                "net": "GND",
+                "points_mm": [
+                  [
+                    1,
+                    1
+                  ],
+                  [
+                    49,
+                    1
+                  ],
+                  [
+                    49,
+                    34
+                  ],
+                  [
+                    1,
+                    34
+                  ]
+                ],
+                "layers": [
+                  "B.Cu"
+                ],
+                "kind": "intent"
+              },
+              {
+                "id": "gnd-zone:1",
+                "net": "GND",
+                "points_mm": [
+                  [
+                    5,
+                    5
+                  ],
+                  [
+                    45,
+                    5
+                  ],
+                  [
+                    45,
+                    30
+                  ],
+                  [
+                    5,
+                    30
+                  ]
+                ],
+                "layers": [
+                  "B.Cu"
+                ],
+                "kind": "fill"
+              }
+            ],
+            "drawings": []
+          }
+        }
+      }
+    }
+  ]
+}
