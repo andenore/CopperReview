@@ -78,6 +78,22 @@ scene on another computer, then load its review. The scene is for the viewer;
 the review is the file to paste into a prompt. Native object UUIDs, component
 references, CopperScript paths, and net names are retained in both.
 
+## Mechanical review and constraint feedback
+
+Inspect the exported board outline, cutouts, footprint geometry, drills and
+keepouts alongside placed components and copper. Use a **Mechanical** annotation
+to record connector placement, mounting clearance or other visible fit concerns;
+select the affected component or region so the feedback keeps its exact board
+identity and geometry.
+
+Geometry and constraint authoring belong in CopperScript's
+[mechanical/floorplan editor](https://github.com/andenore/CopperScript/blob/main/docs/mechanical-editor.md).
+There you can preview placement and review source changes for board geometry,
+poses and supported constraints. CopperReview supplies observations for that next
+iteration; it does not edit `.copper` intent, enforce solver constraints or verify
+3D enclosure clearance. Features absent from the PCB export cannot be recovered
+from the drawing alone.
+
 ## Viewing and storage
 
 - Wheel: zoom under the pointer. Right/middle-drag: pan. **Fit board**: overview.
