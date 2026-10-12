@@ -27,6 +27,9 @@ class ServerTests(unittest.TestCase):
         with self.request('/') as response:
             self.assertIn(b'CopperReview',response.read())
             self.assertIn("frame-ancestors 'none'",response.headers['Content-Security-Policy'])
+        with self.request('/copper-logo.svg') as response:
+            self.assertEqual(response.headers['Content-Type'], 'image/svg+xml')
+            self.assertIn(b'Copper Cu mark', response.read())
         with self.assertRaises(HTTPError) as ctx:
             self.request('/api/scene')
         self.assertEqual(ctx.exception.code,403)

@@ -63,7 +63,8 @@ def make_handler(initial_scene, token):
             files = {"/": ("index.html", "text/html; charset=utf-8"),
                      "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                      "/core.js": ("core.js", "text/javascript; charset=utf-8"),
-                     "/style.css": ("style.css", "text/css; charset=utf-8")}
+                     "/style.css": ("style.css", "text/css; charset=utf-8"),
+                     "/copper-logo.svg": ("copper-logo.svg", "image/svg+xml")}
             if path not in files:
                 self.send(404, {"error": "Not found"})
                 return
