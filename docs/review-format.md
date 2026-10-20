@@ -1,15 +1,17 @@
-# Review output contract: `copper-review/v1`
+# Review output contract: `copper-review/v2`
 
 The preferred LLM input is `<board>.review.json`. It combines observations with
-enough selected geometry to locate the issue and design a reproducer, without
-requiring the whole board to be pasted. A scene file is a separate portable
+identities, summaries and region-clipped geometry: enough to locate the issue
+and design a reproducer, small enough to paste (a net or component annotation
+is a few KB even on a large filled board, and a small region well under 25 KB).
+Full geometry stays in the PCB and the scene. A scene file is a separate portable
 viewer artifact and is usually unnecessary in a prompt.
 
 ## Board identity and coordinates
 
 | Field | Meaning |
 | --- | --- |
-| `schema` | `copper-review/v1`, incompatible changes require a new version |
+| `schema` | `copper-review/v2`, incompatible changes require a new version (v1 files still load; see below) |
 | `board.filename`, `board.name` | Input PCB filename and review name |
 | `board.sha256` | SHA-256 of the exact native PCB bytes; a scene retains this hash |
 | `board.source` | Optional entry-source filename and SHA-256, set using `--source` |
@@ -27,7 +29,10 @@ Display precision is three decimal places; exported geometry retains its numeric
 precision. Region bounds are rounded to six decimals (one nanometre). Native
 UUIDs are retained when present; fallback IDs are stable within this exact file.
 
-Component `reference` is the native PCB label; `source_path` is the original
+Component `reference` is the native PCB label, unique within a scene. A blank or
+repeated native reference (logos, fiducials, copied footprints) is named
+`<reference or footprint name>#n` in file order and the original text is kept in
+`native_reference`; a warning reports how many. `source_path` is the original
 `CopperScriptPath` property when available. Preserve both: hierarchical source
 paths and native reference spellings can differ. Net names remain exact,
 including hierarchy. Pad numbers are strings and repeated physical pads sharing
@@ -60,19 +65,49 @@ reconsider a suggested heuristic while still addressing the reported defect.
 
 `region` can be null. `board_wide` permits a note with no selectors.
 
-`context` snapshots geometry at save time:
+`context` (`format: "compact/v2"`) summarises the selection at save time. It
+names objects by native UUID, reference, net and pad number instead of copying
+their full geometry:
 
-- `components`: selected component poses, side, footprint, source path, bounds,
-  lock status, pads/net associations/drills, and footprint graphics.
-- `nets`: selected nets' complete pad membership with positions and source
-  paths, plus tracks with widths/layers, vias with drills/layer spans, and zones.
-  Tracks preserve segment vertices; arcs also retain their native start/mid/end.
-  This covers all layers, even when the reviewer has some hidden.
-- `region`: rectangle bounds, query layers, query precision, and intersecting
-  component poses, pads, tracks, vias, zone/keepout polygons, net names, and board
-  drawings (including unnetted copper and outline segments). Components use
-  all-side body bounds; copper geometry uses recorded query layers. Intersection
-  is conservative, not an electrical-clearance calculation.
+- `components`: id, reference (plus `native_reference` when renamed), source
+  path, value, footprint, pose, side, lock status, bounds, `pad_count` and
+  `graphics_count`. Up to 64 pads are listed with id, number, pin name, net,
+  position, size, rotation (omitted when 0), shape, layers and drill; larger
+  packages list `pads_by_net` (net name to pad numbers) instead.
+- `nets`: `pad_count`, the pads (component, number, pin name, position) when
+  there are at most 64, otherwise `pads_by_component`; copper `bounds_mm`;
+  `tracks_by_layer` (segment count, total length, widths); `vias` (count, count
+  per layer span, size/drill pairs); and `zones` as summaries (id, kind, layers,
+  owner, bounds, point count, area). This covers all layers, even hidden ones.
+- `region`: rectangle bounds, query layers, query precision, and the objects
+  that intersect it: component poses and bounds, pads (as above), tracks with
+  only the segments that touch the region (`points_mm`, or `runs_mm` for several
+  runs; arcs keep their native start/mid/end), vias, zones as summaries plus
+  `clipped_points_mm` (the outline clipped to the region, 0.1 um precision; a
+  fill's hole contours stay linked by bridges, so read it even-odd) or, beyond
+  200 clipped points, `clipped_point_count` and `clipped_bounds_mm`, and board
+  drawings clipped the same way. Components use all-side body bounds; copper
+  uses the recorded query layers. Intersection is conservative, not an
+  electrical-clearance calculation.
+
+When a CopperScript issue list was loaded (**Load issues**, from
+`copper issues RUN --json`), an annotation may cite issue ids: `issues` lists
+them and `context.issues` keeps each cited issue's id, stage, code, title,
+count, nets, mm window and `caused_by`. The review then carries
+`copperscript_issues`: the run path and status, the board hashes from the issue
+list and `board_verified` (false when the list had no hash, so CopperReview
+could not confirm it belongs to this board). Issue ids are only meaningful for
+that run; a new run renumbers them.
+
+Lists are capped (region: 60 components, 120 pads, 160 tracks, 100 vias, 40
+zones, 40 drawings; 40 zones per net). A capped list keeps its first items in
+scene order and `truncated` gives its full count; select a smaller region or
+open the scene for the rest.
+
+v1 reviews copied complete objects (all of a net's tracks, vias and fill
+polygons, whole intersecting zones) into each context. CopperReview still opens
+them: on load it validates the selection against the hash-identical board and
+rebuilds every context in this format, so a re-export is v2.
 
 Zone `kind` distinguishes `intent` (desired area), `fill` (stored polygon),
 `keepout` (restriction), and `copper` (explicit netted graphic copper).

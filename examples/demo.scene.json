@@ -45,6 +45,7 @@
           "id": "u1-p1",
           "number": "1",
           "net": "+3V3",
+          "pin_name": "",
           "position_mm": [
             16.8,
             15.0
@@ -66,6 +67,7 @@
           "id": "u1-p2",
           "number": "2",
           "net": "GND",
+          "pin_name": "",
           "position_mm": [
             16.8,
             17.0
@@ -87,6 +89,7 @@
           "id": "u1-p3",
           "number": "3",
           "net": "SENSOR_SCL",
+          "pin_name": "",
           "position_mm": [
             23.2,
             16.0
@@ -108,6 +111,7 @@
           "id": "u1-p4",
           "number": "4",
           "net": "SENSOR_SDA",
+          "pin_name": "",
           "position_mm": [
             23.2,
             18.0
@@ -180,6 +184,7 @@
           "id": "u2-p1",
           "number": "1",
           "net": "SENSOR_SCL",
+          "pin_name": "",
           "position_mm": [
             34.0,
             16.0
@@ -201,6 +206,7 @@
           "id": "u2-p2",
           "number": "2",
           "net": "SENSOR_SDA",
+          "pin_name": "",
           "position_mm": [
             34.0,
             18.0
@@ -222,6 +228,7 @@
           "id": "u2-p3",
           "number": "3",
           "net": "+3V3",
+          "pin_name": "",
           "position_mm": [
             38.0,
             16.0
@@ -243,6 +250,7 @@
           "id": "u2-p4",
           "number": "4",
           "net": "GND",
+          "pin_name": "",
           "position_mm": [
             38.0,
             18.0
@@ -315,6 +323,7 @@
           "id": "c1-p1",
           "number": "1",
           "net": "+3V3",
+          "pin_name": "",
           "position_mm": [
             13.0,
             14.0
@@ -336,6 +345,7 @@
           "id": "c1-p2",
           "number": "2",
           "net": "GND",
+          "pin_name": "",
           "position_mm": [
             13.0,
             12.0
@@ -408,6 +418,7 @@
           "id": "j1-p1",
           "number": "1",
           "net": "+3V3",
+          "pin_name": "",
           "position_mm": [
             7.0,
             22.73
@@ -433,6 +444,7 @@
           "id": "j1-p2",
           "number": "2",
           "net": "GND",
+          "pin_name": "",
           "position_mm": [
             7.0,
             25.27
@@ -500,6 +512,7 @@
           "component": "U1",
           "source_path": "control.U1",
           "number": "1",
+          "pin_name": "",
           "id": "u1-p1",
           "position_mm": [
             16.8,
@@ -513,6 +526,7 @@
           "component": "U2",
           "source_path": "sensing.U2",
           "number": "3",
+          "pin_name": "",
           "id": "u2-p3",
           "position_mm": [
             38.0,
@@ -526,6 +540,7 @@
           "component": "C1",
           "source_path": "control.C1",
           "number": "1",
+          "pin_name": "",
           "id": "c1-p1",
           "position_mm": [
             13.0,
@@ -539,6 +554,7 @@
           "component": "J1",
           "source_path": "power.J1",
           "number": "1",
+          "pin_name": "",
           "id": "j1-p1",
           "position_mm": [
             7.0,
@@ -558,6 +574,7 @@
           "component": "U1",
           "source_path": "control.U1",
           "number": "2",
+          "pin_name": "",
           "id": "u1-p2",
           "position_mm": [
             16.8,
@@ -571,6 +588,7 @@
           "component": "U2",
           "source_path": "sensing.U2",
           "number": "4",
+          "pin_name": "",
           "id": "u2-p4",
           "position_mm": [
             38.0,
@@ -584,6 +602,7 @@
           "component": "C1",
           "source_path": "control.C1",
           "number": "2",
+          "pin_name": "",
           "id": "c1-p2",
           "position_mm": [
             13.0,
@@ -597,6 +616,7 @@
           "component": "J1",
           "source_path": "power.J1",
           "number": "2",
+          "pin_name": "",
           "id": "j1-p2",
           "position_mm": [
             7.0,
@@ -616,6 +636,7 @@
           "component": "U1",
           "source_path": "control.U1",
           "number": "3",
+          "pin_name": "",
           "id": "u1-p3",
           "position_mm": [
             23.2,
@@ -629,6 +650,7 @@
           "component": "U2",
           "source_path": "sensing.U2",
           "number": "1",
+          "pin_name": "",
           "id": "u2-p1",
           "position_mm": [
             34.0,
@@ -647,6 +669,7 @@
           "component": "U1",
           "source_path": "control.U1",
           "number": "4",
+          "pin_name": "",
           "id": "u1-p4",
           "position_mm": [
             23.2,
@@ -660,6 +683,7 @@
           "component": "U2",
           "source_path": "sensing.U2",
           "number": "2",
+          "pin_name": "",
           "id": "u2-p2",
           "position_mm": [
             34.0,

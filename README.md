@@ -56,6 +56,11 @@ CopperScript export commands produce the input; no compiler changes are needed.
 4. Write what you observe and the behavior you want improved. Choose category,
    priority, and status; click **Add annotation**. Use **Board-wide observation**
    for a feature request that does not refer to specific geometry.
+   To tie a note to a CopperScript run, save the run's issue list with
+   `copper issues RUN --json > issues.json` and click **Load issues**. Issue
+   windows are drawn on the board and listed in the **Issues** tab; clicking one
+   frames it, selects its window as a region and fills **Cites CopperScript
+   issues**. The list is rejected when its board hash differs from the open board.
 5. Click a saved note to inspect/edit it. Set it to resolved when addressed.
    Add a review summary and **Export review JSON** or **Copy JSON to clipboard**.
 6. Paste the file contents into an LLM prompt with the relevant CopperScript
@@ -67,7 +72,7 @@ CopperScript export commands produce the input; no compiler changes are needed.
    > behavior. Build a small reproducer, preserve existing placement/macro intent,
    > and test the algorithm rather than adding a board-specific repair.
 
-Review files are saved as `<board>.review.json`, schema `copper-review/v1`.
+Review files are saved as `<board>.review.json`, schema `copper-review/v2`.
 See [the output contract](docs/review-format.md), [JSON Schema](docs/review.schema.json),
 and [the complete example review](examples/demo.review.json).
 
@@ -98,6 +103,8 @@ from the drawing alone.
 
 - Wheel: zoom under the pointer. Right/middle-drag: pan. **Fit board**: overview.
 - Keyboard: C component, N net, R region, F fit, Escape clear (outside form fields).
+- Reference labels never overlap: selected parts and larger bodies win, and the
+  status bar counts labels waiting for more zoom.
 - Toggle copper layers, reference labels, logical net guides, fills/zone intent,
   or isolate selected nets. Hidden layers remain in explicitly selected net
   snapshots; region queries use the visible layers recorded with the note.
@@ -120,7 +127,9 @@ from the drawing alone.
 Supported: front/back footprints and their local graphics; circular, oval,
 rectangular and rounded pads; through/NPTH drills; straight and modern arc
 tracks; through/blind/buried via layer spans; polygon/line/arc/circle outlines and
-cutouts; board and footprint-local zone intent/keepouts; stored filled polygons;
+cutouts; board and footprint zones (stored in board coordinates) as intent,
+keepouts and stored filled polygons; footprints with blank or repeated references
+(named `<reference or footprint>#n`, original kept as `native_reference`);
 and filled netted graphic copper exported by CopperScript. Curves are sampled
 with at most 0.01 mm chord error. Stored polygons are rendered as stored, including
 linked hole contours. Region intersections conservatively use pad bounding
@@ -158,7 +167,10 @@ The test verifies component/net/region annotations, geometry exports, edit/delet
 review import, persistence, layer controls, and search. Artifacts go to ignored
 `test-results/`.
 `node tests/viewer-regressions.mjs "http://127.0.0.1:PORT/#token=TOKEN"` additionally
-checks linked-fill holes/connector pixels, pad labels, and transient whole-net hover.
+checks linked-fill holes/connector pixels, pad labels, and transient whole-net hover;
+`node tests/issues-labels.mjs URL` checks issue loading/citation and label thinning.
+`tests/fixtures/kicad-conformance` is a KiCad 9 board with hand-derived expectations
+shared with CopperScript's KiCad reader (keep both copies identical).
 
 The project uses Python's standard library, buildless ES modules, and Canvas 2D.
 `copper_review/importer.py` is the file-to-scene adapter; `web/core.js` owns the

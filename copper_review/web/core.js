@@ -1,5 +1,8 @@
 /* Pure geometry and review contract, also exercised by Node's built-in tests. */
-export const REVIEW_SCHEMA = 'copper-review/v1';
+export const REVIEW_SCHEMA = 'copper-review/v2';
+// v1 reviews (full geometry copies in each context) still load; their contexts are recomputed.
+export const READABLE_REVIEW_SCHEMAS = ['copper-review/v1', REVIEW_SCHEMA];
+export const TOOL_VERSION = '0.2.0';
 export const SCENE_SCHEMA = 'copper-review-scene/v1';
 export const round = value => Math.round(value * 1e6) / 1e6;
 export const clone = value => JSON.parse(JSON.stringify(value));
@@ -55,48 +58,172 @@ export function padCorners(pad) {
   const [w,h]=pad.size_mm, [x,y]=pad.position_mm, r=pad.rotation_deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
   return [[-w/2,-h/2],[w/2,-h/2],[w/2,h/2],[-w/2,h/2]].map(([a,b])=>[x+a*c+b*s,y-a*s+b*c]);
 }
+// Annotation context limits. A review is pasted into prompts, so it carries
+// identities and summaries; the scene (or the PCB) holds the full geometry.
+export const CONTEXT_LIMITS = {list_pads:64, region_components:60, region_pads:120, region_tracks:160,
+  region_vias:100, region_zones:40, region_drawings:40, net_zones:40, clipped_points:200};
+const r6 = p => [round(p[0]),round(p[1])];
+// Clipped outlines are derived geometry: 0.1 um is ample and keeps them short.
+const r4 = p => [Math.round(p[0]*1e4)/1e4,Math.round(p[1]*1e4)/1e4];
+const boundsOf = points => points.length ? [Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1])),
+  Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1]))].map(round) : null;
+function mergeBounds(list) {
+  const valid=list.filter(Boolean);if(!valid.length)return null;
+  return [Math.min(...valid.map(b=>b[0])),Math.min(...valid.map(b=>b[1])),Math.max(...valid.map(b=>b[2])),Math.max(...valid.map(b=>b[3]))];
+}
+export function polygonArea(points) {
+  let a=0;for(let i=0,j=points.length-1;i<points.length;j=i++)a+=(points[j][0]+points[i][0])*(points[j][1]-points[i][1]);
+  return Math.abs(a)/2;
+}
+/** Sutherland-Hodgman clip of a polygon (holes linked by bridges are kept as such) to a rectangle. */
+export function clipPolygonToBox(points,box) {
+  let out=points;
+  const edges=[[p=>p[0]>=box[0],(a,b)=>[box[0],a[1]+(b[1]-a[1])*(box[0]-a[0])/(b[0]-a[0])]],
+    [p=>p[0]<=box[2],(a,b)=>[box[2],a[1]+(b[1]-a[1])*(box[2]-a[0])/(b[0]-a[0])]],
+    [p=>p[1]>=box[1],(a,b)=>[a[0]+(b[0]-a[0])*(box[1]-a[1])/(b[1]-a[1]),box[1]]],
+    [p=>p[1]<=box[3],(a,b)=>[a[0]+(b[0]-a[0])*(box[3]-a[1])/(b[1]-a[1]),box[3]]]];
+  for(const [inside,cut] of edges) {
+    const input=out;out=[];if(!input.length)break;
+    for(let i=0;i<input.length;i++) {
+      const cur=input[i],prev=input[(i+input.length-1)%input.length];
+      if(inside(cur)){if(!inside(prev))out.push(cut(prev,cur));out.push(cur);}
+      else if(inside(prev))out.push(cut(prev,cur));
+    }
+  }
+  const unique=[];for(const p of out.map(r4))if(!unique.length || unique.at(-1)[0]!==p[0] || unique.at(-1)[1]!==p[1])unique.push(p);
+  return unique.length>=3 ? unique : [];
+}
+/** Runs of consecutive polyline segments touching the box (expanded by half the stroke). */
+function polylineRuns(points,box,halfWidth) {
+  const runs=[];let run=null;const query=[box[0]-halfWidth,box[1]-halfWidth,box[2]+halfWidth,box[3]+halfWidth];
+  for(let i=1;i<points.length;i++) {
+    if(segmentIntersectsBox(points[i-1],points[i],query)){if(!run){run=[r6(points[i-1])];runs.push(run);}run.push(r6(points[i]));}
+    else run=null;
+  }
+  return runs;
+}
+const capped = (items,limit,name,truncated) => {if(items.length>limit)truncated[name]=items.length;return items.slice(0,limit);};
+const padBrief = (p,component) => ({...(component?{component}:{}),number:p.number,...(p.pin_name?{pin_name:p.pin_name}:{}),
+  position_mm:r6(p.position_mm)});
+const padDetail = p => ({id:p.id,number:p.number,...(p.pin_name?{pin_name:p.pin_name}:{}),net:p.net,position_mm:r6(p.position_mm),
+  size_mm:r6(p.size_mm),...(p.rotation_deg?{rotation_deg:p.rotation_deg}:{}),shape:p.shape,layers:[...p.layers],
+  ...(p.drill_mm.length?{drill_mm:[...p.drill_mm]}:{})});
+const zoneBrief = z => ({id:z.id,net:z.net,kind:z.kind,layers:[...z.layers],...(z.owner?{owner:z.owner}:{}),
+  bounds_mm:boundsOf(z.points_mm),point_count:z.points_mm.length,area_mm2:round(polygonArea(z.points_mm))});
+function groupNumbers(pads,key) {
+  const groups={};for(const p of pads)(groups[p[key]] ??= []).push(p.number);return groups;
+}
+export function componentContext(c) {
+  const many=c.pads.length>CONTEXT_LIMITS.list_pads;
+  return {id:c.id,reference:c.reference,...(c.native_reference!==undefined?{native_reference:c.native_reference}:{}),
+    source_path:c.source_path,value:c.value ?? '',footprint:c.footprint ?? '',position_mm:r6(c.position_mm),rotation_deg:c.rotation_deg,
+    side:c.side,locked:!!c.locked,bounds_mm:c.bounds_mm.map(round),pad_count:c.pads.length,
+    ...(many?{pads_by_net:groupNumbers(c.pads,'net')}:{pads:c.pads.map(padDetail)}),graphics_count:c.graphics.length};
+}
+export function netContext(scene,net) {
+  const tracks=scene.tracks.filter(t=>t.net===net.name),vias=scene.vias.filter(v=>v.net===net.name),zones=scene.zones.filter(z=>z.net===net.name);
+  const byLayer={};
+  for(const t of tracks){const l=(byLayer[t.layer] ??= {segments:0,length_mm:0,widths_mm:new Set()});
+    l.segments+=t.points_mm.length-1;l.widths_mm.add(t.width_mm);
+    for(let i=1;i<t.points_mm.length;i++)l.length_mm+=Math.hypot(t.points_mm[i][0]-t.points_mm[i-1][0],t.points_mm[i][1]-t.points_mm[i-1][1]);}
+  for(const l of Object.values(byLayer)){l.length_mm=round(l.length_mm);l.widths_mm=[...l.widths_mm].sort((a,b)=>a-b);}
+  const spans={};for(const v of vias){const key=`${v.layers[0]}-${v.layers.at(-1)}`;spans[key]=(spans[key] || 0)+1;}
+  const truncated={},many=net.pads.length>CONTEXT_LIMITS.list_pads;
+  const bounds=mergeBounds([boundsOf(net.pads.map(p=>p.position_mm)),...tracks.map(t=>boundsOf(t.points_mm)),
+    boundsOf(vias.map(v=>v.position_mm)),...zones.map(z=>boundsOf(z.points_mm))]);
+  return {name:net.name,pad_count:net.pads.length,
+    ...(many?{pads_by_component:groupNumbers(net.pads,'component')}:{pads:net.pads.map(p=>padBrief(p,p.component))}),
+    bounds_mm:bounds && bounds.map(round),tracks_by_layer:byLayer,
+    vias:{count:vias.length,by_span:spans,sizes_mm:[...new Set(vias.map(v=>`${v.size_mm}/${v.drill_mm}`))].sort()},
+    zones:capped(zones.map(zoneBrief),CONTEXT_LIMITS.net_zones,'zones',truncated),
+    ...(Object.keys(truncated).length?{truncated}:{})};
+}
 export function regionContext(scene,box,layers) {
-  const visible = ls => ls.some(l=>layers.includes(l));
+  const L=CONTEXT_LIMITS,truncated={},visible = ls => ls.some(l=>layers.includes(l));
   const components=scene.components.filter(c=>boxesOverlap(c.bounds_mm,box)).map(c=>({reference:c.reference,
-    source_path:c.source_path,position_mm:clone(c.position_mm),rotation_deg:c.rotation_deg,side:c.side,locked:c.locked,bounds_mm:clone(c.bounds_mm)}));
+    source_path:c.source_path,position_mm:r6(c.position_mm),rotation_deg:c.rotation_deg,side:c.side,locked:!!c.locked,bounds_mm:c.bounds_mm.map(round)}));
   const pads=scene.components.flatMap(c=>c.pads.filter(p=>visible(p.layers) && polygonIntersectsBox(padCorners(p),box))
-    .map(p=>({component:c.reference,source_path:c.source_path,...clone(p)})));
-  const tracks=scene.tracks.filter(t=>layers.includes(t.layer) && t.points_mm.slice(1).some((p,i)=>segmentIntersectsBox(t.points_mm[i],p,expand(box,t.width_mm/2))));
-  const vias=scene.vias.filter(v=>visible(v.layers) && pointInBox(v.position_mm,expand(box,v.size_mm/2)));
-  const zones=scene.zones.filter(z=>visible(z.layers) && polygonIntersectsBox(z.points_mm,box));
+    .map(p=>({component:c.reference,...padDetail(p)})));
+  const tracks=scene.tracks.filter(t=>layers.includes(t.layer)).map(t=>({t,runs:polylineRuns(t.points_mm,box,t.width_mm/2)}))
+    .filter(x=>x.runs.length).map(({t,runs})=>({id:t.id,net:t.net,layer:t.layer,width_mm:t.width_mm,
+      ...(t.arc?{arc:{start_mm:r6(t.arc.start_mm),mid_mm:r6(t.arc.mid_mm),end_mm:r6(t.arc.end_mm)}}:{}),
+      // Only the part inside the region; arcs keep their native start/mid/end.
+      points_mm:t.arc?undefined:runs.length===1?runs[0]:undefined,...(t.arc || runs.length===1?{}:{runs_mm:runs})}))
+    .map(t=>JSON.parse(JSON.stringify(t)));
+  const vias=scene.vias.filter(v=>visible(v.layers) && pointInBox(v.position_mm,expand(box,v.size_mm/2)))
+    .map(v=>({id:v.id,net:v.net,position_mm:r6(v.position_mm),size_mm:v.size_mm,drill_mm:v.drill_mm,layers:[...v.layers]}));
+  const zones=scene.zones.filter(z=>visible(z.layers) && polygonIntersectsBox(z.points_mm,box)).map(z=>{
+    const clipped=clipPolygonToBox(z.points_mm,box),brief=zoneBrief(z);
+    return {...brief,...(clipped.length<=L.clipped_points?{clipped_points_mm:clipped}:{clipped_point_count:clipped.length,
+      clipped_bounds_mm:boundsOf(clipped)})};
+  });
   const nets=[...new Set([...pads,...tracks,...vias,...zones].map(p=>p.net).filter(Boolean))].sort();
-  const drawings=scene.drawings.filter(g=>(layers.includes(g.layer) || g.layer==='Edge.Cuts') &&
-    (g.filled ? polygonIntersectsBox(g.points,box) : g.points.slice(1).some((p,i)=>segmentIntersectsBox(g.points[i],p,expand(box,g.width_mm/2)))));
-  return {components,nets,pads,tracks:clone(tracks),vias:clone(vias),zones:clone(zones),drawings:clone(drawings)};
+  const drawings=scene.drawings.filter(g=>layers.includes(g.layer) || g.layer==='Edge.Cuts').map(g=>{
+    if(g.filled){const clipped=polygonIntersectsBox(g.points,box)?clipPolygonToBox(g.points,box):[];
+      return clipped.length?{layer:g.layer,width_mm:g.width_mm,filled:true,clipped_points_mm:clipped}:null;}
+    const runs=polylineRuns(g.points,box,g.width_mm/2);
+    return runs.length?{layer:g.layer,width_mm:g.width_mm,filled:false,runs_mm:runs}:null;
+  }).filter(Boolean);
+  return {components:capped(components,L.region_components,'components',truncated),nets,
+    pads:capped(pads,L.region_pads,'pads',truncated),tracks:capped(tracks,L.region_tracks,'tracks',truncated),
+    vias:capped(vias,L.region_vias,'vias',truncated),zones:capped(zones,L.region_zones,'zones',truncated),
+    drawings:capped(drawings,L.region_drawings,'drawings',truncated),...(Object.keys(truncated).length?{truncated}:{})};
 }
 export function snapshotSelection(scene,selection,layers) {
   const selectedComponents=scene.components.filter(c=>selection.components.includes(c.reference));
   const selectedNets=scene.nets.filter(n=>selection.nets.includes(n.name));
-  const tracked=scene.tracks.filter(t=>selection.nets.includes(t.net));
-  const vias=scene.vias.filter(v=>selection.nets.includes(v.net));
-  return {components:selectedComponents.map(c=>clone(c)), nets:selectedNets.map(n=>({...clone(n),
-    tracks:clone(tracked.filter(t=>t.net===n.name)),vias:clone(vias.filter(v=>v.net===n.name)),
-    zones:clone(scene.zones.filter(z=>z.net===n.name))})),
+  return {format:'compact/v2',components:selectedComponents.map(componentContext),nets:selectedNets.map(n=>netContext(scene,n)),
     region:selection.region ? {bounds_mm:selection.region.map(round), query_layers:[...layers],
-      query_precision:'conservative intersection; pad bounding polygons and stroke-expanded boxes; arcs sampled <=0.01 mm',
+      query_precision:'conservative intersection; pad bounding polygons and stroke-expanded boxes; arcs sampled <=0.01 mm; '+
+        'tracks, drawings and zones clipped to the region',
       context:regionContext(scene,selection.region,layers)} : null};
 }
 export function makeAnnotation(scene,selection,layers,fields,id=globalThis.crypto.randomUUID()) {
   if(!fields.observation.trim()) throw new Error('Write an observation before saving.');
-  if(!selection.components.length && !selection.nets.length && !selection.region && !fields.boardWide)
-    throw new Error('Select a component, net, region, or enable a board-wide note.');
+  const cited=fields.issues || [];
+  if(!selection.components.length && !selection.nets.length && !selection.region && !fields.boardWide && !cited.length)
+    throw new Error('Select a component, net, region, cite an issue, or enable a board-wide note.');
+  const context=snapshotSelection(scene,selection,layers);
+  if(cited.length)context.issues=cited.map(issueBrief);
   return {id,created_at:new Date().toISOString(),category:fields.category,priority:fields.priority,
     status:fields.status || 'open',observation:fields.observation.trim(),desired_behavior:fields.desired_behavior.trim(),
     board_wide:!!fields.boardWide,selection:clone(selection),visible_layers:[...layers],
-    context:snapshotSelection(scene,selection,layers)};
+    ...(cited.length?{issues:cited.map(i=>i.id)}:{}),context};
 }
-export function makeReview(scene,annotations,stage,summary) {
-  return {schema:REVIEW_SCHEMA,tool:{name:'CopperReview',version:'0.1.0'},exported_at:new Date().toISOString(),
+// CopperScript `copper issues RUN --json` documents, shown as framed windows.
+export const ISSUES_SCHEMA = 'copperscript.run-issues/v1';
+const issueBrief = i => ({id:i.id,stage:i.stage,code:i.code,title:i.title,count:i.count,
+  nets:[...(i.nets || [])],window_mm:i.window_mm ? [...i.window_mm] : null,...(i.caused_by?{caused_by:i.caused_by}:{})});
+export function validateIssues(doc,scene) {
+  if(doc?.schema!==ISSUES_SCHEMA || !Array.isArray(doc.issues))
+    throw new Error('Not a CopperScript issue list. Save one with: copper issues RUN --json > issues.json');
+  const hashes=[doc.board_sha256,doc.filled_board_sha256].filter(h=>typeof h==='string');
+  if(hashes.length && !hashes.includes(scene.board.sha256))
+    throw new Error("These issues belong to a different board revision. Open that run's board.kicad_pcb (or its refilled board) first.");
+  const ids=new Set();
+  doc.issues.forEach((i,n)=>{
+    const where=`issues[${n}]`;
+    if(typeof i?.id!=='string' || !i.id || ids.has(i.id))throw new Error(`Invalid issue list: ${where}.id must be a unique string.`);
+    ids.add(i.id);
+    if(typeof i.code!=='string' || typeof i.title!=='string')throw new Error(`Invalid issue list: ${where} (${i.id}) needs code and title.`);
+    if(i.window_mm!==null && i.window_mm!==undefined && !(Array.isArray(i.window_mm) && i.window_mm.length===4 &&
+       i.window_mm.every(v=>typeof v==='number' && Number.isFinite(v)) && i.window_mm[0]<=i.window_mm[2] && i.window_mm[1]<=i.window_mm[3]))
+      throw new Error(`Invalid issue list: ${where} (${i.id}).window_mm must be [x0,y0,x1,y1] mm.`);
+    if(i.nets!==undefined && !(Array.isArray(i.nets) && i.nets.every(s=>typeof s==='string')))throw new Error(`Invalid issue list: ${where} (${i.id}).nets must be strings.`);
+  });
+  return {source:{schema:ISSUES_SCHEMA,run:typeof doc.run==='string'?doc.run:null,status:doc.status ?? null,
+    board_sha256:doc.board_sha256 ?? null,filled_board_sha256:doc.filled_board_sha256 ?? null,
+    board_verified:hashes.length>0,omitted:Number.isInteger(doc.omitted)?doc.omitted:0},
+    issues:doc.issues.map(issueBrief)};
+}
+export function makeReview(scene,annotations,stage,summary,issueSource=null) {
+  return {schema:REVIEW_SCHEMA,tool:{name:'CopperReview',version:TOOL_VERSION},exported_at:new Date().toISOString(),
     board:{...clone(scene.board),stage,stage_evidence:'reviewer-declared; not connectivity validation'},
     summary:summary.trim(),geometry_counts:{components:scene.components.length,nets:scene.nets.length,
       track_segments:scene.tracks.length,vias:scene.vias.length,zone_polygons:scene.zones.length},
     inspection_limits:[...scene.warnings,'Net guides show logical membership, not measured open connections.',
       'Annotations are human observations and requests, not validated solver constraints or DRC results.'],
+    ...(issueSource && annotations.some(a=>a.issues?.length)?{copperscript_issues:clone(issueSource)}:{}),
     annotations:clone(annotations)};
 }
 export function validateScene(scene) {
@@ -106,40 +233,63 @@ export function validateScene(scene) {
     if(!Array.isArray(scene[key])) throw new Error(`Invalid scene: ${key}`);
   if(!Array.isArray(scene.board.layers) || !Array.isArray(scene.board.bounds_mm) || scene.board.bounds_mm.length!==4 ||
      scene.board.bounds_mm.some(n=>typeof n!=='number' || !Number.isFinite(n))) throw new Error('Invalid board coordinates');
-  const fail=()=>{throw new Error('Invalid scene geometry or identity.');};
+  // Each failure names the object (index plus id/reference/name) and the field.
+  const fail=(where,field,why='is invalid')=>{throw new Error(`Invalid scene geometry or identity: ${where}.${field} ${why}.`);};
   const finite=n=>typeof n==='number' && Number.isFinite(n) && Math.abs(n)<=1e8;
   const vector=(v,len=2)=>Array.isArray(v) && v.length===len && v.every(finite);
   const strings=v=>Array.isArray(v) && v.every(s=>typeof s==='string');
   const points=v=>Array.isArray(v) && v.every(p=>vector(p));
-  const gValid=g=>points(g.points) && typeof g.layer==='string' && finite(g.width_mm) && g.width_mm>=0 && typeof g.filled==='boolean';
-  if(scene.board.coordinates?.units!=='mm' || scene.board.coordinates?.x_axis!=='right' || scene.board.coordinates?.y_axis!=='down' ||
-     !strings(scene.board.layers) || !strings(scene.warnings) || typeof scene.board.name!=='string' ||
-     scene.board.bounds_mm[0]>scene.board.bounds_mm[2] || scene.board.bounds_mm[1]>scene.board.bounds_mm[3])fail();
+  const label=(kind,i,o,key='id')=>`${kind}[${i}]${o && typeof o[key]==='string' && o[key]?` (${o[key]})`:''}`;
+  const check=(ok,where,field,why)=>{if(!ok)fail(where,field,why);};
+  const graphicCheck=(g,where)=>{check(points(g.points),where,'points','must be [x,y] mm pairs');check(typeof g.layer==='string',where,'layer');
+    check(finite(g.width_mm) && g.width_mm>=0,where,'width_mm','must be a finite width >= 0');check(typeof g.filled==='boolean',where,'filled','must be true/false');};
+  const coordinates=scene.board.coordinates;
+  for(const [key,value] of [['units','mm'],['x_axis','right'],['y_axis','down']])
+    check(coordinates?.[key]===value,'board',`coordinates.${key}`,`must be "${value}"`);
+  check(strings(scene.board.layers),'board','layers','must be layer names');check(strings(scene.warnings),'scene','warnings','must be strings');
+  check(typeof scene.board.name==='string','board','name','must be a string');
+  check(scene.board.bounds_mm[0]<=scene.board.bounds_mm[2] && scene.board.bounds_mm[1]<=scene.board.bounds_mm[3],'board','bounds_mm','must be ascending');
   const refs=new Set();
-  for(const c of scene.components){
-    if(typeof c.reference!=='string' || refs.has(c.reference) || typeof c.source_path!=='string' || typeof c.id!=='string' ||
-       !vector(c.position_mm) || !vector(c.bounds_mm,4) || !finite(c.rotation_deg) || !['front','back'].includes(c.side) ||
-       !Array.isArray(c.graphics) || !c.graphics.every(gValid) || !Array.isArray(c.pads))fail();
+  scene.components.forEach((c,i)=>{
+    const where=label('components',i,c,'reference');
+    check(typeof c.reference==='string' && c.reference!=='',where,'reference','must be a non-empty string');
+    check(!refs.has(c.reference),where,'reference','repeats an earlier component (import the PCB again to disambiguate)');
     refs.add(c.reference);
-    for(const p of c.pads)if(typeof p.id!=='string' || typeof p.number!=='string' || typeof p.net!=='string' ||
-       (p.pin_name!==undefined && typeof p.pin_name!=='string') ||
-       !vector(p.position_mm) || !vector(p.size_mm) || p.size_mm.some(n=>n<=0) || !finite(p.rotation_deg) ||
-       typeof p.shape!=='string' || !strings(p.layers) || !Array.isArray(p.drill_mm) ||
-       ![0,2].includes(p.drill_mm.length) || !p.drill_mm.every(finite) || !finite(p.roundrect_ratio) || p.roundrect_ratio<0 || p.roundrect_ratio>.5)fail();
-  }
-  for(const t of scene.tracks)if(typeof t.id!=='string' || typeof t.net!=='string' || !points(t.points_mm) || t.points_mm.length<2 ||
-    !finite(t.width_mm) || t.width_mm<=0 || typeof t.layer!=='string')fail();
-  for(const v of scene.vias)if(typeof v.id!=='string' || typeof v.net!=='string' || !vector(v.position_mm) ||
-    !finite(v.size_mm) || v.size_mm<=0 || !finite(v.drill_mm) || v.drill_mm<=0 || !strings(v.layers))fail();
-  for(const z of scene.zones)if(typeof z.id!=='string' || typeof z.net!=='string' || !points(z.points_mm) ||
-    !strings(z.layers) || !['intent','fill','keepout','copper'].includes(z.kind))fail();
-  for(const n of scene.nets)if(typeof n.name!=='string' || !Array.isArray(n.pads) ||
-    !n.pads.every(p=>typeof p.component==='string' && typeof p.number==='string' && vector(p.position_mm) && strings(p.layers)))fail();
-  if(!scene.drawings.every(gValid))fail();
+    check(c.native_reference===undefined || typeof c.native_reference==='string',where,'native_reference');
+    check(typeof c.source_path==='string',where,'source_path');check(typeof c.id==='string',where,'id');
+    check(vector(c.position_mm),where,'position_mm','must be [x,y] mm');check(vector(c.bounds_mm,4),where,'bounds_mm','must be 4 numbers');
+    check(finite(c.rotation_deg),where,'rotation_deg');check(['front','back'].includes(c.side),where,'side','must be front or back');
+    check(Array.isArray(c.graphics),where,'graphics','must be a list');c.graphics.forEach((g,j)=>graphicCheck(g,`${where}.graphics[${j}]`));
+    check(Array.isArray(c.pads),where,'pads','must be a list');
+    c.pads.forEach((p,j)=>{const at=`${where}.pads[${j}]${typeof p.number==='string'?` (${p.number})`:''}`;
+      check(typeof p.id==='string',at,'id');check(typeof p.number==='string',at,'number','must be a string');check(typeof p.net==='string',at,'net','must be a string');
+      check(p.pin_name===undefined || typeof p.pin_name==='string',at,'pin_name');
+      check(vector(p.position_mm),at,'position_mm','must be [x,y] mm');check(vector(p.size_mm) && p.size_mm.every(n=>n>0),at,'size_mm','must be two positive mm values');
+      check(finite(p.rotation_deg),at,'rotation_deg');check(typeof p.shape==='string',at,'shape');check(strings(p.layers),at,'layers','must be layer names');
+      check(Array.isArray(p.drill_mm) && [0,2].includes(p.drill_mm.length) && p.drill_mm.every(finite),at,'drill_mm','must be [] or [x,y] mm');
+      check(finite(p.roundrect_ratio) && p.roundrect_ratio>=0 && p.roundrect_ratio<=.5,at,'roundrect_ratio','must be within 0..0.5');});
+  });
+  scene.tracks.forEach((t,i)=>{const where=label('tracks',i,t);
+    check(typeof t.id==='string',where,'id');check(typeof t.net==='string',where,'net','must be a string');
+    check(points(t.points_mm) && t.points_mm.length>=2,where,'points_mm','must hold at least two [x,y] mm points');
+    check(finite(t.width_mm) && t.width_mm>0,where,'width_mm','must be a positive width');check(typeof t.layer==='string',where,'layer');});
+  scene.vias.forEach((v,i)=>{const where=label('vias',i,v);
+    check(typeof v.id==='string',where,'id');check(typeof v.net==='string',where,'net','must be a string');check(vector(v.position_mm),where,'position_mm','must be [x,y] mm');
+    check(finite(v.size_mm) && v.size_mm>0,where,'size_mm','must be positive');check(finite(v.drill_mm) && v.drill_mm>0,where,'drill_mm','must be positive');
+    check(strings(v.layers),where,'layers','must be layer names');});
+  scene.zones.forEach((z,i)=>{const where=label('zones',i,z);
+    check(typeof z.id==='string',where,'id');check(typeof z.net==='string',where,'net','must be a string');
+    check(points(z.points_mm) && z.points_mm.length>=3,where,'points_mm','must hold at least three [x,y] mm points');
+    check(strings(z.layers),where,'layers','must be layer names');check(['intent','fill','keepout','copper'].includes(z.kind),where,'kind','must be intent, fill, keepout or copper');});
+  scene.nets.forEach((n,i)=>{const where=label('nets',i,n,'name');
+    check(typeof n.name==='string',where,'name');check(Array.isArray(n.pads),where,'pads','must be a list');
+    n.pads.forEach((p,j)=>check(typeof p.component==='string' && typeof p.number==='string' && vector(p.position_mm) && strings(p.layers),
+      `${where}.pads[${j}]`,'component/number/position_mm/layers'));});
+  scene.drawings.forEach((g,i)=>graphicCheck(g,`drawings[${i}]`));
   return scene;
 }
 export function validateReview(review,scene) {
-  if(review?.schema!==REVIEW_SCHEMA || !Array.isArray(review.annotations)) throw new Error('Not a CopperReview review v1.');
+  if(!READABLE_REVIEW_SCHEMAS.includes(review?.schema) || !Array.isArray(review.annotations)) throw new Error('Not a CopperReview review (v1 or v2).');
   if(review.board?.sha256!==scene.board.sha256) throw new Error('This review belongs to a different board revision. Load the exact PCB/scene first.');
   const ids=new Set();
   for(const a of review.annotations) {
@@ -148,7 +298,8 @@ export function validateReview(review,scene) {
       throw new Error('Invalid review annotation.');
     if(ids.has(a.id) || !['placement','routing','package_escape','return_path','mechanical','algorithm','other'].includes(a.category) ||
        !['low','medium','high'].includes(a.priority) || !['open','resolved'].includes(a.status) ||
-       typeof a.board_wide!=='boolean' || a.visible_layers.some(l=>!scene.board.layers.includes(l))) throw new Error('Invalid review annotation fields.');
+       typeof a.board_wide!=='boolean' || a.visible_layers.some(l=>!scene.board.layers.includes(l)) ||
+       (a.issues!==undefined && !(Array.isArray(a.issues) && a.issues.every(s=>typeof s==='string')))) throw new Error('Invalid review annotation fields.');
     ids.add(a.id);
     if(a.selection.components.some(r=>!scene.components.some(c=>c.reference===r)) ||
        a.selection.nets.some(n=>!scene.nets.some(net=>net.name===n))) throw new Error('Review references missing entities.');
@@ -158,4 +309,10 @@ export function validateReview(review,scene) {
   }
   if(!['unknown','placed','partially_routed','fully_routed'].includes(review.board.stage)) throw new Error('Invalid review stage.');
   return review;
+}
+/** Rebuild each annotation's context from the (hash-identical) scene in the current compact format. */
+export function refreshContexts(scene,annotations) {
+  // Cited CopperScript issues are not part of the scene: keep their saved summaries.
+  return annotations.map(a=>{const context=snapshotSelection(scene,a.selection,a.visible_layers);
+    if(a.context?.issues)context.issues=clone(a.context.issues);return {...clone(a),context};});
 }

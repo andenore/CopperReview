@@ -6,7 +6,7 @@ Do not add placing/routing algorithms or mutate source boards here; those belong
 in CopperScript. Preserve original source paths, exact net/pad names, native
 UUIDs, and the exact board hash when creating feedback.
 
-The `copper-review/v1` contract is documented in docs/review-format.md and
+The `copper-review/v2` contract is documented in docs/review-format.md and
 docs/review.schema.json. Never infer routing completeness from track counts or
 call logical membership guides verified open connections. Keep zone intent,
 observed fill, explicit copper, and keepouts distinct. Warn on unsupported

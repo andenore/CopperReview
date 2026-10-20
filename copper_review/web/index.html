@@ -4,16 +4,16 @@
 <body>
 <header><div class="brand"><img class="logo" src="/copper-logo.svg" width="42" height="42" alt="Cu"><div><strong>CopperReview</strong><small>Inspect. Annotate. Improve.</small></div></div>
 <div class="board-heading"><strong id="board-name">Open a board to begin</strong><span id="board-meta">Local PCB inspection · no KiCad required</span></div>
-<div class="header-actions"><button id="open-board">Open board</button><button id="load-review">Load review</button><button id="export-scene" title="Portable board geometry for sharing">Save scene</button><button id="export-review" class="primary">Export review JSON</button></div></header>
+<div class="header-actions"><button id="open-board">Open board</button><button id="load-review">Load review</button><button id="load-issues" title="CopperScript issue list: copper issues RUN --json">Load issues</button><button id="export-scene" title="Portable board geometry for sharing">Save scene</button><button id="export-review" class="primary">Export review JSON</button></div></header>
 <main>
 <aside class="explorer"><div class="section-label">BOARD EXPLORER</div>
 <label class="field">Review stage<select id="stage"><option value="unknown">Unknown / unverified</option><option value="placed">Placed</option><option value="partially_routed">Partially routed</option><option value="fully_routed">Fully routed (declared)</option></select></label>
 <label class="search"><span>⌕</span><input id="search" placeholder="Find a reference or net…" aria-label="Search components and nets"></label>
-<div class="tabs"><button id="tab-components" class="active">Components <span id="component-count">0</span></button><button id="tab-nets">Nets <span id="net-count">0</span></button></div>
+<div class="tabs"><button id="tab-components" class="active">Components <span id="component-count">0</span></button><button id="tab-nets">Nets <span id="net-count">0</span></button><button id="tab-issues" hidden>Issues <span id="issue-count">0</span></button></div>
 <div id="entity-list" class="entity-list" aria-label="Board entities"></div>
 <div class="layers"><div class="section-label">VISIBLE LAYERS</div><div id="layer-list"></div>
 <label><input id="show-labels" type="checkbox" checked> Reference labels</label><label><input id="show-pad-labels" type="checkbox" checked> Pad numbers / names</label><label><input id="show-guides" type="checkbox"> Logical net guides</label><label><input id="show-zones" type="checkbox" checked> Copper fills / zone intent</label>
-<label><input id="isolate" type="checkbox"> Isolate selected nets</label></div>
+<label><input id="isolate" type="checkbox"> Isolate selected nets</label><label id="show-issues-label" hidden><input id="show-issues" type="checkbox" checked> CopperScript issue windows</label></div>
 <details class="limits"><summary>Import details &amp; limits <span id="warning-count"></span></summary><ul id="warnings"></ul></details>
 </aside>
 <section class="workbench"><div class="toolbar"><div class="tool-group"><button id="mode-component" class="active" title="Select component (C)">Component</button><button id="mode-net" title="Select net by pad/track/via (N)">Net</button><button id="mode-region" title="Drag a rectangular region (R)">Region</button></div><span class="hint">Shift adds · wheel zooms · right-drag pans</span><button id="fit">Fit board</button><button id="clear">Clear</button></div>
@@ -27,11 +27,12 @@
 <div class="form-row"><label class="field">Category<select id="category"><option value="placement">Placement</option><option value="routing">Routing</option><option value="package_escape">Package escape</option><option value="return_path">Return path</option><option value="mechanical">Mechanical</option><option value="algorithm">Algorithm / feature</option><option value="other">Other</option></select></label><label class="field">Priority<select id="priority"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></label></div>
 <label class="field">What do you observe?<textarea id="observation" rows="5" placeholder="e.g. These escapes cross immediately outside U1. The route detours through the capacitor cluster."></textarea></label>
 <label class="field">What should improve?<textarea id="desired" rows="4" placeholder="e.g. Preserve pad ordering at package exits and reserve a direct corridor before routing nearby nets."></textarea></label>
+<label class="field">Cites CopperScript issues<input id="issue-ids" type="text" placeholder="e.g. P1, N3 (load issues first)" aria-label="Cited CopperScript issue ids"></label>
 <label class="field">Status<select id="note-status"><option value="open">Open</option><option value="resolved">Resolved</option></select></label>
 <button id="save-note" class="primary full">Add annotation</button><button id="cancel-edit" class="full" hidden>Cancel edit</button>
 <div class="export-context"><div class="section-label">CONTEXT FOR THE NEXT PASS</div><label class="field">Review summary<textarea id="summary" rows="3" placeholder="What should the next placement/routing iteration focus on?"></textarea></label><p>JSON includes board hash, source paths, exact entity names, geometry, regions, layers, and your notes.</p><button id="copy-review" class="full">Copy JSON to clipboard</button><span id="autosave-status">Notes save locally per board revision.</span></div>
 </aside>
 </main><div id="message" role="status" hidden></div>
-<input id="board-file" type="file" accept=".kicad_pcb,.json" hidden><input id="review-file" type="file" accept=".json" hidden>
+<input id="board-file" type="file" accept=".kicad_pcb,.json" hidden><input id="review-file" type="file" accept=".json" hidden><input id="issues-file" type="file" accept=".json" hidden>
 <script type="module" src="/app.js"></script>
 </body></html>

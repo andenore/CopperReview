@@ -2,7 +2,9 @@
 
 KiCad footprint coordinates already encode back-side reflection. Its positive
 angles are counterclockwise in a world with y pointing down; pad angles are
-absolute, while pad positions are footprint-local.
+absolute (an omitted angle is 0, not the footprint angle), while pad and graphic
+positions are footprint-local. Zones inside a footprint are stored in absolute
+board coordinates, like board-level zones.
 """
 from __future__ import annotations
 
@@ -163,13 +165,46 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
         return first(item, "uuid", first(item, "tstamp", ["uuid", fallback]))[1]
 
     components, tracks, vias, zones, drawings = [], [], [], [], []
+    footprints = children(tree, "footprint") + children(tree, "module")
+    native_refs = []
+    for index, fp in enumerate(footprints):
+        props = {p[1]: p[2] for p in children(fp, "property") if len(p) > 2}
+        texts = {p[1]: p[2] for p in children(fp, "fp_text") if len(p) > 2}
+        native_refs.append(props.get("Reference", texts.get("reference", "")))
+    # Selections and net membership name components by reference, so references
+    # must be unique. Blank (logos, fiducials) and repeated native references get
+    # a stable "#n" suffix in file order; native_reference keeps the original.
+    taken, counts, references = set(r for r in native_refs if r), {}, []
+    for index, (fp, native) in enumerate(zip(footprints, native_refs)):
+        if native and native not in counts:
+            counts[native] = 1
+            references.append(native)
+            continue
+        base = native or (fp[1].rsplit(":", 1)[-1] if len(fp) > 1 and isinstance(fp[1], str) and fp[1] else "FP")
+        n = counts.get(base, 0)
+        while True:
+            n += 1
+            candidate = f"{base}#{n}"
+            if candidate not in taken:
+                break
+        counts[base] = n
+        taken.add(candidate)
+        references.append(candidate)
+    renamed = sum(1 for a, b in zip(native_refs, references) if a != b)
+    if renamed:
+        warnings.add(f"{renamed} footprint(s) with a blank or repeated reference are named <reference or footprint>#n; "
+                     "native_reference keeps the original text.")
 
-    def read_zone(z, fallback_id, transform=lambda p: p, owner=None):
+    def read_zone(z, fallback_id, owner=None):
         zone_layers = first(z, "layers", first(z, "layer", ["layer", "F.Cu"]))[1:]
         zone_net = first(z, "net_name", ["net_name", net(z)])[1]
         is_keepout = first(z, "keepout") is not None
         for poly in children(z, "polygon") + children(z, "filled_polygon"):
-            points = [transform(xy([p], "xy")) for p in children(first(poly, "pts", []), "xy")]
+            points = [xy([p], "xy") for p in children(first(poly, "pts", []), "xy")]
+            if len(points) < 3:
+                # KiCad keeps outline-less zones (e.g. rule areas being edited); nothing to draw or query.
+                warnings.add("Zones with fewer than three outline points are skipped.")
+                continue
             actual = poly[0] == "filled_polygon"
             poly_layer = first(poly, "layer", ["layer", zone_layers[0]])[1]
             zones.append({"id": identity(z, fallback_id)+f":{len(zones)}", "net": zone_net,
@@ -178,15 +213,16 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                           **({"owner": owner} if owner else {})})
         if children(z, "filled_polygon"):
             warnings.add("Filled polygons are displayed as stored; fills are not recomputed or electrically verified.")
-    for index, fp in enumerate(children(tree, "footprint") + children(tree, "module")):
+    for index, fp in enumerate(footprints):
         props = {p[1]: p[2] for p in children(fp, "property") if len(p) > 2}
         texts = {p[1]: p[2] for p in children(fp, "fp_text") if len(p) > 2}
-        ref = props.get("Reference", texts.get("reference", f"FP{index+1}"))
+        ref = references[index]
         origin = xy(fp, "at")
         at = first(fp, "at")
         angle = number(at[3]) if len(at) > 3 else 0
         transform = lambda p, a=angle, o=origin: rotate(p, a, o)
         component = {"id": identity(fp, f"component:{index}"), "reference": ref,
+                     **({"native_reference": native_refs[index]} if native_refs[index] != ref else {}),
                      "source_path": props.get("CopperScriptPath", ref),
                      "value": props.get("Value", texts.get("value", "")), "footprint": fp[1],
                      "position_mm": origin, "rotation_deg": angle,
@@ -210,7 +246,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
             component["pads"].append({"id": identity(pad, f"pad:{index}:{pi}"), "number": pad[1], "net": net(pad),
                 "pin_name": first(pad, "pinfunction", ["pinfunction", ""])[1],
                 "position_mm": transform([number(pa[1]), number(pa[2])]), "size_mm": size,
-                "rotation_deg": number(pa[3]) if len(pa) > 3 else angle, "shape": pad[3], "kind": pad[2],
+                "rotation_deg": number(pa[3]) if len(pa) > 3 else 0, "shape": pad[3], "kind": pad[2],
                 "layers": pad_layers, "drill_mm": drill[:2],
                 "roundrect_ratio": number(first(pad, "roundrect_rratio", ["ratio", "0.25"])[1])})
         for g in fp:
@@ -225,7 +261,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
         component["bounds_mm"] = bounds(points, (*origin, *origin))
         components.append(component)
         for zi, z in enumerate(children(fp, "zone")):
-            read_zone(z, f"footprint-zone:{index}:{zi}", transform, component["source_path"])
+            read_zone(z, f"footprint-zone:{index}:{zi}", component["source_path"])
         if children(fp, "fp_curve"):
             warnings.add(f"Bezier footprint graphics on {ref} are not displayed.")
     for index, t in enumerate(children(tree, "segment") + children(tree, "arc")):

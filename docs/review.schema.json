@@ -1,69 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CopperReview feedback v1",
+  "title": "CopperReview feedback v2",
   "type": "object",
   "required": ["schema", "tool", "exported_at", "board", "summary", "geometry_counts", "inspection_limits", "annotations"],
-  "properties": {
-    "schema": {"const": "copper-review/v1"},
-    "tool": {"type": "object", "required": ["name", "version"], "properties": {"name": {"const": "CopperReview"}, "version": {"type": "string"}}},
-    "exported_at": {"type": "string", "format": "date-time"},
-    "board": {"$ref": "#/$defs/board"},
-    "summary": {"type": "string"},
-    "geometry_counts": {
-      "type": "object", "required": ["components", "nets", "track_segments", "vias", "zone_polygons"],
-      "additionalProperties": {"type": "integer", "minimum": 0}
-    },
-    "inspection_limits": {"type": "array", "items": {"type": "string"}},
-    "annotations": {"type": "array", "items": {"$ref": "#/$defs/annotation"}}
-  },
+  "properties": {"schema": {"const": "copper-review/v2"}, "tool": {"type": "object", "required": ["name", "version"], "properties": {"name": {"const": "CopperReview"}, "version": {"type": "string"}}}, "exported_at": {"type": "string", "format": "date-time"}, "board": {"$ref": "#/$defs/board"}, "summary": {"type": "string"}, "geometry_counts": {"type": "object", "required": ["components", "nets", "track_segments", "vias", "zone_polygons"], "additionalProperties": {"type": "integer", "minimum": 0}}, "inspection_limits": {"type": "array", "items": {"type": "string"}}, "annotations": {"type": "array", "items": {"$ref": "#/$defs/annotation"}}, "copperscript_issues": {"type": "object", "description": "Source of cited CopperScript issues (copper issues RUN --json)", "required": ["schema", "board_verified"], "properties": {"schema": {"const": "copperscript.run-issues/v1"}, "run": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "board_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]}, "filled_board_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]}, "board_verified": {"type": "boolean"}, "omitted": {"type": "integer", "minimum": 0}}}},
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "point": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
     "bounds": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
     "strings": {"type": "array", "items": {"type": "string"}},
     "geometryObjects": {"type": "array", "items": {"type": "object"}},
-    "board": {
-      "type": "object", "required": ["name", "filename", "sha256", "stage", "stage_evidence", "source", "bounds_mm", "coordinates", "layers"],
-      "properties": {
-        "name": {"type": "string"}, "filename": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha256"},
-        "stage": {"enum": ["unknown", "placed", "partially_routed", "fully_routed"]},
-        "stage_evidence": {"type": "string"},
-        "source": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["filename", "sha256"], "properties": {"filename": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha256"}}}]},
-        "bounds_mm": {"$ref": "#/$defs/bounds"},
-        "layers": {"$ref": "#/$defs/strings"},
-        "coordinates": {
-          "type": "object", "required": ["units", "origin", "x_axis", "y_axis", "view", "positive_rotation"],
-          "properties": {"units": {"const": "mm"}, "origin": {"type": "string"}, "x_axis": {"const": "right"}, "y_axis": {"const": "down"}, "view": {"type": "string"}, "positive_rotation": {"const": "counterclockwise"}}
-        }
-      }
-    },
-    "selection": {
-      "type": "object", "required": ["components", "nets", "region"],
-      "properties": {"components": {"$ref": "#/$defs/strings"}, "nets": {"$ref": "#/$defs/strings"}, "region": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/bounds"}]}}
-    },
-    "context": {
-      "type": "object", "required": ["components", "nets", "region"],
-      "properties": {
-        "components": {"$ref": "#/$defs/geometryObjects"},
-        "nets": {"type": "array", "items": {"type": "object", "required": ["name", "pads", "tracks", "vias", "zones"], "properties": {"name": {"type": "string"}, "pads": {"$ref": "#/$defs/geometryObjects"}, "tracks": {"$ref": "#/$defs/geometryObjects"}, "vias": {"$ref": "#/$defs/geometryObjects"}, "zones": {"$ref": "#/$defs/geometryObjects"}}}},
-        "region": {
-          "oneOf": [{"type": "null"}, {
-            "type": "object", "required": ["bounds_mm", "query_layers", "query_precision", "context"],
-            "properties": {"bounds_mm": {"$ref": "#/$defs/bounds"}, "query_layers": {"$ref": "#/$defs/strings"}, "query_precision": {"type": "string"},
-              "context": {"type": "object", "required": ["components", "nets", "pads", "tracks", "vias", "zones", "drawings"], "properties": {"components": {"$ref": "#/$defs/geometryObjects"}, "nets": {"$ref": "#/$defs/strings"}, "pads": {"$ref": "#/$defs/geometryObjects"}, "tracks": {"$ref": "#/$defs/geometryObjects"}, "vias": {"$ref": "#/$defs/geometryObjects"}, "zones": {"$ref": "#/$defs/geometryObjects"}, "drawings": {"$ref": "#/$defs/geometryObjects"}}}}
-          }]
-        }
-      }
-    },
-    "annotation": {
-      "type": "object", "required": ["id", "created_at", "category", "priority", "status", "observation", "desired_behavior", "board_wide", "selection", "visible_layers", "context"],
-      "properties": {
-        "id": {"type": "string", "format": "uuid"}, "created_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"},
-        "category": {"enum": ["placement", "routing", "package_escape", "return_path", "mechanical", "algorithm", "other"]},
-        "priority": {"enum": ["low", "medium", "high"]}, "status": {"enum": ["open", "resolved"]},
-        "observation": {"type": "string", "minLength": 1}, "desired_behavior": {"type": "string"}, "board_wide": {"type": "boolean"},
-        "selection": {"$ref": "#/$defs/selection"}, "visible_layers": {"$ref": "#/$defs/strings"}, "context": {"$ref": "#/$defs/context"}
-      }
-    }
+    "board": {"type": "object", "required": ["name", "filename", "sha256", "stage", "stage_evidence", "source", "bounds_mm", "coordinates", "layers"], "properties": {"name": {"type": "string"}, "filename": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha256"}, "stage": {"enum": ["unknown", "placed", "partially_routed", "fully_routed"]}, "stage_evidence": {"type": "string"}, "source": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["filename", "sha256"], "properties": {"filename": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha256"}}}]}, "bounds_mm": {"$ref": "#/$defs/bounds"}, "layers": {"$ref": "#/$defs/strings"}, "coordinates": {"type": "object", "required": ["units", "origin", "x_axis", "y_axis", "view", "positive_rotation"], "properties": {"units": {"const": "mm"}, "origin": {"type": "string"}, "x_axis": {"const": "right"}, "y_axis": {"const": "down"}, "view": {"type": "string"}, "positive_rotation": {"const": "counterclockwise"}}}}},
+    "selection": {"type": "object", "required": ["components", "nets", "region"], "properties": {"components": {"$ref": "#/$defs/strings"}, "nets": {"$ref": "#/$defs/strings"}, "region": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/bounds"}]}}},
+    "context": {"type": "object", "required": ["format", "components", "nets", "region"], "properties": {"format": {"const": "compact/v2"}, "components": {"type": "array", "items": {"type": "object", "required": ["id", "reference", "source_path", "position_mm", "rotation_deg", "side", "bounds_mm", "pad_count"], "properties": {"id": {"type": "string"}, "reference": {"type": "string"}, "native_reference": {"type": "string"}, "source_path": {"type": "string"}, "position_mm": {"$ref": "#/$defs/point"}, "rotation_deg": {"type": "number"}, "side": {"enum": ["front", "back"]}, "bounds_mm": {"$ref": "#/$defs/bounds"}, "pad_count": {"type": "integer", "minimum": 0}, "pads": {"$ref": "#/$defs/geometryObjects"}, "pads_by_net": {"type": "object", "additionalProperties": {"$ref": "#/$defs/strings"}}, "graphics_count": {"type": "integer", "minimum": 0}}}}, "nets": {"type": "array", "items": {"type": "object", "required": ["name", "pad_count", "tracks_by_layer", "vias", "zones"], "properties": {"name": {"type": "string"}, "pad_count": {"type": "integer", "minimum": 0}, "pads": {"$ref": "#/$defs/geometryObjects"}, "pads_by_component": {"type": "object", "additionalProperties": {"$ref": "#/$defs/strings"}}, "bounds_mm": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/bounds"}]}, "tracks_by_layer": {"type": "object", "additionalProperties": {"type": "object", "required": ["segments", "length_mm", "widths_mm"]}}, "vias": {"type": "object", "required": ["count", "by_span"]}, "zones": {"$ref": "#/$defs/geometryObjects"}, "truncated": {"$ref": "#/$defs/truncated"}}}}, "region": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["bounds_mm", "query_layers", "query_precision", "context"], "properties": {"bounds_mm": {"$ref": "#/$defs/bounds"}, "query_layers": {"$ref": "#/$defs/strings"}, "query_precision": {"type": "string"}, "context": {"type": "object", "required": ["components", "nets", "pads", "tracks", "vias", "zones", "drawings"], "properties": {"components": {"$ref": "#/$defs/geometryObjects"}, "nets": {"$ref": "#/$defs/strings"}, "pads": {"$ref": "#/$defs/geometryObjects"}, "tracks": {"$ref": "#/$defs/geometryObjects"}, "vias": {"$ref": "#/$defs/geometryObjects"}, "zones": {"$ref": "#/$defs/geometryObjects"}, "drawings": {"$ref": "#/$defs/geometryObjects"}, "truncated": {"$ref": "#/$defs/truncated"}}}}}]}, "issues": {"type": "array", "items": {"type": "object", "required": ["id", "code", "title"], "properties": {"id": {"type": "string"}, "stage": {"type": "string"}, "code": {"type": "string"}, "title": {"type": "string"}, "count": {"type": "integer"}, "nets": {"$ref": "#/$defs/strings"}, "window_mm": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/bounds"}]}, "caused_by": {"type": "string"}}}}}},
+    "annotation": {"type": "object", "required": ["id", "created_at", "category", "priority", "status", "observation", "desired_behavior", "board_wide", "selection", "visible_layers", "context"], "properties": {"id": {"type": "string", "format": "uuid"}, "created_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"}, "category": {"enum": ["placement", "routing", "package_escape", "return_path", "mechanical", "algorithm", "other"]}, "priority": {"enum": ["low", "medium", "high"]}, "status": {"enum": ["open", "resolved"]}, "observation": {"type": "string", "minLength": 1}, "desired_behavior": {"type": "string"}, "board_wide": {"type": "boolean"}, "selection": {"$ref": "#/$defs/selection"}, "visible_layers": {"$ref": "#/$defs/strings"}, "context": {"$ref": "#/$defs/context"}, "issues": {"$ref": "#/$defs/strings"}}},
+    "truncated": {"type": "object", "description": "Total count of a list that was cut to its limit", "additionalProperties": {"type": "integer", "minimum": 0}}
   }
 }

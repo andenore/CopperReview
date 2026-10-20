@@ -48,3 +48,38 @@ No input boards or CopperScript sources were modified by these checks.
   duplicates, zero-length segments, hover/dimming, zoom/pan and layer filtering.
 - The 9 Node tests, annotation browser workflow, fill/label/hover regression,
   and real six-layer Tracker board browser check also passed after this change.
+
+## Backlog fixes, 20 October 2026
+
+- Annotation contexts are compact (`copper-review/v2`): identities, summaries and
+  region-clipped geometry instead of copied nets, fills and footprints. Measured
+  with the same selections as the review (annotation JSON size):
+
+  | Board | Selection | Before | After |
+  | --- | --- | --- | --- |
+  | CopperProbe (refilled) | net GND | 348 KB | 5.6 KB |
+  | CopperProbe | component U_USB (169 pads) | 41 KB | 2.1 KB |
+  | CopperProbe | 2 x 2 mm region at U_USB | 440 KB | 17 KB |
+  | CopperProbe | 10 x 10 mm region (capped) | 562 KB | 65 KB |
+  | FX10 kit | net GND | 1156 KB | 11.5 KB |
+  | FX10 kit | component J7 (402 pads) | 126 KB | 6.3 KB |
+  | FX10 kit | 2 x 2 mm region | 1158 KB | 5.6 KB |
+
+  A Node test enforces the budget on a synthetic filled board (40k-point fill,
+  600-pad BGA). v1 reviews and saved local notes load and are rebuilt.
+- Footprint zones are read in board coordinates: all 105 on the FX10 kit now lie
+  on the board (42 were off it), R211's keepout at (54.5, -8.2). Pads without an
+  angle are 0 degrees; zones with fewer than three points are skipped.
+- The FX10 kit (30 blank references) opens: blank/repeated references become
+  `<reference or footprint>#n` with `native_reference` kept. Scene validation
+  errors name the object and field.
+- `examples/demo.scene.json` is regenerated and a test checks the importer still
+  produces it; the example review validates against the published schema.
+- Shared KiCad conformance fixture (rotated, back-side, blank/duplicate
+  references, footprint keepout and copper zones, arc, via, empty zone) with
+  hand-derived expectations; it fails on the previous importer.
+- Reference labels are thinned to avoid overlap; CopperScript issue lists load as
+  windows and notes can cite their ids.
+- 21 Python tests, 14 Node tests, the browser workflow, viewer and track-joint
+  pixel regressions, the issue/label browser test, and real-board imports of the
+  FX10 kit (363 components, 12,786 tracks) and CopperProbe passed.

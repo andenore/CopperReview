@@ -43,7 +43,8 @@ try {
   const download=await downloadPromise;await download.saveAs('test-results/browser.review.json');
   const review=JSON.parse(readFileSync('test-results/browser.review.json'));
   assert.equal(review.annotations.length,3);assert.equal(review.annotations[0].context.components[0].source_path,'control.U1');
-  assert.equal(review.annotations[1].context.nets[0].tracks.length,3);assert(review.annotations[2].selection.region);
+  assert.equal(review.schema,'copper-review/v2');
+  assert.equal(review.annotations[1].context.nets[0].tracks_by_layer['F.Cu'].segments,3);assert(review.annotations[2].selection.region);
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.note-row').length===3);
   await page.locator('.note').first().click();await page.locator('#observation').fill('Edited package exit observation.');await page.locator('#save-note').click();
   assert((await page.locator('.note-title').first().textContent()).includes('Edited'));

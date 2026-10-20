@@ -1,9 +1,9 @@
-import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,makeAnnotation,makeReview,validateScene,validateReview} from './core.js';
+import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
 const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
 const state={scene:null,selection:{components:[],nets:[],region:null},layers:[],annotations:[],tab:'components',mode:'component',
-  zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[]};
+  zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[],issues:null,hiddenLabels:0};
 const palette=['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'];
 const copperColor = layer => palette[Math.max(0,state.scene.board.layers.indexOf(layer))%palette.length];
 const visible = layers => layers.some(l=>state.layers.includes(l));
@@ -100,6 +100,33 @@ function drawPadLabel(component,pad,selected) {
   const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle='#0d171b';ctx.strokeText(label,tx,ty);
   ctx.fillStyle=expanded?'#fff0b6':'#c1d0d5';ctx.fillText(label,tx,ty);ctx.restore();
 }
+// Reference labels never overlap: selected parts first, then larger bodies; the rest
+// wait until zooming in gives them room (the status bar counts them).
+function drawReferenceLabels(items) {
+  const area=c=>(c.bounds_mm[2]-c.bounds_mm[0])*(c.bounds_mm[3]-c.bounds_mm[1]);
+  items.sort((a,b)=>(b[1]-a[1]) || area(b[0])-area(a[0]) || (a[0].reference<b[0].reference?-1:1));
+  ctx.font=`${11/state.zoom}px ui-monospace,Consolas,monospace`;ctx.textAlign='center';ctx.textBaseline='bottom';
+  const placed=[];let hidden=0;
+  for(const [c,selected] of items) {
+    const x=c.position_mm[0],y=c.bounds_mm[1]-4/state.zoom;
+    const sx=x*state.zoom+state.offset[0],sy=y*state.zoom+state.offset[1],w=ctx.measureText(c.reference).width*state.zoom;
+    const box=[sx-w/2-2,sy-13,sx+w/2+2,sy+1];
+    if(box[2]<0 || box[0]>state.width || box[3]<0 || box[1]>state.height)continue;
+    if(!selected && placed.some(b=>boxesOverlap(b,box))){hidden++;continue;}
+    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?'#fff0b6':'#c1d0d5';ctx.fillText(c.reference,x,y);
+  }
+  state.hiddenLabels=hidden;canvas.dataset.hiddenLabels=String(hidden);canvas.dataset.shownLabels=String(placed.length);
+}
+function drawIssues() {
+  if(!state.issues || !$('show-issues').checked)return;
+  ctx.setLineDash([6/state.zoom,3/state.zoom]);ctx.lineWidth=1.4/state.zoom;ctx.font=`${11/state.zoom}px ui-monospace,Consolas,monospace`;
+  ctx.textAlign='left';ctx.textBaseline='bottom';
+  for(const issue of state.issues.issues){if(!issue.window_mm)continue;const b=issue.window_mm,cited=citedIssueIds().includes(issue.id);
+    ctx.globalAlpha=cited?1:.75;ctx.strokeStyle=cited?'#ffd27a':'#ff7a7a';ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);
+    ctx.fillStyle=ctx.strokeStyle;ctx.fillText(issue.id,b[0],b[1]-2/state.zoom);}
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+}
+function citedIssueIds(){return $('issue-ids').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);}
 function draw() {
   const dpr=devicePixelRatio || 1;
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.globalAlpha=1;ctx.clearRect(0,0,state.width,state.height);
@@ -109,7 +136,7 @@ function draw() {
   if(step>0)for(let x=((state.offset[0]%step)+step)%step;x<state.width;x+=step)
     for(let y=((state.offset[1]%step)+step)%step;y<state.height;y+=step)ctx.fillRect(x,y,1,1);
   if(!state.scene)return;
-  const scene=state.scene,padLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
+  const scene=state.scene,padLabels=[],referenceLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
   // Edge geometry (including inner cutouts) remains visible at all layer settings.
   for(const g of scene.drawings.filter(g=>g.layer==='Edge.Cuts')){ctx.globalAlpha=1;graphic(g,'#9abfba');}
   if($('show-zones').checked)for(const z of scene.zones) {
@@ -158,8 +185,9 @@ function draw() {
     }
     if(selected){ctx.globalAlpha=1;ctx.strokeStyle='#ffe9a6';ctx.lineWidth=1.6/state.zoom;ctx.setLineDash([5/state.zoom,3/state.zoom]);
       const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
-    if($('show-labels').checked && cVisible){ctx.globalAlpha=selected?1:.85;ctx.font=`${11/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle=selected?'#fff0b6':'#c1d0d5';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(c.reference,c.position_mm[0],c.bounds_mm[1]-4/state.zoom);}
+    if($('show-labels').checked && cVisible)referenceLabels.push([c,selected]);
   }
+  drawReferenceLabels(referenceLabels);
   for(const v of scene.vias) {
     if(!visible(v.layers) || !renderNet(v.net))continue;
     ctx.globalAlpha=opacity(v.net);ctx.fillStyle=isNetFocused(v.net)?'#fff0b6':'#bba5d7';
@@ -175,11 +203,11 @@ function draw() {
     }ctx.setLineDash([]);
   }
   for(const args of padLabels)drawPadLabel(...args);
-  ctx.globalAlpha=1;
+  ctx.globalAlpha=1;drawIssues();
   for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?'#526662':'#c19562';ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle='#82d5c019';ctx.strokeStyle='#84d4c0';ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
-  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm`;
+  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
 function hit(point,forHover=false) {
   if(!state.scene)return {};
@@ -217,17 +245,43 @@ function updateSelection() {
 function renderEntities() {
   $('entity-list').replaceChildren();if(!state.scene)return;
   const search=$('search').value.toLowerCase(),nets=state.tab==='nets';
+  if(state.tab==='issues'){renderIssues(search);return;}
   const list=nets?state.scene.nets:state.scene.components;
   for(const entity of list){const name=nets?entity.name:entity.reference;
     if(!`${name} ${entity.source_path || ''} ${entity.value || ''}`.toLowerCase().includes(search))continue;
     const button=document.createElement('button');button.className='entity';button.type='button';
     button.classList.toggle('selected',state.selection[nets?'nets':'components'].includes(name));
     const label=document.createElement('span');label.textContent=name;const detail=document.createElement('span');detail.className='secondary';detail.textContent=nets?`${entity.pads.length} pads`:engineeringText(entity.value || entity.side);button.append(label,detail);
-    button.title=nets?name:`${entity.source_path}\n${entity.footprint}`;
+    button.title=nets?name:`${entity.source_path}\n${entity.footprint}${entity.native_reference!==undefined?`\nnative reference: "${entity.native_reference}"`:''}`;
     if(nets){button.onpointerenter=()=>setHover({net:name});button.onpointerleave=clearHover;button.onfocus=()=>setHover({net:name});button.onblur=clearHover;}
     button.onclick=e=>{select(nets?'nets':'components',name,e.shiftKey);if(!nets){const b=entity.bounds_mm;fit([b[0]-5,b[1]-5,b[2]+5,b[3]+5]);}};
     $('entity-list').append(button);
   }
+}
+function renderIssues(search) {
+  if(!state.issues)return;
+  for(const issue of state.issues.issues){
+    if(!`${issue.id} ${issue.code} ${issue.title} ${issue.nets.join(' ')}`.toLowerCase().includes(search))continue;
+    const button=document.createElement('button');button.className='entity';button.type='button';
+    button.classList.toggle('selected',citedIssueIds().includes(issue.id));
+    const label=document.createElement('span');label.textContent=`${issue.id} · ${issue.code}`;
+    const detail=document.createElement('span');detail.className='secondary';detail.textContent=issue.window_mm?`${issue.count}×`:'no position';
+    button.append(label,detail);button.title=issue.title;
+    button.onclick=e=>{
+      const ids=e.shiftKey?citedIssueIds():[];if(!ids.includes(issue.id))ids.push(issue.id);$('issue-ids').value=ids.join(', ');
+      if(issue.window_mm){const b=issue.window_mm;if(!e.shiftKey)state.selection={components:[],nets:[],region:null};
+        state.selection.region=b.map(round);fit([b[0]-2,b[1]-2,b[2]+2,b[3]+2]);}
+      updateSelection();message(`${issue.id}: ${issue.title}`);};
+    $('entity-list').append(button);
+  }
+}
+function issuesFromForm() {
+  const ids=citedIssueIds();if(!ids.length)return [];
+  const old=state.editing && state.annotations.find(a=>a.id===state.editing);
+  // Editing a note whose citations are unchanged needs no issue list: keep the saved summaries.
+  if(!state.issues && old?.context?.issues && JSON.stringify(ids)===JSON.stringify(old.issues || []))return clone(old.context.issues);
+  if(!state.issues)throw new Error('Load the CopperScript issue list (Load issues) before citing issue ids.');
+  return ids.map(id=>{const issue=state.issues.issues.find(i=>i.id===id);if(!issue)throw new Error(`Issue ${id} is not in the loaded list.`);return issue;});
 }
 function storageKey(){return `copper-review:v1:${state.scene.board.sha256}`;}
 function saveLocal() {
@@ -250,12 +304,13 @@ function renderNotes() {
 function editNote(a) {
   state.editing=a.id;state.selection=clone(a.selection);state.layers=[...a.visible_layers];
   $('category').value=a.category;$('priority').value=a.priority;$('observation').value=a.observation;$('desired').value=a.desired_behavior;$('note-status').value=a.status;$('board-wide').checked=a.board_wide;
+  $('issue-ids').value=(a.issues || []).join(', ');
   $('save-note').textContent='Save changes';$('cancel-edit').hidden=false;renderLayers();updateSelection();
   if(a.selection.region){const b=a.selection.region;fit([b[0]-3,b[1]-3,b[2]+3,b[3]+3]);}
   else if(a.selection.components.length){const c=state.scene.components.find(c=>c.reference===a.selection.components[0]);const b=c.bounds_mm;fit([b[0]-5,b[1]-5,b[2]+5,b[3]+5]);}
   $('observation').focus();
 }
-function resetForm() {state.editing=null;$('observation').value='';$('desired').value='';$('note-status').value='open';$('board-wide').checked=false;$('save-note').textContent='Add annotation';$('cancel-edit').hidden=true;}
+function resetForm() {state.editing=null;$('observation').value='';$('issue-ids').value='';$('desired').value='';$('note-status').value='open';$('board-wide').checked=false;$('save-note').textContent='Add annotation';$('cancel-edit').hidden=true;}
 function renderLayers() {
   $('layer-list').replaceChildren();
   for(const layer of state.scene.board.layers){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=state.layers.includes(layer);input.dataset.layer=layer;
@@ -264,42 +319,54 @@ function renderLayers() {
   }
 }
 function loadScene(scene) {
-  validateScene(scene);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
-  try{const saved=JSON.parse(localStorage.getItem(storageKey()) || 'null');if(saved){validateReview({schema:'copper-review/v1',board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=saved.annotations;$('summary').value=saved.summary || '';$('stage').value=saved.stage;}}catch{message('Saved local notes were invalid; load an exported review to recover them.',true);}
+  validateScene(scene);if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
+  try{const saved=JSON.parse(localStorage.getItem(storageKey()) || 'null');if(saved){validateReview({schema:REVIEW_SCHEMA,board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=refreshContexts(scene,saved.annotations);$('summary').value=saved.summary || '';$('stage').value=saved.stage;}}catch{message('Saved local notes were invalid; load an exported review to recover them.',true);}
   $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
   renderLayers();renderEntities();renderNotes();fit();setEnabled();
 }
-function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value),null,2)+'\n';}
+function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,state.issues?.source || null),null,2)+'\n';}
 function download(name,text,type='application/json') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function setEnabled(){for(const id of ['load-review','export-scene','export-review','copy-review','save-note','fit','clear'])$(id).disabled=!state.scene;}
+function setEnabled(){for(const id of ['load-review','load-issues','export-scene','export-review','copy-review','save-note','fit','clear'])$(id).disabled=!state.scene;}
+function setIssues(issues) {
+  state.issues=issues;const shown=!!issues;$('tab-issues').hidden=!shown;$('show-issues-label').hidden=!shown;
+  $('issue-count').textContent=issues?issues.issues.length:0;if(!shown && state.tab==='issues'){state.tab='components';for(const t of ['components','nets','issues'])$(`tab-${t}`).classList.toggle('active',t==='components');}
+  renderEntities();requestDraw();
+}
 for(const id of ['open-board','empty-open'])$(id).onclick=()=>$('board-file').click();
 $('load-review').onclick=()=>$('review-file').click();
+$('load-issues').onclick=()=>$('issues-file').click();
+$('issues-file').onchange=guarded(async event=>{
+  const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>20*1024*1024)throw new Error('Issue list exceeds 20 MiB.');
+  const issues=validateIssues(JSON.parse(await file.text()),state.scene);setIssues(issues);
+  message(`Loaded ${issues.issues.length} CopperScript issues${issues.source.board_verified?'':' (no board hash in the file: could not confirm they belong to this board)'}`,!issues.source.board_verified);
+});
 $('board-file').onchange=guarded(async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>49*1024*1024)throw new Error('File exceeds the local upload limit (49 MiB).');
-  if(file.name.toLowerCase().endsWith('.json')){const value=JSON.parse(await file.text());if(value.schema==='copper-review/v1')throw new Error('Use Load review for annotation files; first open the matching PCB or scene.');loadScene(value);}
+  if(file.name.toLowerCase().endsWith('.json')){const value=JSON.parse(await file.text());if(value.schema===ISSUES_SCHEMA)throw new Error('Use Load issues for CopperScript issue lists; first open the matching PCB.');if(READABLE_REVIEW_SCHEMAS.includes(value.schema))throw new Error('Use Load review for annotation files; first open the matching PCB or scene.');loadScene(value);}
   else{const response=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Copper-Token':token,'X-Copper-Filename':encodeURIComponent(file.name)},body:await file.arrayBuffer()});const scene=await response.json();if(!response.ok)throw new Error(scene.error);loadScene(scene);}
   message(`Opened ${file.name}`);
 });
 $('review-file').onchange=guarded(async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>50*1024*1024)throw new Error('Review exceeds 50 MiB.');
-  const review=validateReview(JSON.parse(await file.text()),state.scene);state.annotations=clone(review.annotations);$('summary').value=review.summary || '';$('stage').value=review.board.stage;
+  const review=validateReview(JSON.parse(await file.text()),state.scene);state.annotations=refreshContexts(state.scene,review.annotations);$('summary').value=review.summary || '';$('stage').value=review.board.stage;
   resetForm();renderNotes();saveLocal();requestDraw();message(`Loaded ${state.annotations.length} review notes`);
 });
 $('export-review').onclick=guarded(()=>{download(`${state.scene.board.name}.review.json`,reviewText());message('Review exported. Paste its contents into your next LLM prompt.');});
 $('export-scene').onclick=guarded(()=>download(`${state.scene.board.name}.scene.json`,JSON.stringify(state.scene,null,2)+'\n'));
 $('copy-review').onclick=guarded(async()=>{await navigator.clipboard.writeText(reviewText());message('Review JSON copied.');});
 $('save-note').onclick=guarded(()=>{
-  const note=makeAnnotation(state.scene,state.selection,state.layers,{category:$('category').value,priority:$('priority').value,status:$('note-status').value,observation:$('observation').value,desired_behavior:$('desired').value,boardWide:$('board-wide').checked},state.editing || crypto.randomUUID());
+  const note=makeAnnotation(state.scene,state.selection,state.layers,{category:$('category').value,priority:$('priority').value,status:$('note-status').value,observation:$('observation').value,desired_behavior:$('desired').value,boardWide:$('board-wide').checked,issues:issuesFromForm()},state.editing || crypto.randomUUID());
   if(state.editing){const i=state.annotations.findIndex(a=>a.id===state.editing);note.created_at=state.annotations[i].created_at;note.updated_at=new Date().toISOString();state.annotations[i]=note;}else state.annotations.push(note);
   renderNotes();saveLocal();resetForm();requestDraw();message('Annotation saved.');
 });
 $('cancel-edit').onclick=resetForm;$('summary').oninput=saveLocal;$('stage').onchange=saveLocal;
 $('search').oninput=renderEntities;
-for(const tab of ['components','nets'])$(`tab-${tab}`).onclick=()=>{state.tab=tab;for(const t of ['components','nets'])$(`tab-${t}`).classList.toggle('active',t===tab);renderEntities();};
+for(const tab of ['components','nets','issues'])$(`tab-${tab}`).onclick=()=>{state.tab=tab;for(const t of ['components','nets','issues'])$(`tab-${t}`).classList.toggle('active',t===tab);renderEntities();};
 for(const mode of ['component','net','region'])$(`mode-${mode}`).onclick=()=>setMode(mode);
-for(const id of ['show-labels','show-pad-labels','show-guides','show-zones','isolate'])$(id).onchange=()=>{clearHover();requestDraw();};
+for(const id of ['show-labels','show-pad-labels','show-guides','show-zones','isolate','show-issues'])$(id).onchange=()=>{clearHover();requestDraw();};
+$('issue-ids').oninput=()=>{requestDraw();if(state.tab==='issues')renderEntities();};
 $('fit').onclick=()=>fit();$('clear').onclick=()=>{clearSelection();resetForm();};
 canvas.oncontextmenu=e=>e.preventDefault();
 canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
