@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
 const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
 const state={scene:null,selection:{components:[],nets:[],region:null},layers:[],annotations:[],tab:'components',mode:'component',
-  zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[],issues:null,hiddenLabels:0};
+  zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[],issues:null,issueSource:null,hiddenLabels:0};
 const palette=['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'];
 const copperColor = layer => palette[Math.max(0,state.scene.board.layers.indexOf(layer))%palette.length];
 const visible = layers => layers.some(l=>state.layers.includes(l));
@@ -286,7 +286,7 @@ function issuesFromForm() {
 function storageKey(){return `copper-review:v1:${state.scene.board.sha256}`;}
 function saveLocal() {
   if(!state.scene)return;
-  try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value}));$('autosave-status').textContent='Saved in this browser · export JSON to share';}
+  try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value,copperscript_issues:issueSource()}));$('autosave-status').textContent='Saved in this browser · export JSON to share';}
   catch {$('autosave-status').textContent='Local storage unavailable/full · export JSON now';}
 }
 function renderNotes() {
@@ -295,7 +295,7 @@ function renderNotes() {
   for(const a of state.annotations){const row=document.createElement('div');row.className='note-row';
     const priority=document.createElement('span');priority.className=`priority ${a.priority}`;priority.textContent=a.priority;
     const button=document.createElement('button');button.className='note';const title=document.createElement('span');title.className='note-title';title.textContent=a.observation;
-    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} · ${a.status} · ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
+    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} · ${a.status} · ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
     const remove=document.createElement('button');remove.className='delete-note';remove.textContent='×';remove.title='Delete annotation';remove.setAttribute('aria-label',`Delete annotation: ${a.observation}`);
     remove.onclick=()=>{state.annotations=state.annotations.filter(n=>n.id!==a.id);if(state.editing===a.id)resetForm();renderNotes();saveLocal();requestDraw();};
     row.append(priority,button,remove);$('note-list').append(row);
@@ -320,15 +320,22 @@ function renderLayers() {
 }
 function loadScene(scene) {
   validateScene(scene);if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
-  try{const saved=JSON.parse(localStorage.getItem(storageKey()) || 'null');if(saved){validateReview({schema:REVIEW_SCHEMA,board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=refreshContexts(scene,saved.annotations);$('summary').value=saved.summary || '';$('stage').value=saved.stage;}}catch{message('Saved local notes were invalid; load an exported review to recover them.',true);}
+  state.issueSource=null;let raw=null;
+  try{raw=localStorage.getItem(storageKey());const saved=JSON.parse(raw || 'null');if(saved){validateReview({schema:REVIEW_SCHEMA,board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=refreshContexts(scene,saved.annotations);$('summary').value=saved.summary || '';$('stage').value=saved.stage;state.issueSource=saved.copperscript_issues || null;}}
+  catch{
+    // Keep the unreadable notes instead of overwriting them with the next autosave.
+    try{if(raw)localStorage.setItem(`${storageKey()}:unreadable:${new Date().toISOString()}`,raw);}catch{}
+    message('Saved local notes could not be read; they were kept under an ":unreadable" key. Load an exported review to recover.',true);}
   $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
   renderLayers();renderEntities();renderNotes();fit();setEnabled();
 }
-function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,state.issues?.source || null),null,2)+'\n';}
+function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,issueSource()),null,2)+'\n';}
 function download(name,text,type='application/json') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function setEnabled(){for(const id of ['load-review','load-issues','export-scene','export-review','copy-review','save-note','fit','clear'])$(id).disabled=!state.scene;}
+// The issue list loaded now, else the one recorded with loaded or saved notes.
+function issueSource(){return state.issues?.source || state.issueSource || null;}
 function setIssues(issues) {
   state.issues=issues;const shown=!!issues;$('tab-issues').hidden=!shown;$('show-issues-label').hidden=!shown;
   $('issue-count').textContent=issues?issues.issues.length:0;if(!shown && state.tab==='issues'){state.tab='components';for(const t of ['components','nets','issues'])$(`tab-${t}`).classList.toggle('active',t==='components');}
@@ -350,7 +357,7 @@ $('board-file').onchange=guarded(async event=>{
 });
 $('review-file').onchange=guarded(async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>50*1024*1024)throw new Error('Review exceeds 50 MiB.');
-  const review=validateReview(JSON.parse(await file.text()),state.scene);state.annotations=refreshContexts(state.scene,review.annotations);$('summary').value=review.summary || '';$('stage').value=review.board.stage;
+  const review=validateReview(JSON.parse(await file.text()),state.scene);state.annotations=refreshContexts(state.scene,review.annotations);state.issueSource=review.copperscript_issues || null;$('summary').value=review.summary || '';$('stage').value=review.board.stage;
   resetForm();renderNotes();saveLocal();requestDraw();message(`Loaded ${state.annotations.length} review notes`);
 });
 $('export-review').onclick=guarded(()=>{download(`${state.scene.board.name}.review.json`,reviewText());message('Review exported. Paste its contents into your next LLM prompt.');});

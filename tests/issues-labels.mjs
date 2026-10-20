@@ -45,6 +45,16 @@ try {
   await page.locator('.note').first().click();assert.equal(await page.locator('#issue-ids').inputValue(),'P1');
   await page.locator('#observation').fill('P1: edited.');await page.locator('#save-note').click();
   assert((await page.locator('.note-title').first().textContent()).includes('edited'));
+  // The issue source survives a reload (local notes) and a review round trip without the issue list.
+  let again=page.waitForEvent('download');await page.locator('#export-review').click();
+  await (await again).saveAs('test-results/issues-again.review.json');
+  assert.equal(JSON.parse(readFileSync('test-results/issues-again.review.json')).copperscript_issues.run,'build/demo/runs/T1');
+  await page.locator('#review-file').setInputFiles('test-results/issues.review.json');
+  await page.waitForFunction(()=>document.querySelector('.note-title')?.textContent==='P1: C1 blocks the U1 exits.');
+  again=page.waitForEvent('download');await page.locator('#export-review').click();
+  await (await again).saveAs('test-results/issues-third.review.json');
+  assert.equal(JSON.parse(readFileSync('test-results/issues-third.review.json')).copperscript_issues.board_verified,true);
+  assert((await page.locator('.note-caption').first().textContent()).includes('issue P1'));
   // Labels: all four fit at board zoom; zoomed far out they would collide, so only one is drawn.
   await page.locator('#fit').click();await page.waitForTimeout(100);
   const canvas=page.locator('#board-canvas');

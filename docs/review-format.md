@@ -32,7 +32,10 @@ UUIDs are retained when present; fallback IDs are stable within this exact file.
 Component `reference` is the native PCB label, unique within a scene. A blank or
 repeated native reference (logos, fiducials, copied footprints) is named
 `<reference or footprint name>#n` in file order and the original text is kept in
-`native_reference`; a warning reports how many. `source_path` is the original
+`native_reference`; a warning reports how many. A footprint with no reference
+at all is `FP<file position>`, as in earlier versions. When an older review
+names a component by its native text and exactly one component carries that
+`native_reference`, the selection is mapped to the new name on load. `source_path` is the original
 `CopperScriptPath` property when available. Preserve both: hierarchical source
 paths and native reference spellings can differ. Net names remain exact,
 including hierarchy. Pad numbers are strings and repeated physical pads sharing
@@ -75,25 +78,29 @@ their full geometry:
   position, size, rotation (omitted when 0), shape, layers and drill; larger
   packages list `pads_by_net` (net name to pad numbers) instead.
 - `nets`: `pad_count`, the pads (component, number, pin name, position) when
-  there are at most 64, otherwise `pads_by_component`; copper `bounds_mm`;
-  `tracks_by_layer` (segment count, total length, widths); `vias` (count, count
+  there are at most 64, otherwise `pads_by_component`; `bounds_mm` around its
+  pads, tracks, vias and zone outlines; `tracks_by_layer` (straight `segments`,
+  native `arcs`, total length, widths); `vias` (count, count
   per layer span, size/drill pairs); and `zones` as summaries (id, kind, layers,
   owner, bounds, point count, area). This covers all layers, even hidden ones.
 - `region`: rectangle bounds, query layers, query precision, and the objects
-  that intersect it: component poses and bounds, pads (as above), tracks with
-  only the segments that touch the region (`points_mm`, or `runs_mm` for several
-  runs; arcs keep their native start/mid/end), vias, zones as summaries plus
+  that intersect it: component poses and bounds, pads (as above), tracks as
+  the whole segments that touch the region (`points_mm`, or `runs_mm` for
+  several runs; segments are not cut at the region edge; arcs keep their native
+  start/mid/end), vias, zones as summaries plus `clipped_area_mm2` and
   `clipped_points_mm` (the outline clipped to the region, 0.1 um precision; a
   fill's hole contours stay linked by bridges, so read it even-odd) or, beyond
-  200 clipped points, `clipped_point_count` and `clipped_bounds_mm`, and board
-  drawings clipped the same way. Components use all-side body bounds; copper
+  200 clipped points, `clipped_point_count` and `clipped_bounds_mm`. A zone that
+  only touches the region edge has `clipped_area_mm2: 0` and no points. Board
+  drawings list touching outline runs, and filled drawings their clipped outline. Components use all-side body bounds; copper
   uses the recorded query layers. Intersection is conservative, not an
   electrical-clearance calculation.
 
 When a CopperScript issue list was loaded (**Load issues**, from
 `copper issues RUN --json`), an annotation may cite issue ids: `issues` lists
 them and `context.issues` keeps each cited issue's id, stage, code, title,
-count, nets, mm window and `caused_by`. The review then carries
+count, nets (a capped list's remainder as `nets_omitted`), mm window and
+`caused_by`. The review then carries
 `copperscript_issues`: the run path and status, the board hashes from the issue
 list and `board_verified` (false when the list had no hash, so CopperReview
 could not confirm it belongs to this board). Issue ids are only meaningful for

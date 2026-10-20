@@ -170,7 +170,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
     for index, fp in enumerate(footprints):
         props = {p[1]: p[2] for p in children(fp, "property") if len(p) > 2}
         texts = {p[1]: p[2] for p in children(fp, "fp_text") if len(p) > 2}
-        native_refs.append(props.get("Reference", texts.get("reference", "")))
+        native_refs.append(props.get("Reference", texts.get("reference")))
     # Selections and net membership name components by reference, so references
     # must be unique. Blank (logos, fiducials) and repeated native references get
     # a stable "#n" suffix in file order; native_reference keeps the original.
@@ -179,6 +179,11 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
         if native and native not in counts:
             counts[native] = 1
             references.append(native)
+            continue
+        if native is None and f"FP{index+1}" not in taken:
+            # No reference at all: the name earlier versions used, so their reviews still resolve.
+            taken.add(f"FP{index+1}")
+            references.append(f"FP{index+1}")
             continue
         base = native or (fp[1].rsplit(":", 1)[-1] if len(fp) > 1 and isinstance(fp[1], str) and fp[1] else "FP")
         n = counts.get(base, 0)
@@ -190,7 +195,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
         counts[base] = n
         taken.add(candidate)
         references.append(candidate)
-    renamed = sum(1 for a, b in zip(native_refs, references) if a != b)
+    renamed = sum(1 for a, b in zip(native_refs, references) if a is not None and a != b)
     if renamed:
         warnings.add(f"{renamed} footprint(s) with a blank or repeated reference are named <reference or footprint>#n; "
                      "native_reference keeps the original text.")
@@ -222,7 +227,8 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
         angle = number(at[3]) if len(at) > 3 else 0
         transform = lambda p, a=angle, o=origin: rotate(p, a, o)
         component = {"id": identity(fp, f"component:{index}"), "reference": ref,
-                     **({"native_reference": native_refs[index]} if native_refs[index] != ref else {}),
+                     **({"native_reference": native_refs[index]}
+                        if native_refs[index] is not None and native_refs[index] != ref else {}),
                      "source_path": props.get("CopperScriptPath", ref),
                      "value": props.get("Value", texts.get("value", "")), "footprint": fp[1],
                      "position_mm": origin, "rotation_deg": angle,

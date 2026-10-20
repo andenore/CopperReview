@@ -65,11 +65,16 @@ export const CONTEXT_LIMITS = {list_pads:64, region_components:60, region_pads:1
 const r6 = p => [round(p[0]),round(p[1])];
 // Clipped outlines are derived geometry: 0.1 um is ample and keeps them short.
 const r4 = p => [Math.round(p[0]*1e4)/1e4,Math.round(p[1]*1e4)/1e4];
-const boundsOf = points => points.length ? [Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1])),
-  Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1]))].map(round) : null;
+function boundsOf(points) {
+  // A loop, not Math.min(...points): fills can hold hundreds of thousands of points.
+  if(!points.length)return null;
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const [x,y] of points){if(x<x0)x0=x;if(y<y0)y0=y;if(x>x1)x1=x;if(y>y1)y1=y;}
+  return [x0,y0,x1,y1].map(round);
+}
 function mergeBounds(list) {
   const valid=list.filter(Boolean);if(!valid.length)return null;
-  return [Math.min(...valid.map(b=>b[0])),Math.min(...valid.map(b=>b[1])),Math.max(...valid.map(b=>b[2])),Math.max(...valid.map(b=>b[3]))];
+  return boundsOf(valid.flatMap(b=>[[b[0],b[1]],[b[2],b[3]]]));
 }
 export function polygonArea(points) {
   let a=0;for(let i=0,j=points.length-1;i<points.length;j=i++)a+=(points[j][0]+points[i][0])*(points[j][1]-points[i][1]);
@@ -91,7 +96,9 @@ export function clipPolygonToBox(points,box) {
     }
   }
   const unique=[];for(const p of out.map(r4))if(!unique.length || unique.at(-1)[0]!==p[0] || unique.at(-1)[1]!==p[1])unique.push(p);
-  return unique.length>=3 ? unique : [];
+  while(unique.length>1 && unique[0][0]===unique.at(-1)[0] && unique[0][1]===unique.at(-1)[1])unique.pop();
+  // Only an area counts: a polygon that merely touches the region edge clips to nothing.
+  return unique.length>=3 && polygonArea(unique)>1e-9 ? unique : [];
 }
 /** Runs of consecutive polyline segments touching the box (expanded by half the stroke). */
 function polylineRuns(points,box,halfWidth) {
@@ -99,6 +106,11 @@ function polylineRuns(points,box,halfWidth) {
   for(let i=1;i<points.length;i++) {
     if(segmentIntersectsBox(points[i-1],points[i],query)){if(!run){run=[r6(points[i-1])];runs.push(run);}run.push(r6(points[i]));}
     else run=null;
+  }
+  // A closed outline that touches the region across its start point is one run, not two.
+  const closed=points.length>2 && points[0][0]===points.at(-1)[0] && points[0][1]===points.at(-1)[1];
+  if(closed && runs.length>1 && run===runs.at(-1) && segmentIntersectsBox(points[0],points[1],query)){
+    const last=runs.pop();runs[0]=[...last,...runs[0].slice(1)];
   }
   return runs;
 }
@@ -123,8 +135,9 @@ export function componentContext(c) {
 export function netContext(scene,net) {
   const tracks=scene.tracks.filter(t=>t.net===net.name),vias=scene.vias.filter(v=>v.net===net.name),zones=scene.zones.filter(z=>z.net===net.name);
   const byLayer={};
-  for(const t of tracks){const l=(byLayer[t.layer] ??= {segments:0,length_mm:0,widths_mm:new Set()});
-    l.segments+=t.points_mm.length-1;l.widths_mm.add(t.width_mm);
+  for(const t of tracks){const l=(byLayer[t.layer] ??= {segments:0,arcs:0,length_mm:0,widths_mm:new Set()});
+    // Native objects: an arc counts once, not per display sample.
+    if(t.arc)l.arcs++;else l.segments+=t.points_mm.length-1;l.widths_mm.add(t.width_mm);
     for(let i=1;i<t.points_mm.length;i++)l.length_mm+=Math.hypot(t.points_mm[i][0]-t.points_mm[i-1][0],t.points_mm[i][1]-t.points_mm[i-1][1]);}
   for(const l of Object.values(byLayer)){l.length_mm=round(l.length_mm);l.widths_mm=[...l.widths_mm].sort((a,b)=>a-b);}
   const spans={};for(const v of vias){const key=`${v.layers[0]}-${v.layers.at(-1)}`;spans[key]=(spans[key] || 0)+1;}
@@ -147,15 +160,16 @@ export function regionContext(scene,box,layers) {
   const tracks=scene.tracks.filter(t=>layers.includes(t.layer)).map(t=>({t,runs:polylineRuns(t.points_mm,box,t.width_mm/2)}))
     .filter(x=>x.runs.length).map(({t,runs})=>({id:t.id,net:t.net,layer:t.layer,width_mm:t.width_mm,
       ...(t.arc?{arc:{start_mm:r6(t.arc.start_mm),mid_mm:r6(t.arc.mid_mm),end_mm:r6(t.arc.end_mm)}}:{}),
-      // Only the part inside the region; arcs keep their native start/mid/end.
+      // Whole segments that touch the region (not cut at its edge); arcs keep their native start/mid/end.
       points_mm:t.arc?undefined:runs.length===1?runs[0]:undefined,...(t.arc || runs.length===1?{}:{runs_mm:runs})}))
     .map(t=>JSON.parse(JSON.stringify(t)));
   const vias=scene.vias.filter(v=>visible(v.layers) && pointInBox(v.position_mm,expand(box,v.size_mm/2)))
     .map(v=>({id:v.id,net:v.net,position_mm:r6(v.position_mm),size_mm:v.size_mm,drill_mm:v.drill_mm,layers:[...v.layers]}));
   const zones=scene.zones.filter(z=>visible(z.layers) && polygonIntersectsBox(z.points_mm,box)).map(z=>{
     const clipped=clipPolygonToBox(z.points_mm,box),brief=zoneBrief(z);
+    if(!clipped.length)return {...brief,clipped_area_mm2:0};
     return {...brief,...(clipped.length<=L.clipped_points?{clipped_points_mm:clipped}:{clipped_point_count:clipped.length,
-      clipped_bounds_mm:boundsOf(clipped)})};
+      clipped_bounds_mm:boundsOf(clipped)}),clipped_area_mm2:round(polygonArea(clipped))};
   });
   const nets=[...new Set([...pads,...tracks,...vias,...zones].map(p=>p.net).filter(Boolean))].sort();
   const drawings=scene.drawings.filter(g=>layers.includes(g.layer) || g.layer==='Edge.Cuts').map(g=>{
@@ -175,7 +189,7 @@ export function snapshotSelection(scene,selection,layers) {
   return {format:'compact/v2',components:selectedComponents.map(componentContext),nets:selectedNets.map(n=>netContext(scene,n)),
     region:selection.region ? {bounds_mm:selection.region.map(round), query_layers:[...layers],
       query_precision:'conservative intersection; pad bounding polygons and stroke-expanded boxes; arcs sampled <=0.01 mm; '+
-        'tracks, drawings and zones clipped to the region',
+        'tracks and outlines list whole segments touching the region; zone and filled-shape outlines are clipped to it',
       context:regionContext(scene,selection.region,layers)} : null};
 }
 export function makeAnnotation(scene,selection,layers,fields,id=globalThis.crypto.randomUUID()) {
@@ -192,8 +206,12 @@ export function makeAnnotation(scene,selection,layers,fields,id=globalThis.crypt
 }
 // CopperScript `copper issues RUN --json` documents, shown as framed windows.
 export const ISSUES_SCHEMA = 'copperscript.run-issues/v1';
+// CopperScript caps long net lists with a "+N more" entry: keep it as a count, not a net name.
+const MORE = /^\+(\d+) more$/;
 const issueBrief = i => ({id:i.id,stage:i.stage,code:i.code,title:i.title,count:i.count,
-  nets:[...(i.nets || [])],window_mm:i.window_mm ? [...i.window_mm] : null,...(i.caused_by?{caused_by:i.caused_by}:{})});
+  nets:(i.nets || []).filter(n=>!MORE.test(n)),
+  ...((i.nets || []).some(n=>MORE.test(n))?{nets_omitted:Number((i.nets.find(n=>MORE.test(n))).match(MORE)[1])}:{}),
+  ...(i.nets_omitted?{nets_omitted:i.nets_omitted}:{}),window_mm:i.window_mm ? [...i.window_mm] : null,...(i.caused_by?{caused_by:i.caused_by}:{})});
 export function validateIssues(doc,scene) {
   if(doc?.schema!==ISSUES_SCHEMA || !Array.isArray(doc.issues))
     throw new Error('Not a CopperScript issue list. Save one with: copper issues RUN --json > issues.json');
@@ -252,8 +270,8 @@ export function validateScene(scene) {
   const refs=new Set();
   scene.components.forEach((c,i)=>{
     const where=label('components',i,c,'reference');
-    check(typeof c.reference==='string' && c.reference!=='',where,'reference','must be a non-empty string');
-    check(!refs.has(c.reference),where,'reference','repeats an earlier component (import the PCB again to disambiguate)');
+    check(typeof c.reference==='string',where,'reference','must be a string');
+    check(!refs.has(c.reference),where,'reference','repeats an earlier component; open the .kicad_pcb again to rename duplicates');
     refs.add(c.reference);
     check(c.native_reference===undefined || typeof c.native_reference==='string',where,'native_reference');
     check(typeof c.source_path==='string',where,'source_path');check(typeof c.id==='string',where,'id');
@@ -279,7 +297,7 @@ export function validateScene(scene) {
     check(strings(v.layers),where,'layers','must be layer names');});
   scene.zones.forEach((z,i)=>{const where=label('zones',i,z);
     check(typeof z.id==='string',where,'id');check(typeof z.net==='string',where,'net','must be a string');
-    check(points(z.points_mm) && z.points_mm.length>=3,where,'points_mm','must hold at least three [x,y] mm points');
+    check(points(z.points_mm),where,'points_mm','must be [x,y] mm points');
     check(strings(z.layers),where,'layers','must be layer names');check(['intent','fill','keepout','copper'].includes(z.kind),where,'kind','must be intent, fill, keepout or copper');});
   scene.nets.forEach((n,i)=>{const where=label('nets',i,n,'name');
     check(typeof n.name==='string',where,'name');check(Array.isArray(n.pads),where,'pads','must be a list');
@@ -301,6 +319,13 @@ export function validateReview(review,scene) {
        typeof a.board_wide!=='boolean' || a.visible_layers.some(l=>!scene.board.layers.includes(l)) ||
        (a.issues!==undefined && !(Array.isArray(a.issues) && a.issues.every(s=>typeof s==='string')))) throw new Error('Invalid review annotation fields.');
     ids.add(a.id);
+    // Older imports named a blank or repeated reference by its native text; map it to the
+    // renamed component when exactly one component carries that native reference.
+    a.selection.components=a.selection.components.map(r=>{
+      if(scene.components.some(c=>c.reference===r))return r;
+      const renamed=scene.components.filter(c=>c.native_reference===r);
+      return renamed.length===1 ? renamed[0].reference : r;
+    });
     if(a.selection.components.some(r=>!scene.components.some(c=>c.reference===r)) ||
        a.selection.nets.some(n=>!scene.nets.some(net=>net.name===n))) throw new Error('Review references missing entities.');
     if(a.selection.region && (!Array.isArray(a.selection.region) || a.selection.region.length!==4 ||

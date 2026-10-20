@@ -60,6 +60,8 @@ test('scene validation rejects non-mm coordinates and invalid pad geometry',()=>
   assert.throws(()=>validateScene(bad),/components\[0\] \(U1\)\.pads\[0\] \(1\)\.size_mm must be two positive/);
 });
 test('scene validation names a repeated reference and accepts renamed native references',()=>{
+  const blank=JSON.parse(JSON.stringify(scene));blank.components[0].reference='';blank.zones[0].points_mm=[[0,0]];
+  assert.equal(validateScene(blank),blank);
   const dup=JSON.parse(JSON.stringify(scene));dup.components[1].reference=dup.components[0].reference;
   assert.throws(()=>validateScene(dup),/components\[1\] \(U1\)\.reference repeats an earlier component/);
   const renamed=JSON.parse(JSON.stringify(scene));renamed.components[1].native_reference='';renamed.components[1].reference='FP#1';
@@ -127,4 +129,30 @@ test('CopperScript issue lists bind to the board and annotations cite their ids'
   const back=validateReview(JSON.parse(JSON.stringify(review)),scene);
   assert.equal(refreshContexts(scene,back.annotations)[1].context.issues[0].id,'N1');
   assert.equal(makeReview(scene,[],'placed','',issues.source).copperscript_issues,undefined);
+});
+
+test('review fixes: big zones, closed outlines, edge-touching zones, arcs, capped issue nets, renamed references',()=>{
+  const big=JSON.parse(JSON.stringify(scene)),ring=[];
+  for(let i=0;i<200000;i++){const a=i/200000*Math.PI*2;ring.push([25+20*Math.cos(a),17+15*Math.sin(a)]);}
+  big.zones.push({id:'huge',net:'GND',points_mm:ring,layers:['F.Cu'],kind:'fill'});
+  const net=snapshotSelection(big,{components:[],nets:['GND'],region:null},['F.Cu']).nets[0];
+  assert(net.zones.some(z=>z.id==='huge' && z.point_count===200000));
+  const outline={layer:'Edge.Cuts',width_mm:.1,filled:false,points:[[0,0],[50,0],[50,32],[0,32],[0,0]]};
+  const corner=regionContext({...scene,drawings:[outline]},[-1,-1,1,1],['F.Cu']).drawings[0];
+  assert.deepEqual(corner.runs_mm,[[[0,32],[0,0],[50,0]]]);
+  const touching={id:'edge',net:'GND',points_mm:[[10,0],[20,0],[20,10],[10,10]],layers:['F.Cu'],kind:'fill'};
+  const z=regionContext({...scene,zones:[touching]},[20,2,25,4],['F.Cu']).zones[0];
+  assert.equal(z.clipped_area_mm2,0);assert(!z.clipped_points_mm);
+  assert.deepEqual(clipPolygonToBox([[2,0],[3,0],[2,0]],[0,-1,5,1]),[]);
+  const arcs=JSON.parse(JSON.stringify(scene));arcs.tracks.push({id:'arc1',net:'GND',layer:'F.Cu',width_mm:.2,
+    points_mm:[[0,0],[.7,.3],[1,1]],arc:{start_mm:[0,0],mid_mm:[.7,.3],end_mm:[1,1]}});
+  const layer=snapshotSelection(arcs,{components:[],nets:['GND'],region:null},['F.Cu']).nets[0].tracks_by_layer['F.Cu'];
+  assert.equal(layer.arcs,1);
+  const issues=validateIssues({schema:'copperscript.run-issues/v1',board_sha256:scene.board.sha256,
+    issues:[{id:'N1',code:'X',title:'t',count:9,nets:['A','B','+7 more'],window_mm:null}]},scene);
+  assert.deepEqual(issues.issues[0].nets,['A','B']);assert.equal(issues.issues[0].nets_omitted,7);
+  const renamed=JSON.parse(JSON.stringify(scene));renamed.components[1].native_reference='';renamed.components[1].reference='Logo#1';
+  const old={schema:'copper-review/v1',board:{sha256:scene.board.sha256,stage:'placed'},annotations:[{id:'a',observation:'o',desired_behavior:'',
+    category:'other',priority:'low',status:'open',board_wide:false,visible_layers:['F.Cu'],selection:{components:[''],nets:[],region:null}}]};
+  assert.deepEqual(validateReview(old,renamed).annotations[0].selection.components,['Logo#1']);
 });

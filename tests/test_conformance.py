@@ -61,6 +61,11 @@ class ConformanceTests(unittest.TestCase):
             for got, want in zip(match[0]["points_mm"], e["points_mm"]):
                 self.close(got, want)
 
+    def test_degenerate_zones_are_skipped_with_a_warning(self):
+        self.assertEqual(self.expected["degenerate_zones_skipped"]["count"], 2)
+        self.assertFalse(any(len(z["points_mm"]) < 3 for z in self.scene["zones"]))
+        self.assertIn("Zones with fewer than three outline points are skipped.", self.scene["warnings"])
+
     def test_arcs_and_vias(self):
         for e in self.expected["arcs"]:
             arc = next(t for t in self.scene["tracks"] if "arc" in t)

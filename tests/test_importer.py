@@ -122,6 +122,9 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(refs, ["FP#1", "FID#1", "R1", "R1#3", "R1#2"])
         self.assertEqual([c.get("native_reference") for c in scene["components"]], ["", "", None, "R1", None])
         self.assertTrue(any("blank or repeated reference" in w for w in scene["warnings"]))
+        legacy = import_pcb(b'(kicad_pcb (layers (0 "F.Cu" signal)) (footprint "X" (layer "F.Cu") (at 0 0)) (footprint "Y" (layer "F.Cu") (at 1 1)))', "x")
+        self.assertEqual([c["reference"] for c in legacy["components"]], ["FP1", "FP2"])
+        self.assertTrue(all("native_reference" not in c for c in legacy["components"]))
 
     def test_example_scene_is_what_the_importer_produces(self):
         import json

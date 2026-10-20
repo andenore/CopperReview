@@ -57,13 +57,13 @@ No input boards or CopperScript sources were modified by these checks.
 
   | Board | Selection | Before | After |
   | --- | --- | --- | --- |
-  | CopperProbe (refilled) | net GND | 348 KB | 5.6 KB |
+  | CopperProbe (refilled) | net GND | 348 KB | 5.7 KB |
   | CopperProbe | component U_USB (169 pads) | 41 KB | 2.1 KB |
   | CopperProbe | 2 x 2 mm region at U_USB | 440 KB | 17 KB |
   | CopperProbe | 10 x 10 mm region (capped) | 562 KB | 65 KB |
-  | FX10 kit | net GND | 1156 KB | 11.5 KB |
+  | FX10 kit | net GND | 1156 KB | 11.6 KB |
   | FX10 kit | component J7 (402 pads) | 126 KB | 6.3 KB |
-  | FX10 kit | 2 x 2 mm region | 1158 KB | 5.6 KB |
+  | FX10 kit | 2 x 2 mm region | 1158 KB | 5.8 KB |
 
   A Node test enforces the budget on a synthetic filled board (40k-point fill,
   600-pad BGA). v1 reviews and saved local notes load and are rebuilt.
@@ -78,8 +78,15 @@ No input boards or CopperScript sources were modified by these checks.
 - Shared KiCad conformance fixture (rotated, back-side, blank/duplicate
   references, footprint keepout and copper zones, arc, via, empty zone) with
   hand-derived expectations; it fails on the previous importer.
+- An independent review's findings were fixed: the issue-list source survives
+  reloads and review round trips; old scenes with a blank reference or a short
+  zone load again, a footprint with no reference keeps its earlier `FP<n>` name
+  and old selections of a renamed reference are mapped; unreadable local notes
+  are kept instead of overwritten; bounds use a loop (a 200k-point zone no longer
+  overflows the stack); arcs count once; closed outlines and edge-touching zones
+  clip correctly; capped issue net lists become `nets_omitted`.
 - Reference labels are thinned to avoid overlap; CopperScript issue lists load as
   windows and notes can cite their ids.
-- 21 Python tests, 14 Node tests, the browser workflow, viewer and track-joint
+- 22 Python tests, 15 Node tests, the browser workflow, viewer and track-joint
   pixel regressions, the issue/label browser test, and real-board imports of the
   FX10 kit (363 components, 12,786 tracks) and CopperProbe passed.

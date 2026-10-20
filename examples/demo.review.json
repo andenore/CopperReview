@@ -220,6 +220,7 @@
             "tracks_by_layer": {
               "F.Cu": {
                 "segments": 3,
+                "arcs": 0,
                 "length_mm": 12.84242,
                 "widths_mm": [
                   0.25
@@ -275,7 +276,7 @@
             "F.Cu",
             "B.Cu"
           ],
-          "query_precision": "conservative intersection; pad bounding polygons and stroke-expanded boxes; arcs sampled <=0.01 mm; tracks, drawings and zones clipped to the region",
+          "query_precision": "conservative intersection; pad bounding polygons and stroke-expanded boxes; arcs sampled <=0.01 mm; tracks and outlines list whole segments touching the region; zone and filled-shape outlines are clipped to it",
           "context": {
             "components": [
               {
@@ -524,7 +525,8 @@
                     33.5732,
                     24.0463
                   ]
-                ]
+                ],
+                "clipped_area_mm2": 136.188886
               },
               {
                 "id": "gnd-zone:1",
@@ -558,7 +560,8 @@
                     33.5732,
                     24.0463
                   ]
-                ]
+                ],
+                "clipped_area_mm2": 136.188886
               }
             ],
             "drawings": []
