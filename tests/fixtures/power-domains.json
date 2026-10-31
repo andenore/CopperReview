@@ -1,0 +1,457 @@
+{
+  "type": "power",
+  "nodes": [
+    {
+      "id": "rail:PWR/BAT",
+      "kind": "net",
+      "entity": "PWR/BAT",
+      "label": "PWR/BAT",
+      "subtitle": "3.7 V",
+      "passives": 1
+    },
+    {
+      "id": "device:PWR/J_BAT",
+      "kind": "component",
+      "entity": "PWR/J_BAT",
+      "label": "PWR/J_BAT",
+      "subtitle": "JST_S3B_XH_SM4_TB",
+      "device": true
+    },
+    {
+      "id": "device:PWR/U_CHARGE",
+      "kind": "component",
+      "entity": "PWR/U_CHARGE",
+      "label": "PWR/U_CHARGE",
+      "subtitle": "BQ24072RGTR",
+      "device": true
+    },
+    {
+      "id": "rail:V5",
+      "kind": "net",
+      "entity": "V5",
+      "label": "V5",
+      "subtitle": "5 V",
+      "passives": 2
+    },
+    {
+      "id": "device:J_POWER",
+      "kind": "component",
+      "entity": "J_POWER",
+      "label": "J_POWER",
+      "subtitle": "GCT_USB4135_GF_A",
+      "device": true
+    },
+    {
+      "id": "rail:PWR/VSYS",
+      "kind": "net",
+      "entity": "PWR/VSYS",
+      "label": "PWR/VSYS",
+      "subtitle": "3.7 V",
+      "passives": 5
+    },
+    {
+      "id": "device:PWR/U_LOGIC",
+      "kind": "component",
+      "entity": "PWR/U_LOGIC",
+      "label": "PWR/U_LOGIC",
+      "subtitle": "TPS63020DSJR",
+      "device": true
+    },
+    {
+      "id": "device:PWR/U_MODEM",
+      "kind": "component",
+      "entity": "PWR/U_MODEM",
+      "label": "PWR/U_MODEM",
+      "subtitle": "TPS63020DSJR",
+      "device": true
+    },
+    {
+      "id": "rail:V3V3",
+      "kind": "net",
+      "entity": "V3V3",
+      "label": "V3V3",
+      "subtitle": "3.3 V",
+      "passives": 19
+    },
+    {
+      "id": "device:U_MCU",
+      "kind": "component",
+      "entity": "U_MCU",
+      "label": "U_MCU",
+      "subtitle": "STM32G0C1RET6",
+      "device": true
+    },
+    {
+      "id": "device:U_CC",
+      "kind": "component",
+      "entity": "U_CC",
+      "label": "U_CC",
+      "subtitle": "TUSB320LAI",
+      "device": true
+    },
+    {
+      "id": "device:U_MODEM_LEVEL",
+      "kind": "component",
+      "entity": "U_MODEM_LEVEL",
+      "label": "U_MODEM_LEVEL",
+      "subtitle": "MODEM_UART_TRANSLATOR",
+      "device": true
+    },
+    {
+      "id": "device:U_MODEM_STATUS",
+      "kind": "component",
+      "entity": "U_MODEM_STATUS",
+      "label": "U_MODEM_STATUS",
+      "subtitle": "MODEM_STATUS_TRANSLATOR",
+      "device": true
+    },
+    {
+      "id": "device:U_NRF",
+      "kind": "component",
+      "entity": "U_NRF",
+      "label": "U_NRF",
+      "subtitle": "NRF52832_QFAA",
+      "device": true
+    },
+    {
+      "id": "device:U_ACCEL",
+      "kind": "component",
+      "entity": "U_ACCEL",
+      "label": "U_ACCEL",
+      "subtitle": "LIS2DW12",
+      "device": true
+    },
+    {
+      "id": "device:U_GNSS",
+      "kind": "component",
+      "entity": "U_GNSS",
+      "label": "U_GNSS",
+      "subtitle": "MAX_M10S_00B",
+      "device": true
+    },
+    {
+      "id": "device:U_MODEM",
+      "kind": "component",
+      "entity": "U_MODEM",
+      "label": "U_MODEM",
+      "subtitle": "SIM7670G_LNGV",
+      "device": true
+    },
+    {
+      "id": "device:J_DEBUG",
+      "kind": "component",
+      "entity": "J_DEBUG",
+      "label": "J_DEBUG",
+      "subtitle": "DEBUG_HEADER",
+      "device": true
+    },
+    {
+      "id": "device:J_SWD_MCU",
+      "kind": "component",
+      "entity": "J_SWD_MCU",
+      "label": "J_SWD_MCU",
+      "subtitle": "SWD_HEADER",
+      "device": true
+    },
+    {
+      "id": "device:J_SWD_NRF",
+      "kind": "component",
+      "entity": "J_SWD_NRF",
+      "label": "J_SWD_NRF",
+      "subtitle": "SWD_HEADER",
+      "device": true
+    },
+    {
+      "id": "rail:V3V8",
+      "kind": "net",
+      "entity": "V3V8",
+      "label": "V3V8",
+      "subtitle": "3.8 V",
+      "passives": 5
+    },
+    {
+      "id": "rail:V1V8_MODEM",
+      "kind": "net",
+      "entity": "V1V8_MODEM",
+      "label": "V1V8_MODEM",
+      "subtitle": "Voltage unspecified",
+      "passives": 2
+    },
+    {
+      "id": "rail:SIM_VCC",
+      "kind": "net",
+      "entity": "SIM_VCC",
+      "label": "SIM_VCC",
+      "subtitle": "Voltage unspecified",
+      "passives": 0
+    },
+    {
+      "id": "device:J_SIM",
+      "kind": "component",
+      "entity": "J_SIM",
+      "label": "J_SIM",
+      "subtitle": "SIM8060_6_0_14_00_A",
+      "device": true
+    }
+  ],
+  "edges": [
+    {
+      "from": "device:PWR/J_BAT",
+      "to": "rail:PWR/BAT",
+      "kind": "net",
+      "entity": "PWR/BAT",
+      "pins": [
+        "PWR/J_BAT.P1"
+      ]
+    },
+    {
+      "from": "rail:PWR/BAT",
+      "to": "device:PWR/U_CHARGE",
+      "kind": "net",
+      "entity": "PWR/BAT",
+      "pins": [
+        "PWR/U_CHARGE.BAT_2",
+        "PWR/U_CHARGE.BAT_3"
+      ]
+    },
+    {
+      "from": "device:J_POWER",
+      "to": "rail:V5",
+      "kind": "net",
+      "entity": "V5",
+      "pins": [
+        "J_POWER.VBUS_A",
+        "J_POWER.VBUS_B"
+      ]
+    },
+    {
+      "from": "rail:V5",
+      "to": "device:PWR/U_CHARGE",
+      "kind": "net",
+      "entity": "V5",
+      "pins": [
+        "PWR/U_CHARGE.IN",
+        "PWR/U_CHARGE.EN1"
+      ]
+    },
+    {
+      "from": "device:PWR/U_CHARGE",
+      "to": "rail:PWR/VSYS",
+      "kind": "net",
+      "entity": "PWR/VSYS",
+      "pins": [
+        "PWR/U_CHARGE.OUT_10",
+        "PWR/U_CHARGE.OUT_11"
+      ]
+    },
+    {
+      "from": "rail:PWR/VSYS",
+      "to": "device:PWR/U_LOGIC",
+      "kind": "net",
+      "entity": "PWR/VSYS",
+      "pins": [
+        "PWR/U_LOGIC.VIN_10",
+        "PWR/U_LOGIC.VIN_11",
+        "PWR/U_LOGIC.VINA",
+        "PWR/U_LOGIC.EN"
+      ]
+    },
+    {
+      "from": "rail:PWR/VSYS",
+      "to": "device:PWR/U_MODEM",
+      "kind": "net",
+      "entity": "PWR/VSYS",
+      "pins": [
+        "PWR/U_MODEM.VIN_10",
+        "PWR/U_MODEM.VIN_11",
+        "PWR/U_MODEM.VINA"
+      ]
+    },
+    {
+      "from": "device:PWR/U_LOGIC",
+      "to": "rail:V3V3",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "PWR/U_LOGIC.VOUT_4",
+        "PWR/U_LOGIC.VOUT_5"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_MCU",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_MCU.VDD",
+        "U_MCU.VBAT",
+        "U_MCU.VREF_PLUS"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_CC",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_CC.VDD"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_MODEM_LEVEL",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_MODEM_LEVEL.VCCA",
+        "U_MODEM_LEVEL.DIR1"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_MODEM_STATUS",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_MODEM_STATUS.VCCA"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_NRF",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_NRF.VDD_1",
+        "U_NRF.VDD_2",
+        "U_NRF.VDD_3"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_ACCEL",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_ACCEL.VDD",
+        "U_ACCEL.VDD_IO",
+        "U_ACCEL.CS"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_GNSS",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_GNSS.VCC",
+        "U_GNSS.V_IO",
+        "U_GNSS.V_BCKP"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:U_MODEM",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "U_MODEM.GNSS_VBKP"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:J_DEBUG",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "J_DEBUG.VREF"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:J_SWD_MCU",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "J_SWD_MCU.VREF"
+      ]
+    },
+    {
+      "from": "rail:V3V3",
+      "to": "device:J_SWD_NRF",
+      "kind": "net",
+      "entity": "V3V3",
+      "pins": [
+        "J_SWD_NRF.VREF"
+      ]
+    },
+    {
+      "from": "device:PWR/U_MODEM",
+      "to": "rail:V3V8",
+      "kind": "net",
+      "entity": "V3V8",
+      "pins": [
+        "PWR/U_MODEM.VOUT_4",
+        "PWR/U_MODEM.VOUT_5"
+      ]
+    },
+    {
+      "from": "rail:V3V8",
+      "to": "device:U_MODEM",
+      "kind": "net",
+      "entity": "V3V8",
+      "pins": [
+        "U_MODEM.USB_VBUS",
+        "U_MODEM.VBAT_1",
+        "U_MODEM.VBAT_2",
+        "U_MODEM.VBAT_3"
+      ]
+    },
+    {
+      "from": "device:U_MODEM",
+      "to": "rail:V1V8_MODEM",
+      "kind": "net",
+      "entity": "V1V8_MODEM",
+      "pins": [
+        "U_MODEM.VDD_EXT",
+        "U_MODEM.GNSS_VDD"
+      ]
+    },
+    {
+      "from": "rail:V1V8_MODEM",
+      "to": "device:U_MODEM_LEVEL",
+      "kind": "net",
+      "entity": "V1V8_MODEM",
+      "pins": [
+        "U_MODEM_LEVEL.VCCB"
+      ]
+    },
+    {
+      "from": "rail:V1V8_MODEM",
+      "to": "device:U_MODEM_STATUS",
+      "kind": "net",
+      "entity": "V1V8_MODEM",
+      "pins": [
+        "U_MODEM_STATUS.VCCB"
+      ]
+    },
+    {
+      "from": "device:U_MODEM",
+      "to": "rail:SIM_VCC",
+      "kind": "net",
+      "entity": "SIM_VCC",
+      "pins": [
+        "U_MODEM.USIM_VDD"
+      ]
+    },
+    {
+      "from": "rail:SIM_VCC",
+      "to": "device:J_SIM",
+      "kind": "net",
+      "entity": "SIM_VCC",
+      "pins": [
+        "J_SIM.VCC"
+      ]
+    }
+  ]
+}

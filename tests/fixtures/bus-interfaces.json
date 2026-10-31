@@ -1,0 +1,510 @@
+{
+  "nodes": [
+    {
+      "id": "bus:[[\"U_ACCEL\",\"U_MCU\"],[\"I2C_SCL\",\"I2C_SDA\"]]",
+      "kind": "bus",
+      "entity": "interface:MOTION_BUS",
+      "label": "MOTION_BUS",
+      "subtitle": "I²C · 2 signal nets",
+      "protocol": {
+        "key": "i2c",
+        "label": "I²C"
+      },
+      "types": [
+        "std.i2c",
+        "I2C2"
+      ],
+      "aliases": [
+        "MOTION_BUS",
+        "MOTION_I2C"
+      ],
+      "nets": [
+        "I2C_SCL",
+        "I2C_SDA"
+      ],
+      "busIds": [
+        "interface:MOTION_BUS",
+        "peripheral:MOTION_I2C"
+      ]
+    },
+    {
+      "id": "device:U_ACCEL",
+      "kind": "component",
+      "entity": "U_ACCEL",
+      "label": "U_ACCEL",
+      "subtitle": "LIS2DW12",
+      "device": true
+    },
+    {
+      "id": "device:U_MCU",
+      "kind": "component",
+      "entity": "U_MCU",
+      "label": "U_MCU",
+      "subtitle": "STM32G0C1RET6",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"U_MCU\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_UART",
+      "label": "MODEM_UART",
+      "subtitle": "UART · 2 signal nets",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "types": [
+        "USART1"
+      ],
+      "aliases": [
+        "MODEM_UART"
+      ],
+      "nets": [
+        "MCU_MODEM_RX",
+        "MCU_MODEM_TX"
+      ],
+      "busIds": [
+        "peripheral:MODEM_UART"
+      ]
+    },
+    {
+      "id": "device:U_MODEM_LEVEL",
+      "kind": "component",
+      "entity": "U_MODEM_LEVEL",
+      "label": "U_MODEM_LEVEL",
+      "subtitle": "MODEM_UART_TRANSLATOR",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"U_MODEM\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_UART",
+      "label": "MODEM_UART",
+      "subtitle": "UART · 2 signal nets",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "types": [
+        "USART1"
+      ],
+      "aliases": [
+        "MODEM_UART"
+      ],
+      "nets": [
+        "MODEM_UART_TX",
+        "MODEM_UART_RX"
+      ],
+      "busIds": [
+        "peripheral:MODEM_UART"
+      ]
+    },
+    {
+      "id": "device:U_MODEM",
+      "kind": "component",
+      "entity": "U_MODEM",
+      "label": "U_MODEM",
+      "subtitle": "SIM7670G_LNGV",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"U_GNSS\",\"U_MCU\"],[\"GNSS_RX\",\"GNSS_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:GNSS_UART",
+      "label": "GNSS_UART",
+      "subtitle": "UART · 2 signal nets",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "types": [
+        "USART2"
+      ],
+      "aliases": [
+        "GNSS_UART"
+      ],
+      "nets": [
+        "GNSS_TX",
+        "GNSS_RX"
+      ],
+      "busIds": [
+        "peripheral:GNSS_UART"
+      ]
+    },
+    {
+      "id": "device:U_GNSS",
+      "kind": "component",
+      "entity": "U_GNSS",
+      "label": "U_GNSS",
+      "subtitle": "MAX_M10S_00B",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"U_MCU\",\"U_NRF\"],[\"MCU_NRF_RX\",\"MCU_NRF_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:NRF_UART",
+      "label": "NRF_UART",
+      "subtitle": "UART · 2 signal nets",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "types": [
+        "USART3",
+        "UARTE0"
+      ],
+      "aliases": [
+        "NRF_UART",
+        "HOST_UART"
+      ],
+      "nets": [
+        "MCU_NRF_RX",
+        "MCU_NRF_TX"
+      ],
+      "busIds": [
+        "peripheral:NRF_UART",
+        "peripheral:HOST_UART"
+      ]
+    },
+    {
+      "id": "device:U_NRF",
+      "kind": "component",
+      "entity": "U_NRF",
+      "label": "U_NRF",
+      "subtitle": "NRF52832_QFAA",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"J_DEBUG\",\"U_MCU\"],[\"DEBUG_RX\",\"DEBUG_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:DEBUG_UART",
+      "label": "DEBUG_UART",
+      "subtitle": "UART · 2 signal nets",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "types": [
+        "USART6"
+      ],
+      "aliases": [
+        "DEBUG_UART"
+      ],
+      "nets": [
+        "DEBUG_RX",
+        "DEBUG_TX"
+      ],
+      "busIds": [
+        "peripheral:DEBUG_UART"
+      ]
+    },
+    {
+      "id": "device:J_DEBUG",
+      "kind": "component",
+      "entity": "J_DEBUG",
+      "label": "J_DEBUG",
+      "subtitle": "DEBUG_HEADER",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"FL_USB\",\"U_MCU\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_USB",
+      "label": "MODEM_USB",
+      "subtitle": "USB · 2 signal nets",
+      "protocol": {
+        "key": "usb",
+        "label": "USB"
+      },
+      "types": [
+        "USB_FS"
+      ],
+      "aliases": [
+        "MODEM_USB"
+      ],
+      "nets": [
+        "USB_DM_MCU",
+        "USB_DP_MCU"
+      ],
+      "busIds": [
+        "peripheral:MODEM_USB"
+      ]
+    },
+    {
+      "id": "device:FL_USB",
+      "kind": "component",
+      "entity": "FL_USB",
+      "label": "FL_USB",
+      "subtitle": "COILCRAFT_0603USB_601MLC",
+      "device": true
+    },
+    {
+      "id": "bus:[[\"FL_USB\",\"U_MODEM\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_USB",
+      "label": "MODEM_USB",
+      "subtitle": "USB · 2 signal nets",
+      "protocol": {
+        "key": "usb",
+        "label": "USB"
+      },
+      "types": [
+        "USB_FS"
+      ],
+      "aliases": [
+        "MODEM_USB"
+      ],
+      "nets": [
+        "USB_DM_MODEM",
+        "USB_DP_MODEM"
+      ],
+      "busIds": [
+        "peripheral:MODEM_USB"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "device:U_ACCEL",
+      "to": "bus:[[\"U_ACCEL\",\"U_MCU\"],[\"I2C_SCL\",\"I2C_SDA\"]]",
+      "kind": "bus",
+      "entity": "interface:MOTION_BUS",
+      "bundle": "bus:[[\"U_ACCEL\",\"U_MCU\"],[\"I2C_SCL\",\"I2C_SDA\"]]",
+      "protocol": {
+        "key": "i2c",
+        "label": "I²C"
+      },
+      "pins": [
+        "U_ACCEL.SCL",
+        "U_ACCEL.SDA"
+      ]
+    },
+    {
+      "from": "device:U_MCU",
+      "to": "bus:[[\"U_ACCEL\",\"U_MCU\"],[\"I2C_SCL\",\"I2C_SDA\"]]",
+      "kind": "bus",
+      "entity": "interface:MOTION_BUS",
+      "bundle": "bus:[[\"U_ACCEL\",\"U_MCU\"],[\"I2C_SCL\",\"I2C_SDA\"]]",
+      "protocol": {
+        "key": "i2c",
+        "label": "I²C"
+      },
+      "pins": [
+        "U_MCU.PA7",
+        "U_MCU.PA6"
+      ]
+    },
+    {
+      "from": "device:U_MCU",
+      "to": "bus:[[\"U_MCU\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_UART",
+      "bundle": "bus:[[\"U_MCU\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MCU.PB7",
+        "U_MCU.PB6"
+      ]
+    },
+    {
+      "from": "device:U_MODEM_LEVEL",
+      "to": "bus:[[\"U_MCU\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_UART",
+      "bundle": "bus:[[\"U_MCU\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MODEM_LEVEL.A_RX",
+        "U_MODEM_LEVEL.A_TX"
+      ]
+    },
+    {
+      "from": "device:U_MODEM",
+      "to": "bus:[[\"U_MODEM\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_UART",
+      "bundle": "bus:[[\"U_MODEM\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MODEM.MAIN_TXD",
+        "U_MODEM.MAIN_RXD"
+      ]
+    },
+    {
+      "from": "device:U_MODEM_LEVEL",
+      "to": "bus:[[\"U_MODEM\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_UART",
+      "bundle": "bus:[[\"U_MODEM\",\"U_MODEM_LEVEL\"],[\"MCU_MODEM_RX\",\"MCU_MODEM_TX\",\"MODEM_UART_RX\",\"MODEM_UART_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MODEM_LEVEL.B_TX",
+        "U_MODEM_LEVEL.B_RX"
+      ]
+    },
+    {
+      "from": "device:U_GNSS",
+      "to": "bus:[[\"U_GNSS\",\"U_MCU\"],[\"GNSS_RX\",\"GNSS_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:GNSS_UART",
+      "bundle": "bus:[[\"U_GNSS\",\"U_MCU\"],[\"GNSS_RX\",\"GNSS_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_GNSS.TXD",
+        "U_GNSS.RXD"
+      ]
+    },
+    {
+      "from": "device:U_MCU",
+      "to": "bus:[[\"U_GNSS\",\"U_MCU\"],[\"GNSS_RX\",\"GNSS_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:GNSS_UART",
+      "bundle": "bus:[[\"U_GNSS\",\"U_MCU\"],[\"GNSS_RX\",\"GNSS_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MCU.PA3",
+        "U_MCU.PA2"
+      ]
+    },
+    {
+      "from": "device:U_MCU",
+      "to": "bus:[[\"U_MCU\",\"U_NRF\"],[\"MCU_NRF_RX\",\"MCU_NRF_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:NRF_UART",
+      "bundle": "bus:[[\"U_MCU\",\"U_NRF\"],[\"MCU_NRF_RX\",\"MCU_NRF_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MCU.PB9",
+        "U_MCU.PB8"
+      ]
+    },
+    {
+      "from": "device:U_NRF",
+      "to": "bus:[[\"U_MCU\",\"U_NRF\"],[\"MCU_NRF_RX\",\"MCU_NRF_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:NRF_UART",
+      "bundle": "bus:[[\"U_MCU\",\"U_NRF\"],[\"MCU_NRF_RX\",\"MCU_NRF_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_NRF.P0_06",
+        "U_NRF.P0_08"
+      ]
+    },
+    {
+      "from": "device:J_DEBUG",
+      "to": "bus:[[\"J_DEBUG\",\"U_MCU\"],[\"DEBUG_RX\",\"DEBUG_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:DEBUG_UART",
+      "bundle": "bus:[[\"J_DEBUG\",\"U_MCU\"],[\"DEBUG_RX\",\"DEBUG_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "J_DEBUG.RX",
+        "J_DEBUG.TX"
+      ]
+    },
+    {
+      "from": "device:U_MCU",
+      "to": "bus:[[\"J_DEBUG\",\"U_MCU\"],[\"DEBUG_RX\",\"DEBUG_TX\"]]",
+      "kind": "bus",
+      "entity": "peripheral:DEBUG_UART",
+      "bundle": "bus:[[\"J_DEBUG\",\"U_MCU\"],[\"DEBUG_RX\",\"DEBUG_TX\"]]",
+      "protocol": {
+        "key": "uart",
+        "label": "UART"
+      },
+      "pins": [
+        "U_MCU.PA5",
+        "U_MCU.PA4"
+      ]
+    },
+    {
+      "from": "device:FL_USB",
+      "to": "bus:[[\"FL_USB\",\"U_MCU\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_USB",
+      "bundle": "bus:[[\"FL_USB\",\"U_MCU\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "protocol": {
+        "key": "usb",
+        "label": "USB"
+      },
+      "pins": [
+        "FL_USB.DM_IN",
+        "FL_USB.DP_IN"
+      ]
+    },
+    {
+      "from": "device:U_MCU",
+      "to": "bus:[[\"FL_USB\",\"U_MCU\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_USB",
+      "bundle": "bus:[[\"FL_USB\",\"U_MCU\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "protocol": {
+        "key": "usb",
+        "label": "USB"
+      },
+      "pins": [
+        "U_MCU.PA11",
+        "U_MCU.PA12"
+      ]
+    },
+    {
+      "from": "device:FL_USB",
+      "to": "bus:[[\"FL_USB\",\"U_MODEM\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_USB",
+      "bundle": "bus:[[\"FL_USB\",\"U_MODEM\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "protocol": {
+        "key": "usb",
+        "label": "USB"
+      },
+      "pins": [
+        "FL_USB.DM_OUT",
+        "FL_USB.DP_OUT"
+      ]
+    },
+    {
+      "from": "device:U_MODEM",
+      "to": "bus:[[\"FL_USB\",\"U_MODEM\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "kind": "bus",
+      "entity": "peripheral:MODEM_USB",
+      "bundle": "bus:[[\"FL_USB\",\"U_MODEM\"],[\"USB_DM_MCU\",\"USB_DM_MODEM\",\"USB_DP_MCU\",\"USB_DP_MODEM\"]]",
+      "protocol": {
+        "key": "usb",
+        "label": "USB"
+      },
+      "pins": [
+        "U_MODEM.USB_DM",
+        "U_MODEM.USB_DP"
+      ]
+    }
+  ],
+  "type": "bus",
+  "otherSignals": 46
+}

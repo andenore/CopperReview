@@ -1,9 +1,98 @@
+import {compileGithubProject} from './project-compiler.js';
+import {discoverProject,downloadDesign} from './projects.js';
+import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
+import {rememberDocument,rememberedDocument} from './documents.js';
+import {createElectricalReview} from './electrical.js';
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
 const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
+const localServer=!!token&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
+let documentRevision=0,remoteLoad=null,electricalOrigin=null;
+let startupReady=Promise.resolve(),documentBaseline='static';
+const documentIdentity=data=>data?.input?.sha256||data?.board?.sha256||'empty';
 const state={scene:null,selection:{components:[],nets:[],region:null},layers:[],annotations:[],tab:'components',mode:'component',
   zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[],issues:null,issueSource:null,hiddenLabels:0};
+const electrical=createElectricalReview({message,onMode:(shown,model)=>{
+  showProjectOrigin(shown?electricalOrigin:state.scene?.board?.origin);
+  for(const id of ['load-review','load-issues','export-scene','export-review'])$(id).hidden=shown;
+  $('show-electrical').hidden=!electrical.hasModel()||shown;
+  if(shown){$('board-name').textContent=model.name;$('board-meta').textContent='Electrical IR · no layout required';}
+  else if(state.scene){$('board-name').textContent=state.scene.board.name;$('board-meta').textContent='PCB geometry review';fit();}
+  else{$('board-name').textContent='Open a board to begin';$('board-meta').textContent='Local PCB inspection · no KiCad required';}
+}});
+function showCompilerResult(data){
+  const panel=$('compiler-result');panel.hidden=!data.analysis;if(!data.analysis)return;
+  const analysis=data.analysis,findings=analysis.check?.diagnostics||[];
+  $('compiler-result-title').textContent=`CopperScript WASM · ${analysis.check?.passed?'ERC passed':'ERC findings'} · ${findings.length} finding(s)`;
+  const content=$('compiler-result-content');content.replaceChildren();
+  const origin=document.createElement('p');origin.textContent=`${data.input.source.filename} · ${analysis.compiler.source_revision||'working compiler'}${analysis.compiler.source_modified?' (modified source)':''}`;content.append(origin);
+  for(const finding of findings){const row=document.createElement('p');row.textContent=`${finding.severity||''} ${finding.code}: ${finding.message}${finding.location?` (line ${finding.location.line}, column ${finding.location.column})`:''}`;content.append(row);}
+  if(data.input.project){const project=document.createElement('p');project.textContent=`Project: ${data.input.project.files?.length||0} source files · ${data.input.project.modules?.length||0} dependency repositories · ${data.input.project.scope}`;content.append(project);}
+  const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Native compiler pin/net queries';pre.textContent=JSON.stringify({components:analysis.components,nets:analysis.nets,pins:analysis.pins},null,2);details.append(summary,pre);content.append(details);
+}
+function showProjectOrigin(origin){const label=$('project-origin');label.hidden=!origin;label.textContent=origin?origin.provider==='github'?`${String(origin.repository||'').replace('https://github.com/','')} @ ${String(origin.commit||'').slice(0,12)} · ${origin.path}`:origin.url:'';label.title=origin?.url||'';}
+function loadDocument(data){if(data?.schema==='copper-review-electrical/v1'){electrical.load(data);electricalOrigin=data.input.origin||null;showProjectOrigin(electricalOrigin);}else {loadScene(data);electrical.show(false);}showCompilerResult(data);}
+function beginOpen(){if(remoteLoad){remoteLoad.abort();remoteLoad=null;projectBusy(false);}const revision=++documentRevision;cancelCompiler();$('compiler-cancel').hidden=true;return revision;}
+async function openDesignFile(file,electricalOnly=false,{origin=null,prepared=null,revision=beginOpen()}={}){
+  if(!file)return;if(file.size>49*1024*1024)throw Error('File exceeds 49 MiB.');
+  try{
+    await startupReady;if(revision!==documentRevision)return false;const bytes=await file.arrayBuffer();if(revision!==documentRevision)return false;let value;
+    if(prepared)value=prepared;
+    else if(file.name.toLowerCase().endsWith('.copper')){
+      $('compiler-cancel').hidden=false;message('Loading CopperScript WASM and checking source locally…');value=await compileInput(bytes,file.name);
+    }else if(file.name.toLowerCase().endsWith('.json')){
+      value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+      if(value.schema==='copperscript-ir/v0.1')value=await electricalInput(bytes,file.name);
+      else if(value.schema===ISSUES_SCHEMA)throw Error('Use Load issues for issue lists.');
+      else if(READABLE_REVIEW_SCHEMAS.includes(value.schema))throw Error('Use Load review for annotation files.');
+      else if(electricalOnly&&value.schema!=='copper-review-electrical/v1')throw Error('Expected compiled electrical IR.');
+    }else{
+      if(electricalOnly)throw Error('Choose electrical IR JSON or .copper source.');
+      if(!localServer)throw Error('Raw KiCad PCB import currently needs the local importer. Open an exported .scene.json in the hosted viewer.');
+      const response=await fetch('./api/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Copper-Token':token,'X-Copper-Filename':encodeURIComponent(file.name)},body:bytes});value=await response.json();if(!response.ok)throw Error(value.error);documentBaseline=documentIdentity(value);
+    }
+    if(revision!==documentRevision)return false;if(origin){if(value.schema==='copper-review-electrical/v1')value.input={...value.input,origin};else if(value.board)value.board={...value.board,origin};}loadDocument(value);try{await rememberDocument(value,documentBaseline);}catch{message('Design could not be saved in browser storage. Export reviews to keep your notes.',true);return true;}message(`Opened ${file.name}${value.analysis?' · compiled locally with CopperScript WASM':''}`);return true;
+  }catch(error){if(revision!==documentRevision)return;throw Error(`${error.message}${state.scene||electrical.hasModel()?' Previous design remains open.':' No design was loaded.'}`);}
+  finally{if(revision===documentRevision)$('compiler-cancel').hidden=true;}
+}
+let projectFiles=[];
+function projectBusy(busy){$('project-discover').disabled=busy;$('project-open').disabled=busy;$('project-cancel').hidden=!busy;$('project-url-form').setAttribute('aria-busy',String(busy));}
+function cancelProject(){if(remoteLoad){beginOpen();projectBusy(false);$('project-status').textContent='Loading cancelled. Previous design remains open.';}}
+function showProjectDialog(){const dialog=$('project-dialog');if(!dialog.open)dialog.showModal();$('project-url').focus();}
+$('open-url').onclick=showProjectDialog;$('empty-url').onclick=showProjectDialog;
+$('project-close').onclick=()=>{cancelProject();$('project-dialog').close();};$('project-dialog').oncancel=cancelProject;$('project-cancel').onclick=cancelProject;
+for(const id of ['project-url','project-ref'])$(id).oninput=()=>{cancelProject();projectFiles=[];$('project-choices').hidden=true;$('project-status').textContent='';};
+async function openRemoteFile(file,revision,controller){
+  $('project-status').textContent=`Downloading ${file.path}…`;
+  const downloaded=await downloadDesign(file,{signal:controller.signal});if(controller.signal.aborted||revision!==documentRevision)return;
+  $('project-status').textContent=downloaded.name.endsWith('.copper')?'Compiling with CopperScript WASM…':'Opening design…';
+  const prepared=downloaded.name.endsWith('.copper')&&downloaded.origin.provider==='github'?await compileGithubProject(file,downloaded.bytes,{signal:controller.signal,onProgress:text=>{if(revision===documentRevision)$('project-status').textContent=text;}}):null;
+  if(controller.signal.aborted||revision!==documentRevision)return;
+  if(await openDesignFile(new File([downloaded.bytes],downloaded.name),false,{origin:downloaded.origin,prepared,revision})){$('project-status').textContent='';$('project-dialog').close();}
+}
+async function projectAction(action){
+  const revision=beginOpen(),controller=new AbortController();remoteLoad=controller;projectBusy(true);
+  try{await action(revision,controller);}catch(error){if(!controller.signal.aborted&&revision===documentRevision){$('project-status').textContent=error.message;$('project-status').classList.add('error');}}
+  finally{controller.abort(Error('Project loading finished.'));if(remoteLoad===controller){remoteLoad=null;projectBusy(false);}}
+}
+$('project-url-form').onsubmit=event=>{event.preventDefault();projectFiles=[];$('project-choices').hidden=true;$('project-status').classList.remove('error');$('project-status').textContent='Finding designs…';
+  projectAction(async(revision,controller)=>{
+    const project=await discoverProject($('project-url').value,{ref:$('project-ref').value,signal:controller.signal});if(controller.signal.aborted||revision!==documentRevision)return;
+    projectFiles=project.files;if(project.kind==='file'){await openRemoteFile(project.files[0],revision,controller);return;}
+    $('project-revision').textContent=`${project.owner}/${project.repo} · ${project.commit}`;
+    $('project-files').replaceChildren();for(const [index,file]of projectFiles.entries()){const option=document.createElement('option');option.value=index;option.textContent=file.path;$('project-files').append(option);}
+    $('project-choices').hidden=!projectFiles.length;$('project-files').selectedIndex=0;
+    $('project-status').textContent=projectFiles.length?`${projectFiles.length} design file(s). Choose the source or export to review; exports are not checked against current source.`:'No design files found. Paste a direct .json or .copper file URL, or compile the project locally and open its electrical IR.';
+  });
+};
+$('project-open').onclick=()=>{const file=projectFiles[Number($('project-files').value)];if(file)projectAction((revision,controller)=>openRemoteFile(file,revision,controller));};
+$('open-electrical').onclick=()=>$('electrical-file').click();
+$('electrical-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file,true);});
+$('open-source').onclick=()=>$('source-file').click();
+$('source-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file);});
+$('compiler-cancel').onclick=()=>{beginOpen();$('compiler-cancel').hidden=true;message('Compilation cancelled. Previous design remains open.');};
+$('compiler-example').onclick=guarded(async()=>{const response=await fetch(new URL('./example.copper',import.meta.url));if(!response.ok)throw Error('Example is unavailable.');await openDesignFile(new File([await response.arrayBuffer()],'example.copper'));});
 const palette=['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'];
 const copperColor = layer => palette[Math.max(0,state.scene.board.layers.indexOf(layer))%palette.length];
 const visible = layers => layers.some(l=>state.layers.includes(l));
@@ -207,7 +296,7 @@ function draw() {
   for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?'#526662':'#c19562';ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle='#82d5c019';ctx.strokeStyle='#84d4c0';ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
-  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
+  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm Â· grid ${spacing} mm${state.hiddenLabels?` Â· ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
 function hit(point,forHover=false) {
   if(!state.scene)return {};
@@ -235,11 +324,11 @@ function select(kind,name,add=false) {
 }
 function updateSelection() {
   const s=state.selection;const rows=[];
-  if(s.components.length)for(const ref of s.components){const c=state.scene.components.find(c=>c.reference===ref);rows.push(`${ref} · ${c.source_path===ref?'':c.source_path+' · '}${c.side}\nX ${c.position_mm[0].toFixed(3)} · Y ${c.position_mm[1].toFixed(3)} mm · ${c.rotation_deg.toFixed(1)}°`);}
-  if(s.nets.length)for(const net of s.nets){const n=state.scene.nets.find(n=>n.name===net);rows.push(`Net ${net} · ${n.pads.length} pads`);}
-  if(s.region){const b=s.region;rows.push(`Region · X ${b[0].toFixed(3)}…${b[2].toFixed(3)} mm\nY ${b[1].toFixed(3)}…${b[3].toFixed(3)} mm`);}
+  if(s.components.length)for(const ref of s.components){const c=state.scene.components.find(c=>c.reference===ref);rows.push(`${ref} Â· ${c.source_path===ref?'':c.source_path+' Â· '}${c.side}\nX ${c.position_mm[0].toFixed(3)} Â· Y ${c.position_mm[1].toFixed(3)} mm Â· ${c.rotation_deg.toFixed(1)}Â°`);}
+  if(s.nets.length)for(const net of s.nets){const n=state.scene.nets.find(n=>n.name===net);rows.push(`Net ${net} Â· ${n.pads.length} pads`);}
+  if(s.region){const b=s.region;rows.push(`Region Â· X ${b[0].toFixed(3)}â€¦${b[2].toFixed(3)} mm\nY ${b[1].toFixed(3)}â€¦${b[3].toFixed(3)} mm`);}
   $('selection-detail').textContent=rows.join('\n\n') || 'Select a component, net, or drag a region on the board.';
-  $('selection-status').textContent=`${s.components.length} components · ${s.nets.length} nets${s.region?' · region':''}`;
+  $('selection-status').textContent=`${s.components.length} components Â· ${s.nets.length} nets${s.region?' Â· region':''}`;
   renderEntities();requestDraw();
 }
 function renderEntities() {
@@ -264,8 +353,8 @@ function renderIssues(search) {
     if(!`${issue.id} ${issue.code} ${issue.title} ${issue.nets.join(' ')}`.toLowerCase().includes(search))continue;
     const button=document.createElement('button');button.className='entity';button.type='button';
     button.classList.toggle('selected',citedIssueIds().includes(issue.id));
-    const label=document.createElement('span');label.textContent=`${issue.id} · ${issue.code}`;
-    const detail=document.createElement('span');detail.className='secondary';detail.textContent=issue.window_mm?`${issue.count}×`:'no position';
+    const label=document.createElement('span');label.textContent=`${issue.id} Â· ${issue.code}`;
+    const detail=document.createElement('span');detail.className='secondary';detail.textContent=issue.window_mm?`${issue.count}Ã—`:'no position';
     button.append(label,detail);button.title=issue.title;
     button.onclick=e=>{
       const ids=e.shiftKey?citedIssueIds():[];if(!ids.includes(issue.id))ids.push(issue.id);$('issue-ids').value=ids.join(', ');
@@ -286,8 +375,8 @@ function issuesFromForm() {
 function storageKey(){return `copper-review:v1:${state.scene.board.sha256}`;}
 function saveLocal() {
   if(!state.scene)return;
-  try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value,copperscript_issues:issueSource()}));$('autosave-status').textContent='Saved in this browser · export JSON to share';}
-  catch {$('autosave-status').textContent='Local storage unavailable/full · export JSON now';}
+  try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value,copperscript_issues:issueSource()}));$('autosave-status').textContent='Saved in this browser Â· export JSON to share';}
+  catch {$('autosave-status').textContent='Local storage unavailable/full Â· export JSON now';}
 }
 function renderNotes() {
   $('note-count').textContent=state.annotations.length;$('note-list').replaceChildren();
@@ -295,8 +384,8 @@ function renderNotes() {
   for(const a of state.annotations){const row=document.createElement('div');row.className='note-row';
     const priority=document.createElement('span');priority.className=`priority ${a.priority}`;priority.textContent=a.priority;
     const button=document.createElement('button');button.className='note';const title=document.createElement('span');title.className='note-title';title.textContent=a.observation;
-    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} · ${a.status} · ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
-    const remove=document.createElement('button');remove.className='delete-note';remove.textContent='×';remove.title='Delete annotation';remove.setAttribute('aria-label',`Delete annotation: ${a.observation}`);
+    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} Â· ${a.status} Â· ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
+    const remove=document.createElement('button');remove.className='delete-note';remove.textContent='Ã—';remove.title='Delete annotation';remove.setAttribute('aria-label',`Delete annotation: ${a.observation}`);
     remove.onclick=()=>{state.annotations=state.annotations.filter(n=>n.id!==a.id);if(state.editing===a.id)resetForm();renderNotes();saveLocal();requestDraw();};
     row.append(priority,button,remove);$('note-list').append(row);
   }
@@ -326,7 +415,7 @@ function loadScene(scene) {
     // Keep the unreadable notes instead of overwriting them with the next autosave.
     try{if(raw)localStorage.setItem(`${storageKey()}:unreadable:${new Date().toISOString()}`,raw);}catch{}
     message('Saved local notes could not be read; they were kept under an ":unreadable" key. Load an exported review to recover.',true);}
-  $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
+  $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components Â· ${scene.nets.length} nets Â· ${scene.tracks.length} tracks Â· ${scene.vias.length} vias Â· ${scene.board.sha256.slice(0,12)}`;
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
   renderLayers();renderEntities();renderNotes();fit();setEnabled();
@@ -349,12 +438,7 @@ $('issues-file').onchange=guarded(async event=>{
   const issues=validateIssues(JSON.parse(await file.text()),state.scene);setIssues(issues);
   message(`Loaded ${issues.issues.length} CopperScript issues${issues.source.board_verified?'':' (no board hash in the file: could not confirm they belong to this board)'}`,!issues.source.board_verified);
 });
-$('board-file').onchange=guarded(async event=>{
-  const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>49*1024*1024)throw new Error('File exceeds the local upload limit (49 MiB).');
-  if(file.name.toLowerCase().endsWith('.json')){const value=JSON.parse(await file.text());if(value.schema===ISSUES_SCHEMA)throw new Error('Use Load issues for CopperScript issue lists; first open the matching PCB.');if(READABLE_REVIEW_SCHEMAS.includes(value.schema))throw new Error('Use Load review for annotation files; first open the matching PCB or scene.');loadScene(value);}
-  else{const response=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Copper-Token':token,'X-Copper-Filename':encodeURIComponent(file.name)},body:await file.arrayBuffer()});const scene=await response.json();if(!response.ok)throw new Error(scene.error);loadScene(scene);}
-  message(`Opened ${file.name}`);
-});
+$('board-file').onchange=guarded(async event=>{const file=event.target.files[0];event.target.value='';await openDesignFile(file);});
 $('review-file').onchange=guarded(async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>50*1024*1024)throw new Error('Review exceeds 50 MiB.');
   const review=validateReview(JSON.parse(await file.text()),state.scene);state.annotations=refreshContexts(state.scene,review.annotations);state.issueSource=review.copperscript_issues || null;$('summary').value=review.summary || '';$('stage').value=review.board.stage;
@@ -385,11 +469,11 @@ canvas.addEventListener('pointerdown',e=>{
   else if(!pan){const found=hit(point);if(state.mode==='net' && found.net)select('nets',found.net,e.shiftKey);else if(state.mode==='component' && found.component)select('components',found.component.reference,e.shiftKey);else if(!e.shiftKey)clearSelection();}
 });
 canvas.addEventListener('pointermove',e=>{
-  if(!state.scene)return;const point=world(e);$('cursor').textContent=`X ${point[0].toFixed(3)} mm · Y ${point[1].toFixed(3)} mm`;
+  if(!state.scene)return;const point=world(e);$('cursor').textContent=`X ${point[0].toFixed(3)} mm Â· Y ${point[1].toFixed(3)} mm`;
   if(state.drag){const drag=state.drag,s=screen(e);drag.moved=true;
     if(drag.pan){state.offset=[drag.offset[0]+s[0]-drag.screen[0],drag.offset[1]+s[1]-drag.screen[1]];requestDraw();}
     else if(state.mode==='region'){state.selection.region=[Math.min(drag.start[0],point[0]),Math.min(drag.start[1],point[1]),Math.max(drag.start[0],point[0]),Math.max(drag.start[1],point[1])].map(round);updateSelection();}
-  }else{const found=hit(point,true);setHover(found);$('hover-info').hidden=!(found.component || found.net);$('hover-info').textContent=[found.component?.reference,found.pad?`Pad ${padLabel(found.pad)}`:'',found.net?`Net ${found.net}`:'',found.track?`${found.track.layer} · ${found.track.width_mm} mm`:''].filter(Boolean).join(' · ');}
+  }else{const found=hit(point,true);setHover(found);$('hover-info').hidden=!(found.component || found.net);$('hover-info').textContent=[found.component?.reference,found.pad?`Pad ${padLabel(found.pad)}`:'',found.net?`Net ${found.net}`:'',found.track?`${found.track.layer} Â· ${found.track.width_mm} mm`:''].filter(Boolean).join(' Â· ');}
 });
 function endDrag(e){if(state.drag && state.mode==='region' && !state.drag.pan && state.selection.region && (state.selection.region[2]-state.selection.region[0]<.01 || state.selection.region[3]-state.selection.region[1]<.01)){state.selection.region=null;updateSelection();}state.drag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);}
 canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
@@ -398,4 +482,4 @@ document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'
   const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setMode(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')fit();if(e.key==='Escape'){clearSelection();resetForm();}});
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();const first=state.width===0;state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if(first && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
 setEnabled();
-guarded(async()=>{const response=await fetch('/api/scene',{headers:{'X-Copper-Token':token}});const data=await response.json();if(!response.ok)throw new Error(data.error);if(data)loadScene(data);})();
+startupReady=guarded(async()=>{const revision=documentRevision;let data=null;if(localServer){const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});data=await response.json();if(!response.ok)throw new Error(data.error);documentBaseline=documentIdentity(data);}try{data=await rememberedDocument(documentBaseline)||data;}catch{}if(data&&revision===documentRevision)loadDocument(data);})();

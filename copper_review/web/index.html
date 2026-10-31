@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CopperReview · PCB feedback</title><link rel="icon" href="/copper-logo.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CopperReview Â· PCB feedback</title><link rel="icon" href="./copper-logo.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"></head>
 <body>
-<header><div class="brand"><img class="logo" src="/copper-logo.svg" width="42" height="42" alt="Cu"><div><strong>CopperReview</strong><small>Inspect. Annotate. Improve.</small></div></div>
-<div class="board-heading"><strong id="board-name">Open a board to begin</strong><span id="board-meta">Local PCB inspection · no KiCad required</span></div>
-<div class="header-actions"><button id="open-board">Open board</button><button id="load-review">Load review</button><button id="load-issues" title="CopperScript issue list: copper issues RUN --json">Load issues</button><button id="export-scene" title="Portable board geometry for sharing">Save scene</button><button id="export-review" class="primary">Export review JSON</button></div></header>
-<main>
+<header><div class="brand"><img class="logo" src="./copper-logo.svg" width="42" height="42" alt="Cu"><div><strong>CopperReview</strong><small>Inspect. Annotate. Improve.</small></div></div>
+<div class="board-heading"><strong id="board-name">Open a board to begin</strong><span id="project-origin" hidden></span><span id="board-meta">Local PCB inspection Â· no KiCad required</span></div>
+<div class="header-actions"><button id="open-board">Open board</button><button id="open-url">Open URL</button><button id="open-source">Compile .copper</button><button id="compiler-cancel" hidden>Cancel compilation</button><button id="open-electrical">Open electrical IR</button><button id="show-electrical" hidden>Electrical review</button><button id="load-review">Load review</button><button id="load-issues" title="CopperScript issue list: copper issues RUN --json">Load issues</button><button id="export-scene" title="Portable board geometry for sharing">Save scene</button><button id="export-review" class="primary">Export review JSON</button></div></header>
+<main id="pcb-review">
 <aside class="explorer"><div class="section-label">BOARD EXPLORER</div>
 <label class="field">Review stage<select id="stage"><option value="unknown">Unknown / unverified</option><option value="placed">Placed</option><option value="partially_routed">Partially routed</option><option value="fully_routed">Fully routed (declared)</option></select></label>
-<label class="search"><span>⌕</span><input id="search" placeholder="Find a reference or net…" aria-label="Search components and nets"></label>
+<label class="search"><span>âŒ•</span><input id="search" placeholder="Find a reference or netâ€¦" aria-label="Search components and nets"></label>
 <div class="tabs"><button id="tab-components" class="active">Components <span id="component-count">0</span></button><button id="tab-nets">Nets <span id="net-count">0</span></button><button id="tab-issues" hidden>Issues <span id="issue-count">0</span></button></div>
 <div id="entity-list" class="entity-list" aria-label="Board entities"></div>
 <div class="layers"><div class="section-label">VISIBLE LAYERS</div><div id="layer-list"></div>
@@ -16,10 +16,10 @@
 <label><input id="isolate" type="checkbox"> Isolate selected nets</label><label id="show-issues-label" hidden><input id="show-issues" type="checkbox" checked> CopperScript issue windows</label></div>
 <details class="limits"><summary>Import details &amp; limits <span id="warning-count"></span></summary><ul id="warnings"></ul></details>
 </aside>
-<section class="workbench"><div class="toolbar"><div class="tool-group"><button id="mode-component" class="active" title="Select component (C)">Component</button><button id="mode-net" title="Select net by pad/track/via (N)">Net</button><button id="mode-region" title="Drag a rectangular region (R)">Region</button></div><span class="hint">Shift adds · wheel zooms · right-drag pans</span><button id="fit">Fit board</button><button id="clear">Clear</button></div>
+<section class="workbench"><div class="toolbar"><div class="tool-group"><button id="mode-component" class="active" title="Select component (C)">Component</button><button id="mode-net" title="Select net by pad/track/via (N)">Net</button><button id="mode-region" title="Drag a rectangular region (R)">Region</button></div><span class="hint">Shift adds Â· wheel zooms Â· right-drag pans</span><button id="fit">Fit board</button><button id="clear">Clear</button></div>
 <div id="canvas-wrap"><canvas id="board-canvas" aria-label="Interactive PCB board viewer" tabindex="0"></canvas>
-<div id="empty-state"><span class="empty-icon">▱</span><h1>A closer look at your board.</h1><p>Open a CopperScript PCB export to inspect placement,<br>routing, and the areas that need attention.</p><button id="empty-open" class="primary">Open .kicad_pcb</button><p class="quiet">Placed, partial, or fully routed · processed locally</p></div>
-<div id="hover-info" hidden></div><div class="canvas-status"><span id="cursor">X — mm · Y — mm</span><span id="selection-status">No selection</span><span id="zoom-status">100%</span></div></div>
+<div id="empty-state"><span class="empty-icon">â–±</span><h1>A closer look at your board.</h1><p>Open a CopperScript PCB export to inspect placement,<br>routing, and the areas that need attention.</p><button id="empty-open" class="primary">Open design</button><button id="empty-url">Open URL</button><button id="compiler-example">Try example circuit</button><p class="quiet">Placed, partial, or fully routed Â· processed locally</p></div>
+<div id="hover-info" hidden></div><div class="canvas-status"><span id="cursor">X â€” mm Â· Y â€” mm</span><span id="selection-status">No selection</span><span id="zoom-status">100%</span></div></div>
 <div class="review-tray"><div class="tray-heading"><strong>Review notes <span id="note-count">0</span></strong><span>Click a note to inspect or edit it</span></div><div id="note-list"><p class="quiet">Your observations will appear here.</p></div></div>
 </section>
 <aside class="annotation"><div class="section-label">REVIEW ANNOTATION</div><div id="selection-detail" class="selection-detail">Select a component, net, or drag a region on the board.</div>
@@ -32,7 +32,27 @@
 <button id="save-note" class="primary full">Add annotation</button><button id="cancel-edit" class="full" hidden>Cancel edit</button>
 <div class="export-context"><div class="section-label">CONTEXT FOR THE NEXT PASS</div><label class="field">Review summary<textarea id="summary" rows="3" placeholder="What should the next placement/routing iteration focus on?"></textarea></label><p>JSON includes board hash, source paths, exact entity names, geometry, regions, layers, and your notes.</p><button id="copy-review" class="full">Copy JSON to clipboard</button><span id="autosave-status">Notes save locally per board revision.</span></div>
 </aside>
-</main><div id="message" role="status" hidden></div>
-<input id="board-file" type="file" accept=".kicad_pcb,.json" hidden><input id="review-file" type="file" accept=".json" hidden><input id="issues-file" type="file" accept=".json" hidden>
-<script type="module" src="/app.js"></script>
+</main>
+<section id="electrical-review" hidden aria-label="Electrical review">
+  <div class="electrical-heading"><div><strong id="electrical-name"></strong><div id="electrical-meta" class="quiet"></div></div><div class="electrical-chips"><button id="show-pcb">PCB review</button><button id="electrical-load-review">Load electrical review</button><button id="electrical-export">Export electrical review</button></div></div>
+  <details id="compiler-result" class="compiler-result" hidden><summary id="compiler-result-title"></summary><div id="compiler-result-content"></div></details>
+  <nav id="electrical-tabs" class="tabs" aria-label="Electrical views"><button data-electrical-view="focus" aria-selected="true">Focused schematic</button><button data-electrical-view="power" aria-selected="false">Power hierarchy</button><button data-electrical-view="bus" aria-selected="false">Buses &amp; interfaces</button></nav>
+  <div class="electrical-toolbar"><button id="electrical-back" disabled>← Back</button><h2 id="electrical-title"></h2><label>Focus circuit<select id="electrical-focus" aria-label="Focus circuit"></select></label><label>Declared state<select id="electrical-state" aria-label="Declared power state"></select></label><label class="electrical-passive-toggle"><input id="electrical-show-passives" type="checkbox"> Show passives</label><div id="electrical-zoom"><button id="electrical-fit">Fit view</button><button id="electrical-actual-size">100%</button></div></div>
+  <div class="electrical-layout"><aside class="electrical-explorer"><label class="field">Find an interface, component or net<input id="electrical-search" type="text"></label><div id="electrical-entities"></div></aside><div id="electrical-canvas" tabindex="0" role="region" aria-label="Scrollable electrical view"></div><aside class="electrical-sidebar"><section><div class="section-label">PIN / NET INSPECTOR</div><div id="electrical-inspector" aria-live="polite"></div></section><section id="electrical-intent"></section></aside></div>
+  <p id="electrical-disclaimer" class="quiet"></p>
+</section><div id="message" role="status" hidden></div>
+<dialog id="project-dialog" aria-labelledby="project-dialog-title">
+  <form id="project-url-form"><div class="project-dialog-heading"><h2 id="project-dialog-title">Open from URL</h2><button id="project-close" type="button" aria-label="Close URL opener">Close</button></div>
+    <label class="field">GitHub repository or design file URL<input id="project-url" type="url" required placeholder="https://github.com/owner/project" autocomplete="url" spellcheck="false"></label>
+    <label class="field">Branch, tag or commit (optional)<input id="project-ref" type="text" placeholder="Default branch" spellcheck="false"></label>
+    <p class="quiet">Public GitHub projects compile in your browser, including local imports and dependencies pinned in copper.mod / copper.lock. Electrical IR and saved PCB scenes also open directly.</p>
+    <button id="project-discover" type="submit" class="primary">Find designs</button><button id="project-cancel" type="button" hidden>Cancel loading</button>
+  </form>
+  <p id="project-status" role="status" aria-live="polite"></p>
+  <div id="project-choices" hidden><p id="project-revision" class="quiet"></p><label class="field">Design file<select id="project-files" size="8" aria-label="Project design files"></select></label><button id="project-open" type="button" class="primary">Open selected design</button></div>
+</dialog>
+<input id="board-file" type="file" accept=".kicad_pcb,.json,.copper" hidden><input id="review-file" type="file" accept=".json" hidden><input id="issues-file" type="file" accept=".json" hidden>
+<input id="source-file" type="file" accept=".copper" hidden>
+<input id="electrical-file" type="file" accept=".json" hidden><input id="electrical-review-file" type="file" accept=".json" hidden>
+<script type="module" src="./app.js"></script>
 </body></html>

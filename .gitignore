@@ -6,3 +6,5 @@ build/
 dist/
 reviews/
 test-results/
+
+copper_review/web/wasm/

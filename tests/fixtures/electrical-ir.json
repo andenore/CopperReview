@@ -1,0 +1,268 @@
+{
+  "schema": "copperscript-ir/v0.1",
+  "kind": "board",
+  "name": "Fixture",
+  "components": [
+    {
+      "ref": "HOST",
+      "part": "host",
+      "properties": {}
+    },
+    {
+      "ref": "LOAD",
+      "part": "load",
+      "properties": {}
+    },
+    {
+      "ref": "BACKUP",
+      "part": "backup",
+      "properties": {}
+    }
+  ],
+  "nets": [
+    {
+      "name": "DATA",
+      "endpoints": [
+        "HOST.TX",
+        "LOAD.RX"
+      ]
+    },
+    {
+      "name": "ENABLE",
+      "endpoints": [
+        "HOST.EN",
+        "P.EN"
+      ]
+    },
+    {
+      "name": "RAIL",
+      "endpoints": [
+        "P.OUT",
+        "LOAD.VDD"
+      ]
+    },
+    {
+      "name": "BACKUP",
+      "endpoints": [
+        "BACKUP.OUT",
+        "LOAD.VBKP"
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "name": "host",
+      "pins": [
+        {
+          "name": "TX",
+          "number": "1",
+          "profile": {
+            "domains": [
+              "digital"
+            ],
+            "directions": [
+              "output"
+            ]
+          },
+          "bonds": []
+        },
+        {
+          "name": "EN",
+          "number": "2",
+          "profile": {
+            "domains": [
+              "digital"
+            ],
+            "directions": [
+              "output"
+            ]
+          },
+          "bonds": []
+        }
+      ],
+      "category": "semiconductor.ic"
+    },
+    {
+      "name": "load",
+      "pins": [
+        {
+          "name": "RX",
+          "number": "3",
+          "profile": {
+            "domains": [
+              "digital"
+            ],
+            "directions": [
+              "input"
+            ]
+          },
+          "bonds": []
+        },
+        {
+          "name": "VDD",
+          "number": "4",
+          "profile": {
+            "domains": [
+              "power"
+            ],
+            "directions": [
+              "input"
+            ]
+          },
+          "bonds": []
+        },
+        {
+          "name": "VBKP",
+          "number": "5",
+          "profile": {
+            "domains": [
+              "power"
+            ],
+            "directions": [
+              "input"
+            ]
+          },
+          "bonds": []
+        }
+      ],
+      "category": "semiconductor.ic"
+    },
+    {
+      "name": "backup",
+      "pins": [
+        {
+          "name": "OUT",
+          "number": "6",
+          "profile": {
+            "domains": [
+              "power"
+            ],
+            "directions": [
+              "output"
+            ]
+          },
+          "bonds": []
+        }
+      ],
+      "category": "semiconductor.ic"
+    }
+  ],
+  "devices": [],
+  "supplies": [
+    {
+      "name": "MAIN",
+      "net": "RAIL",
+      "voltage": {
+        "value": "3.3",
+        "unit": "V",
+        "base_value": "3.3"
+      },
+      "externally_driven": true
+    }
+  ],
+  "interfaces": [],
+  "peripheral_selections": [
+    {
+      "name": "LINK",
+      "component": "HOST",
+      "peripheral": "UART",
+      "signals": {
+        "TX": {
+          "pin": "TX"
+        }
+      }
+    }
+  ],
+  "module_instances": [
+    {
+      "ref": "P",
+      "module": "Regulator"
+    }
+  ],
+  "module_definitions": [
+    {
+      "name": "Regulator",
+      "ports": {
+        "OUT": "power_out",
+        "EN": "input"
+      },
+      "components": [
+        {
+          "ref": "U",
+          "part": "reg",
+          "properties": {}
+        }
+      ],
+      "parts": [
+        {
+          "name": "reg",
+          "pins": [
+            {
+              "name": "OUT",
+              "number": "1",
+              "profile": {
+                "domains": [
+                  "power"
+                ],
+                "directions": [
+                  "output"
+                ]
+              },
+              "bonds": []
+            },
+            {
+              "name": "EN",
+              "number": "2",
+              "profile": {
+                "domains": [
+                  "digital"
+                ],
+                "directions": [
+                  "input"
+                ]
+              },
+              "bonds": []
+            }
+          ],
+          "category": "semiconductor.ic"
+        }
+      ],
+      "nets": [
+        {
+          "name": "VOUT",
+          "endpoints": [
+            "port.OUT",
+            "U.OUT"
+          ]
+        },
+        {
+          "name": "ON",
+          "endpoints": [
+            "port.EN",
+            "U.EN"
+          ]
+        }
+      ],
+      "supplies": [
+        {
+          "name": "REG",
+          "net": "VOUT",
+          "source": "U.OUT",
+          "voltage": {
+            "value": "3.3",
+            "unit": "V",
+            "base_value": "3.3"
+          }
+        }
+      ]
+    }
+  ],
+  "power_states": [
+    {
+      "name": "OFF",
+      "rails": {
+        "MAIN": "off"
+      }
+    }
+  ]
+}

@@ -27,6 +27,11 @@ class ServerTests(unittest.TestCase):
         with self.request('/') as response:
             self.assertIn(b'CopperReview',response.read())
             self.assertIn("frame-ancestors 'none'",response.headers['Content-Security-Policy'])
+            self.assertIn("connect-src 'self' https:",response.headers['Content-Security-Policy'])
+        for path, symbol in [('/projects.js', b'discoverProject'), ('/project-compiler.js', b'compileGithubProject')]:
+            with self.request(path) as response:
+                self.assertEqual(response.headers['Content-Type'], 'text/javascript; charset=utf-8')
+                self.assertIn(symbol,response.read())
         with self.request('/copper-logo.svg') as response:
             self.assertEqual(response.headers['Content-Type'], 'image/svg+xml')
             self.assertIn(b'Copper Cu mark', response.read())

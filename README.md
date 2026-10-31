@@ -1,12 +1,30 @@
 # CopperReview
 
-A local PCB review tool for CopperScript. Inspect placed, partially routed, or
+[Open CopperReview on GitHub Pages](https://andenore.github.io/CopperReviewPages/).
+
+A local electrical and PCB review tool for CopperScript. Inspect placed, partially routed, or
 fully routed board exports; select components, nets, and rectangular regions;
 annotate the geometry; export a file for the next LLM-assisted solver iteration.
 
-This is a **separate Git project**, with no runtime dependency on CopperScript,
-KiCad, npm, a web service, or a database. Python 3.11+ and a modern browser are
-enough. It reads `.kicad_pcb` files directly; KiCad does not need to be installed.
+This is a **separate Git project**. Its static browser build reuses CopperScript's
+Rust compiler, ERC and queries through a bundled WebAssembly worker. No native
+CopperScript installation or hosted backend is required by that build. The local
+Python 3.11+ server additionally reads raw `.kicad_pcb` files without KiCad.
+See [WASM build, static hosting and current boundaries](docs/wasm-hosting.md).
+For schematic, power hierarchy and bus/interface review before layout, open the
+JSON produced by `copper compile` with **Open electrical IR**, or run
+`python -m copper_review --electrical-ir electrical.ir.json`. All three electrical
+views share a pin/net inspector and an intent/source/notes panel. See the
+[electrical workflow and input/feedback contracts](docs/electrical-review.md).
+**Compile .copper** and **Try example circuit** use the actual WASM compiler for
+self-contained source. **Open URL** compiles public GitHub source projects with
+local imports and pinned library dependencies through the same Rust compiler.
+**Open URL** accepts public GitHub repository/file links or direct HTTPS design
+files. Choose the board source at its resolved commit; the browser reads
+`copper.mod` / `copper.lock`, verifies imported source bytes and opens the electrical
+review. CopperAssetTracker can be opened directly from its GitHub `board.copper`.
+Exported IR and PCB scene files remain supported.
+See [URL loading and provenance](docs/wasm-hosting.md#open-from-url).
 The board is read-only. Feedback never edits the PCB or solver constraints.
 
 ## Run
@@ -144,14 +162,14 @@ Non-copper text labels/dimensions and 3D models are omitted; custom/trapezoidal
 pads use bounding rectangles with visible import warnings. Legacy arc syntax
 is rejected; Bezier graphics are reported as unsupported. The importer targets
 modern CopperScript exports, not every possible KiCad construct. Electrical-only
-`board.json` and `.copper` files do not contain the placed geometry required by
-this viewer; export a PCB or scene first.
+`board.json` opens in electrical review when it is a compiled CopperScript board
+IR; it supplies no PCB geometry. `.copper` source files must be compiled externally.
 
 ## Development
 
 ```powershell
 python -m unittest discover -s tests -v
-node --test tests/core.test.js
+node --test tests/core.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js
 ```
 
 Browser integration test (optional Playwright installation, not a runtime

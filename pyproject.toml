@@ -13,7 +13,7 @@ dependencies = []
 copper-review = "copper_review.__main__:main"
 
 [tool.setuptools.package-data]
-copper_review = ["web/*"]
+copper_review = ["web/*", "web/wasm/*"]
 
 [tool.setuptools.packages.find]
 include = ["copper_review*"]
