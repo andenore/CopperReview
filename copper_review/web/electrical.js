@@ -255,6 +255,14 @@ export function createElectricalReview({message,onMode}){
   $('electrical-back').onclick=()=>{const prev=history.pop();if(prev){focusSelection=prev.focusSelection;selection=prev.selection;view=prev.view;save();render();}};
   $('electrical-show-passives').onchange=e=>{showPassives=e.target.checked;save();render();};
   $('electrical-fit').onclick=()=>{const svg=root.querySelector('.electrical-topology');if(svg){const c=$('electrical-canvas'),zoom=Math.min(1,Math.max(.15,(c.clientWidth-44)/Number(svg.dataset.naturalWidth)),Math.max(.15,(c.clientHeight-100)/Number(svg.dataset.naturalHeight)));if(view==='power')powerZoom=zoom;else if(view==='bus')busZoom=zoom;else if(view==='schematic')sheetZoom=zoom;else schematicZoom=zoom;render();c.scrollTo(0,0);}};
+  // Schematic: wheel zooms under the pointer, right/middle-drag pans (as in the PCB view).
+  const sheetSvg=e=>view==='schematic'?e.target.closest?.('#electrical-canvas')?.querySelector('.electrical-sch'):null;
+  $('electrical-canvas').addEventListener('wheel',e=>{const svg=sheetSvg(e);if(!svg)return;e.preventDefault();const c=e.currentTarget,before=svg.getBoundingClientRect(),fx=(e.clientX-before.left)/before.width,fy=(e.clientY-before.top)/before.height;const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?c.clientHeight:1);sheetZoom=Math.max(.1,Math.min(4,sheetZoom*Math.exp(-delta*.0015)));svg.style.width=`${Number(svg.dataset.naturalWidth)*sheetZoom}px`;svg.style.height=`${Number(svg.dataset.naturalHeight)*sheetZoom}px`;const after=svg.getBoundingClientRect();c.scrollLeft+=after.left+fx*after.width-e.clientX;c.scrollTop+=after.top+fy*after.height-e.clientY;},{passive:false});
+  let sheetPan=null;
+  $('electrical-canvas').addEventListener('pointerdown',e=>{if((e.button!==2&&e.button!==1)||!sheetSvg(e))return;e.preventDefault();const c=e.currentTarget;sheetPan={id:e.pointerId,x:e.clientX,y:e.clientY,left:c.scrollLeft,top:c.scrollTop};c.setPointerCapture(e.pointerId);c.classList.add('panning');});
+  $('electrical-canvas').addEventListener('pointermove',e=>{if(sheetPan?.id!==e.pointerId)return;const c=e.currentTarget;c.scrollLeft=sheetPan.left-(e.clientX-sheetPan.x);c.scrollTop=sheetPan.top-(e.clientY-sheetPan.y);});
+  for(const type of ['pointerup','pointercancel'])$('electrical-canvas').addEventListener(type,e=>{if(sheetPan?.id!==e.pointerId)return;sheetPan=null;e.currentTarget.classList.remove('panning');});
+  $('electrical-canvas').addEventListener('contextmenu',e=>{if(sheetSvg(e))e.preventDefault();});
   $('electrical-actual-size').onclick=()=>{if(view==='power')powerZoom=1;else if(view==='bus')busZoom=1;else if(view==='schematic')sheetZoom=1;else schematicZoom=1;render();};
   $('electrical-state').onchange=e=>{powerState=e.target.value;save();render();};
   $('electrical-search').oninput=renderExplorer;

@@ -72,3 +72,4 @@
 #github-token{border:1px solid var(--border);background:#111a1e;color:var(--text);border-radius:5px;padding:9px;width:100%;min-width:0}
 #github-token-status{overflow-wrap:anywhere;font-size:12px}
 #github-token-status.error{color:#f5aaa0}
+#electrical-canvas.panning,#electrical-canvas.panning *{cursor:grabbing}
