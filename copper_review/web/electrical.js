@@ -51,6 +51,7 @@ export function createElectricalReview({message,onMode}){
     const picker=$('electrical-focus');picker.replaceChildren();
     for(const [label,items]of [['Interfaces',model.buses.filter(b=>b.provenance!=='Net membership').map(b=>['bus',b.id,b.name])],['Components',[...model.components.values()].filter(c=>showPassives||!isPassive(c)||selected('component',c.ref)).map(c=>['component',c.ref,c.ref])],['Rails',model.rails.filter(r=>r.supplies.length||r.sources.length).map(r=>['net',r.net,r.net])]]){const g=el('optgroup');g.label=label;for(const [kind,id,name]of items){const o=el('option',name);o.value=JSON.stringify({kind,id});g.append(o);}picker.append(g);}
     if(focusSelection){const v=JSON.stringify(focusSelection);if(![...picker.options].some(o=>o.value===v)){const o=el('option',focusSelection.id);o.value=v;picker.append(o);}picker.value=v;}
+    $('electrical-notes-list').textContent=`Notes (${notes.length})`;
     $('electrical-back').disabled=!history.length;$('electrical-show-passives').checked=showPassives;$('electrical-zoom').hidden=view!=='focus'&&view!=='schematic'&&(view!=='power'||powerConnections)&&(view!=='bus'||busConnections);
     $('electrical-state').replaceChildren(el('option','No state selected'));$('electrical-state').firstChild.value='';for(const s of model.powerStates){const o=el('option',s.name);o.value=s.name;$('electrical-state').append(o);}$('electrical-state').value=powerState;
     $('electrical-state').disabled=!model.powerStates.length;
@@ -83,6 +84,22 @@ export function createElectricalReview({message,onMode}){
     return s.sheets.filter(sh=>sh.refs.some(r=>refs.has(r))).map(sh=>sh.id);
   }
   function drawnNet(s,n){for(const [rep,names]of s.merged)if(names.includes(n))return rep;return n;}
+  /** Numbered note markers at each note's entity; click one to edit it. */
+  function drawMarkers(svg,anchorOf){
+    const ns=svg.namespaceURI,draw=(tag,attrs,label,parent)=>{const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(label!==undefined)e.textContent=label;parent.append(e);return e;};
+    const markers=draw('g',{class:'electrical-sch-markers'},undefined,svg),stacked=new Map();
+    for(const [i,n]of notes.entries()){
+      const found=anchorOf(n.selection);if(!found)continue;const [key,at]=found,k=stacked.get(key)||0;stacked.set(key,k+1);const x=at[0]+4+k*18,y=at[1]-8;
+      const g=draw('g',{class:`electrical-sch-marker ${n.status==='resolved'?'resolved':''} ${n.priority||''}`,'data-note':n.id,role:'button',tabindex:'0','aria-label':`Note ${i+1}: ${n.observation}`},undefined,markers);
+      draw('title',{},`${i+1}. ${n.category} · ${n.priority} · ${n.status}\n${n.observation}`,g);draw('circle',{cx:x,cy:y,r:8},undefined,g);draw('text',{x,y:y+3.5,'text-anchor':'middle'},String(i+1),g);
+      const open=event=>{event.stopPropagation();editNote(i);};g.onclick=open;g.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open(event);}};
+    }
+  }
+  /** Marker anchors for generated graphs: the entity's box, its label, or for a pin its component. */
+  function boxAnchor(svg){
+    const find=(kind,id)=>{const all=[...svg.querySelectorAll(`[data-kind="${kind}"][data-entity="${CSS.escape(id)}"]`)];return all.find(e=>e.dataset.topologyNode)||all.find(e=>e.tagName==='text')||all[0];};
+    return sel=>{const e=find(sel.kind,sel.id)||(sel.kind==='pin'?find('component',model.pins.get(sel.id)?.component):null);if(!e)return null;const b=e.getBBox();return [`${e.dataset.kind}:${e.dataset.entity}`,[b.x+b.width,b.y]];};
+  }
   function renderSchematic(canvas){
     const s=sheets();if(!s.sheets.length){canvas.append(el('p','No components in this IR.'));return;}
     if(!s.sheets.some(x=>x.id===sheetId)){const ref=selection?.kind==='component'?selection.id:selection?.kind==='pin'?model.pins.get(selection.id).component:null;sheetId=s.sheetOf.get(ref)||s.sheets[0].id;}
@@ -146,15 +163,7 @@ export function createElectricalReview({message,onMode}){
       for(const f of sym.top){if(!anchors.has(`net:${f.net}`))anchors.set(`net:${f.net}`,[f.x,f.end]);const t=pickable(draw('g',{},undefined,g),'net',f.net,`${f.net} · ${f.names.join(', ')}${f.badges.length?` · folded: ${f.badges.join(', ')}`:''}`);draw('path',{d:`M${f.x} ${f.y}L${f.x} ${f.end}M${f.x-9} ${f.end}L${f.x+9} ${f.end}`,class:`electrical-sch-power${net(f.net)}`},undefined,t);draw('text',{x:f.x,y:f.end-5,'text-anchor':f.anchor,class:'electrical-sch-rail'},short(f.net,14),t);if(f.names.length>1)draw('text',{x:f.x+4,y:f.y-3,class:'electrical-sch-meta'},`×${f.names.length}`,t);if(f.badges.length)draw('text',{x:f.x-4,y:f.y-3,'text-anchor':'end',class:'electrical-sch-note'},`C×${f.badges.length}`,t);}
       for(const f of sym.bottom){if(!anchors.has(`net:${f.net}`))anchors.set(`net:${f.net}`,[f.x,f.end+8]);const t=pickable(draw('g',{},undefined,g),'net',f.net,`${f.net} · ${f.names.join(', ')}`);draw('path',{d:`M${f.x} ${f.y}L${f.x} ${f.end}M${f.x-9} ${f.end}L${f.x+9} ${f.end}M${f.x-6} ${f.end+4}L${f.x+6} ${f.end+4}M${f.x-3} ${f.end+8}L${f.x+3} ${f.end+8}`,class:`electrical-sch-ground${net(f.net)}`},undefined,t);if(!/^GND$/i.test(f.net))draw('text',{x:f.x,y:f.end+21,'text-anchor':f.anchor,class:'electrical-sch-meta'},short(f.net,14),t);if(f.names.length>1)draw('text',{x:f.x+4,y:f.y+12,class:'electrical-sch-meta'},`×${f.names.length}`,t);}
     }
-    // Numbered note markers where each note's entity is drawn; click to edit.
-    const markers=draw('g',{class:'electrical-sch-markers'}),stacked=new Map();
-    for(const [i,n]of notes.entries()){
-      const sel=n.selection,key=sel.kind==='net'?`net:${drawn(sel.id)}`:sel.kind==='bus'?(anchors.has(`bus:${sel.id}`)?`bus:${sel.id}`:`net:${drawn(model.buses.find(b=>b.id===sel.id)?.nets[0])}`):`${sel.kind}:${sel.id}`,at=anchors.get(key);if(!at)continue;
-      const k=stacked.get(key)||0;stacked.set(key,k+1);const x=at[0]+4+k*18,y=at[1]-8;
-      const g=draw('g',{class:`electrical-sch-marker ${n.status==='resolved'?'resolved':''} ${n.priority||''}`,'data-note':n.id,role:'button',tabindex:'0','aria-label':`Note ${i+1}: ${n.observation}`},undefined,markers);
-      draw('title',{},`${i+1}. ${n.category} · ${n.priority} · ${n.status}\n${n.observation}`,g);draw('circle',{cx:x,cy:y,r:8},undefined,g);draw('text',{x,y:y+3.5,'text-anchor':'middle'},String(i+1),g);
-      const open=event=>{event.stopPropagation();editNote(i);};g.onclick=open;g.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open(event);}};
-    }
+    drawMarkers(svg,sel=>{const key=sel.kind==='net'?`net:${drawn(sel.id)}`:sel.kind==='bus'?(anchors.has(`bus:${sel.id}`)?`bus:${sel.id}`:`net:${drawn(model.buses.find(b=>b.id===sel.id)?.nets[0])}`):`${sel.kind}:${sel.id}`;return anchors.has(key)?[key,anchors.get(key)]:null;});
     svg.onclick=event=>{if(event.target===svg&&selection){selection=null;save();render();}};
     svg.setAttribute('viewBox',`0 0 ${L.width} ${L.height}`);svg.dataset.naturalWidth=L.width;svg.dataset.naturalHeight=L.height;svg.style.width=`${L.width*sheetZoom}px`;svg.style.height=`${L.height*sheetZoom}px`;canvas.append(svg);
     const here=[...s.folded.values()].filter(f=>s.sheetOf.get(f.ref)===sheetId);
@@ -182,7 +191,7 @@ export function createElectricalReview({message,onMode}){
     const refs=circuit.components.map(c=>c.ref);const selectedBus=focusSelection?.kind==='bus'&&model.buses.find(b=>b.id===focusSelection.id);if(selectedBus){refs.sort((a,b)=>selectedBus.componentRefs.indexOf(a)-selectedBus.componentRefs.indexOf(b));}
     const col=340,box=170,left=12,top=95,row=65,width=Math.max(360,refs.length*col-130),height=Math.max(270,top+circuit.nets.length*row+65);svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.dataset.naturalWidth=width;svg.dataset.naturalHeight=height;svg.style.width=`${width*schematicZoom}px`;svg.style.height=`${height*schematicZoom}px`;
     function draw(tag,attrs,label,parent=svg){const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(label!==undefined)e.textContent=label;parent.append(e);return e;}
-    function click(e,kind,id){e.dataset.kind=kind;e.dataset.entity=id;e.setAttribute('role','button');e.setAttribute('tabindex','0');e.setAttribute('aria-label',id);e.classList.add('electrical-svg-pick');e.onclick=()=>choose(kind,id);e.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();choose(kind,id);}};}
+    function click(e,kind,id){e.dataset.kind=kind;e.dataset.entity=id;e.setAttribute('role','button');e.setAttribute('tabindex','0');e.setAttribute('aria-label',id);e.classList.add('electrical-svg-pick');e.onclick=()=>{if(!selected(kind,id))choose(kind,id);};e.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();choose(kind,id);}};}
     const positions=new Map();
     for(const [i,ref]of refs.entries()){
       const x=left+i*col,c=model.components.get(ref),g=draw('g',{});draw('rect',{x,y:30,width:box,height:height-55,rx:5,class:'electrical-symbol'},undefined,g);const title=draw('text',{x:x+10,y:54},ref,g);click(title,'component',ref);draw('text',{x:x+10,y:73,class:'electrical-svg-small'},c.part.split('.').pop().slice(0,24),g);
@@ -194,7 +203,7 @@ export function createElectricalReview({message,onMode}){
     for(const [index,n]of circuit.nets.entries()){
       const points=n.pins.map(p=>positions.get(p.id)).filter(Boolean).sort((a,b)=>a[0]-b[0]);if(points.length<2)continue;const start=points[0],end=points.at(-1),g=draw('g',{});const path=points.map((p,i)=>`${i?'L':'M'}${p[0]},${p[1]}`).join(' ');draw('path',{d:path,class:`electrical-signal ${selected('net',n.name)?'selected':''}`},undefined,g);const hit=draw('rect',{x:start[0],y:start[1]-10,width:Math.max(1,end[0]-start[0]),height:20,fill:'transparent','pointer-events':'all'},undefined,g);click(hit,'net',n.name);const gap=points.findIndex((p,i)=>i&&p[0]-points[i-1][0]>box);const a=gap>0?points[gap-1]:start,b=gap>0?points[gap]:end;const text=draw('text',{x:(a[0]+b[0])/2,y:top+index*row+18,'text-anchor':'middle',class:'electrical-svg-small'},n.name,g);click(text,'net',n.name);
     }
-    canvas.append(svg);
+    canvas.append(svg);drawMarkers(svg,boxAnchor(svg));
   }
   function renderPower(canvas){
     const modes=el('div',undefined,'tabs');const topology=button('Topology',()=>{powerConnections=false;render();$('electrical-canvas').scrollTo(0,0);});topology.id='electrical-power-topology';topology.classList.toggle('active',!powerConnections);const connections=button('Connections',()=>{powerConnections=true;render();$('electrical-canvas').scrollTo(0,0);});connections.id='electrical-power-connections';connections.classList.toggle('active',powerConnections);modes.append(topology,connections);canvas.append(modes);
@@ -240,7 +249,7 @@ export function createElectricalReview({message,onMode}){
     const {layout,routed}=drawings.get(showPassives);
     const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.classList.add('electrical-topology','electrical-connected-graph',mode==='power'?'electrical-power-topology':'electrical-bus-topology');svg.setAttribute('role','group');svg.setAttribute('aria-label',mode==='power'?'Connected power topology with one box per device':'Connected bus topology with one box per device');
     function draw(tag,attrs,label,parent=svg){const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(label!==undefined)e.textContent=label;parent.append(e);return e;}
-    function pick(e,kind,id){e.dataset.kind=kind;e.dataset.entity=id;e.setAttribute('role','button');e.setAttribute('tabindex','0');e.setAttribute('aria-label',id);e.classList.add('electrical-svg-pick');e.onclick=()=>choose(kind,id);e.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(kind,id);}};}
+    function pick(e,kind,id){e.dataset.kind=kind;e.dataset.entity=id;e.setAttribute('role','button');e.setAttribute('tabindex','0');e.setAttribute('aria-label',id);e.classList.add('electrical-svg-pick');e.onclick=()=>{if(!selected(kind,id))choose(kind,id);};e.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(kind,id);}};}
     const wires=draw('g',{'class':'electrical-graph-wires'}),boxes=draw('g',{'class':'electrical-graph-boxes'});
     if(mode==='power'){
       const groups=new Map();
@@ -280,7 +289,7 @@ export function createElectricalReview({message,onMode}){
       }
     }
     const width=layout.width+35,height=layout.height,zoom=mode==='power'?powerZoom:busZoom;
-    svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.dataset.naturalWidth=width;svg.dataset.naturalHeight=height;svg.style.width=`${width*zoom}px`;svg.style.height=`${height*zoom}px`;canvas.append(svg);
+    svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.dataset.naturalWidth=width;svg.dataset.naturalHeight=height;svg.style.width=`${width*zoom}px`;svg.style.height=`${height*zoom}px`;canvas.append(svg);drawMarkers(svg,boxAnchor(svg));
   }
   function renderBusConnections(canvas){
     const other=el('details',undefined,'electrical-other-signals');other.append(el('summary',`${model.buses.filter(b=>b.provenance==='Net membership').length} other signal nets`));
@@ -335,8 +344,36 @@ export function createElectricalReview({message,onMode}){
   }
   function editNote(i){
     const n=notes[i];editing=i;draft={observation:n.observation,desired:n.desired_behavior||'',category:n.category,priority:n.priority};
-    if(view==='schematic'){pendingPop=`[data-note="${CSS.escape(n.id)}"]`;locate(n.selection.kind,n.selection.id);}
-    else{selection={...n.selection};detail='notes';save();render();}
+    pendingPop=`[data-note="${CSS.escape(n.id)}"]`;
+    if(['schematic','power','bus'].includes(n.view))view=n.view;if(view==='power')powerConnections=false;if(view==='bus')busConnections=false;
+    if(n.view==='focus'){focusSelection={...n.selection};view='focus';}
+    if(view==='schematic')locate(n.selection.kind,n.selection.id);else{selection={...n.selection};save();render();}
+  }
+  /** Notes as plain text for an issue, a chat or a prompt. */
+  function notesText(list){
+    return [`CopperReview electrical notes · ${model.name} · IR ${input.sha256.slice(0,12)}`,...list.map(n=>`${notes.indexOf(n)+1}. [${n.priority} · ${n.category} · ${n.status}] ${n.selection.kind} ${n.selection.id} (${n.view}${n.power_state?`, ${n.power_state}`:''})\n   Observation: ${n.observation}${n.desired_behavior?`\n   Desired: ${n.desired_behavior}`:''}`)].join('\n');
+  }
+  async function copyText(text,what){
+    try{await navigator.clipboard.writeText(text);}catch{const t=el('textarea');t.value=text;document.body.append(t);t.select();document.execCommand('copy');t.remove();}
+    message(`Copied ${what}`);
+  }
+  /** Every note in one list: click to go back to it, copy one or all. */
+  function showNotesList(){
+    let d=$('electrical-notes-dialog');
+    if(!d){d=el('dialog',undefined,'electrical-notes-dialog');d.id='electrical-notes-dialog';d.setAttribute('aria-label','Review notes');document.body.append(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
+    d.replaceChildren();
+    const open=notes.filter(n=>n.status!=='resolved'),head=el('div',undefined,'electrical-notes-head');head.append(el('h3',`Review notes (${notes.length})`));
+    const all=button('Copy all',()=>copyText(notesText(notes),`${notes.length} notes`)),openOnly=button(`Copy open (${open.length})`,()=>copyText(notesText(open),`${open.length} open notes`));all.disabled=!notes.length;openOnly.disabled=!open.length;
+    head.append(all,openOnly,button('Close',()=>d.close()));d.append(head);
+    if(!notes.length)d.append(el('p','No notes yet. Select something and press N, or double-click it in a drawing.','quiet'));
+    const list=el('div',undefined,'electrical-notes-items');
+    for(const [i,n]of notes.entries()){
+      const row=el('div',undefined,`electrical-notes-row${n.status==='resolved'?' resolved':''}`),go=button('',()=>{d.close();editNote(i);},'electrical-notes-go');
+      const top=el('div');top.append(el('span',String(i+1),`electrical-note-number ${n.priority}`),el('strong',n.selection.id),el('span',`${n.category} · ${n.priority} · ${n.status} · ${n.view}`,'quiet'));
+      go.append(top,el('div',n.observation));if(n.desired_behavior)go.append(el('div',`→ ${n.desired_behavior}`,'quiet'));
+      row.append(go,button('Copy',()=>copyText(notesText([n]),`note ${i+1}`)));list.append(row);
+    }
+    d.append(list);d.showModal();
   }
   /** A small note editor next to an element of the drawing. */
   function openNote(rect){
@@ -356,25 +393,30 @@ export function createElectricalReview({message,onMode}){
   $('electrical-show-passives').onchange=e=>{showPassives=e.target.checked;save();render();};
   $('electrical-fit').onclick=()=>{const svg=root.querySelector('.electrical-topology');if(svg){const c=$('electrical-canvas'),[mx,my]=view==='schematic'?[26,(c.querySelector('.electrical-sheet-bar')?.offsetHeight||0)+20]:[44,100],zoom=Math.min(view==='schematic'?4:1,Math.max(.15,(c.clientWidth-mx)/Number(svg.dataset.naturalWidth)),Math.max(.15,(c.clientHeight-my)/Number(svg.dataset.naturalHeight)));if(view==='power')powerZoom=zoom;else if(view==='bus')busZoom=zoom;else if(view==='schematic')sheetZoom=zoom;else schematicZoom=zoom;render();c.scrollTo(0,0);}};
   // Schematic: wheel zooms under the pointer, right/middle-drag pans (as in the PCB view).
-  const sheetSvg=e=>view==='schematic'&&(e.target.closest?.('.electrical-sch')||e.target.id==='electrical-canvas')?$('electrical-canvas').querySelector('.electrical-sch'):null;
-  // Double-click an element of the drawing, or press N, to note the selection.
-  $('electrical-canvas').addEventListener('dblclick',e=>{const target=view==='schematic'&&e.target.closest?.('.electrical-sch .electrical-svg-pick');if(target){e.preventDefault();openNote(target.getBoundingClientRect());}});
+  // Every drawing: wheel zooms under the pointer, right/middle-drag pans (as in the PCB view).
+  const getZoom=()=>view==='schematic'?sheetZoom:view==='power'?powerZoom:view==='bus'?busZoom:schematicZoom;
+  const setZoom=z=>{if(view==='schematic')sheetZoom=z;else if(view==='power')powerZoom=z;else if(view==='bus')busZoom=z;else schematicZoom=z;};
+  const drawing=e=>{const svg=$('electrical-canvas').querySelector('svg.electrical-topology');return svg&&(e.target.closest?.('svg.electrical-topology')||e.target.id==='electrical-canvas')?svg:null;};
+  const modal=()=>!!document.querySelector('dialog[open]');
+  // Double-click an element of a drawing, or press N, to note the selection.
+  $('electrical-canvas').addEventListener('dblclick',e=>{const target=e.target.closest?.('svg.electrical-topology .electrical-svg-pick');if(target){e.preventDefault();openNote(target.getBoundingClientRect());}});
   document.addEventListener('keydown',e=>{
-    if(root.hidden||e.key.toLowerCase()!=='n'||e.ctrlKey||e.metaKey||e.altKey||!selection||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
+    if(root.hidden||modal()||e.key.toLowerCase()!=='n'||e.ctrlKey||e.metaKey||e.altKey||!selection||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
     e.preventDefault();editing=null;
-    if(view==='schematic'){const target=$('electrical-canvas').querySelector(`.electrical-sch [data-kind="${selection.kind}"][data-entity="${CSS.escape(selection.id)}"]`);openNote(target?.getBoundingClientRect());}
-    else{detail='notes';renderIntent();$('electrical-observation')?.focus();}
+    const svg=$('electrical-canvas').querySelector('svg.electrical-topology'),target=svg?.querySelector(`[data-kind="${selection.kind}"][data-entity="${CSS.escape(selection.id)}"]`);
+    if(svg)openNote(target?.getBoundingClientRect());else{detail='notes';renderIntent();$('electrical-observation')?.focus();}
   });
-  $('electrical-canvas').addEventListener('wheel',e=>{const svg=sheetSvg(e);if(!svg)return;e.preventDefault();const c=e.currentTarget,before=svg.getBoundingClientRect(),fx=(e.clientX-before.left)/before.width,fy=(e.clientY-before.top)/before.height;const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?c.clientHeight:1);sheetZoom=Math.max(.1,Math.min(4,sheetZoom*Math.exp(-delta*.0015)));svg.style.width=`${Number(svg.dataset.naturalWidth)*sheetZoom}px`;svg.style.height=`${Number(svg.dataset.naturalHeight)*sheetZoom}px`;const after=svg.getBoundingClientRect();c.scrollLeft+=after.left+fx*after.width-e.clientX;c.scrollTop+=after.top+fy*after.height-e.clientY;},{passive:false});
-  let sheetPan=null;
-  $('electrical-canvas').addEventListener('pointerdown',e=>{if((e.button!==2&&e.button!==1)||!sheetSvg(e))return;e.preventDefault();const c=e.currentTarget;sheetPan={id:e.pointerId,x:e.clientX,y:e.clientY,left:c.scrollLeft,top:c.scrollTop};c.setPointerCapture(e.pointerId);c.classList.add('panning');});
-  $('electrical-canvas').addEventListener('pointermove',e=>{if(sheetPan?.id!==e.pointerId)return;const c=e.currentTarget;c.scrollLeft=sheetPan.left-(e.clientX-sheetPan.x);c.scrollTop=sheetPan.top-(e.clientY-sheetPan.y);});
-  for(const type of ['pointerup','pointercancel'])$('electrical-canvas').addEventListener(type,e=>{if(sheetPan?.id!==e.pointerId)return;sheetPan=null;e.currentTarget.classList.remove('panning');});
-  $('electrical-canvas').addEventListener('contextmenu',e=>{if(sheetSvg(e))e.preventDefault();});
+  $('electrical-canvas').addEventListener('wheel',e=>{const svg=drawing(e);if(!svg)return;e.preventDefault();const c=e.currentTarget,before=svg.getBoundingClientRect(),fx=(e.clientX-before.left)/before.width,fy=(e.clientY-before.top)/before.height;const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?c.clientHeight:1),zoom=Math.max(.1,Math.min(4,getZoom()*Math.exp(-delta*.0015)));setZoom(zoom);svg.style.width=`${Number(svg.dataset.naturalWidth)*zoom}px`;svg.style.height=`${Number(svg.dataset.naturalHeight)*zoom}px`;const after=svg.getBoundingClientRect();c.scrollLeft+=after.left+fx*after.width-e.clientX;c.scrollTop+=after.top+fy*after.height-e.clientY;},{passive:false});
+  let pan=null;
+  $('electrical-canvas').addEventListener('pointerdown',e=>{if((e.button!==2&&e.button!==1)||!drawing(e))return;e.preventDefault();const c=e.currentTarget;pan={id:e.pointerId,x:e.clientX,y:e.clientY,left:c.scrollLeft,top:c.scrollTop};c.setPointerCapture(e.pointerId);c.classList.add('panning');});
+  $('electrical-canvas').addEventListener('pointermove',e=>{if(pan?.id!==e.pointerId)return;const c=e.currentTarget;c.scrollLeft=pan.left-(e.clientX-pan.x);c.scrollTop=pan.top-(e.clientY-pan.y);});
+  for(const type of ['pointerup','pointercancel'])$('electrical-canvas').addEventListener(type,e=>{if(pan?.id!==e.pointerId)return;pan=null;e.currentTarget.classList.remove('panning');});
+  $('electrical-canvas').addEventListener('contextmenu',e=>{if(drawing(e))e.preventDefault();});
+  $('electrical-notes-list').onclick=showNotesList;
   $('electrical-actual-size').onclick=()=>{if(view==='power')powerZoom=1;else if(view==='bus')busZoom=1;else if(view==='schematic')sheetZoom=1;else schematicZoom=1;render();};
   const maximize=on=>{document.body.classList.toggle('electrical-maximized',on);$('electrical-maximize').setAttribute('aria-pressed',String(on));$('electrical-maximize').textContent=on?'Restore':'Maximize';};
   $('electrical-maximize').onclick=()=>maximize(!document.body.classList.contains('electrical-maximized'));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('electrical-maximized'))maximize(false);});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal()&&document.body.classList.contains('electrical-maximized'))maximize(false);});
   $('electrical-state').onchange=e=>{powerState=e.target.value;save();render();};
   $('electrical-search').oninput=renderExplorer;
   $('electrical-export').onclick=exportReview;

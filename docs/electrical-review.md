@@ -118,8 +118,9 @@ comments or requirements absent from the IR cannot be reconstructed.
 
 On desktop the explorer, canvas and inspector/intent panes have bounded scroll
 areas. Large schematics can scroll horizontally and vertically at readable size;
-**Fit view** fits the drawing and **100%** restores its natural size. In the Schematic view the
-wheel zooms under the pointer and right- or middle-drag pans. **Maximize** hides the page
+**Fit view** fits the drawing and **100%** restores its natural size. In every drawing
+(Schematic, Focused schematic and the Power and Bus topologies) the wheel zooms under
+the pointer and right- or middle-drag pans. The electrical view uses the full window width. **Maximize** hides the page
 header and side panels to give the drawing the whole window (Esc restores), and
 Fit view there may enlarge a small sheet. Power, bus and
 focused schematic zoom settings are independent. On narrow
@@ -128,13 +129,26 @@ is remembered with the review. Searching the explorer includes collapsed passive
 
 ### Notes
 
-On the Schematic, double-click an element or press **N** to write a note about the
-selection in a small editor next to it: category and priority chips, the
+In any drawing (Schematic, Focused schematic, Power or Bus topology), double-click an
+element or press **N** to write a note about the selection in a small editor next to it: category and priority chips, the
 observation, and an optional desired behavior (Ctrl+Enter saves, Esc cancels).
 Saved notes appear as numbered markers where their entity is drawn (red for high
 priority, grey once resolved); click one to edit, resolve or reopen it. The sheet
-list shows `✎ n` for sheets with notes. **Notes** lists every note and has the same
-editor for the other views (N opens it there).
+list shows `✎ n` for sheets with notes; the Power and Bus topologies mark notes on the
+entity's box (a pin's note on its part). The side panel's **Notes** tab has the same
+editor for the list views (N opens it there).
+
+**Notes (n)** in the toolbar opens every note in one list. Clicking a note returns to
+the view it was written in, selects its entity and opens it for editing. **Copy** copies
+one note, **Copy all** or **Copy open** the list, as plain text with the board name and
+IR hash:
+
+```text
+CopperReview electrical notes · CopperAssetTracker · IR f64e77e861a1
+3. [medium · interface · open] bus interface:MOTION_BUS (bus)
+   Observation: Check the I2C pull-up value for 400 kHz
+   Desired: Confirm 2.2k
+```
 
 ## Input and feedback identity
 
