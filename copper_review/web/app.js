@@ -1,5 +1,5 @@
 import {compileGithubProject} from './project-compiler.js';
-import {discoverProject,downloadDesign} from './projects.js';
+import {discoverProject,downloadDesign,setGithubToken,hasGithubToken,checkGithubToken} from './projects.js';
 import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
 import {createElectricalReview} from './electrical.js';
@@ -86,6 +86,18 @@ $('project-url-form').onsubmit=event=>{event.preventDefault();projectFiles=[];$(
     $('project-status').textContent=projectFiles.length?`${projectFiles.length} design file(s). Choose the source or export to review; exports are not checked against current source.`:'No design files found. Paste a direct .json or .copper file URL, or compile the project locally and open its electrical IR.';
   });
 };
+const TOKEN_KEY='copper-review-github-token';
+function showTokenState(text='',error=false){const active=hasGithubToken();$('github-token-state').textContent=active?'· token in use':'';$('github-token-forget').hidden=!active;$('github-token-status').textContent=text;$('github-token-status').classList.toggle('error',error);}
+function forgetToken(){setGithubToken('');try{sessionStorage.removeItem(TOKEN_KEY);}catch{}$('github-token').value='';}
+try{setGithubToken(sessionStorage.getItem(TOKEN_KEY)||'');}catch{}showTokenState();
+$('github-token-form').onsubmit=async event=>{event.preventDefault();cancelProject();const value=$('github-token').value.trim();
+  try{setGithubToken(value);}catch(error){showTokenState(error.message,true);return;}
+  if(!value){forgetToken();showTokenState('Enter a token, or close this section to stay with public repositories.',true);return;}
+  $('github-token').value='';showTokenState('Checking token with GitHub…');
+  try{const core=await checkGithubToken();try{sessionStorage.setItem(TOKEN_KEY,value);}catch{}showTokenState(`Token accepted · ${core.remaining??'?'} of ${core.limit??'?'} API requests left this hour. Kept until this tab closes.`);}
+  catch(error){forgetToken();showTokenState(error.message,true);}
+};
+$('github-token-forget').onclick=()=>{cancelProject();forgetToken();showTokenState('Token forgotten. Only public repositories will load.');};
 $('project-open').onclick=()=>{const file=projectFiles[Number($('project-files').value)];if(file)projectAction((revision,controller)=>openRemoteFile(file,revision,controller));};
 $('open-electrical').onclick=()=>$('electrical-file').click();
 $('electrical-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file,true);});

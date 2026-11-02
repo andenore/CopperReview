@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CopperReview Â· PCB feedback</title><link rel="icon" href="./copper-logo.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"></head>
+<head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CopperReview Â· PCB feedback</title><link rel="icon" href="./copper-logo.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"></head>
 <body>
 <header><div class="brand"><img class="logo" src="./copper-logo.svg" width="42" height="42" alt="Cu"><div><strong>CopperReview</strong><small>Inspect. Annotate. Improve.</small></div></div>
 <div class="board-heading"><strong id="board-name">Open a board to begin</strong><span id="project-origin" hidden></span><span id="board-meta">Local PCB inspection Â· no KiCad required</span></div>
@@ -45,9 +45,14 @@
   <form id="project-url-form"><div class="project-dialog-heading"><h2 id="project-dialog-title">Open from URL</h2><button id="project-close" type="button" aria-label="Close URL opener">Close</button></div>
     <label class="field">GitHub repository or design file URL<input id="project-url" type="url" required placeholder="https://github.com/owner/project" autocomplete="url" spellcheck="false"></label>
     <label class="field">Branch, tag or commit (optional)<input id="project-ref" type="text" placeholder="Default branch" spellcheck="false"></label>
-    <p class="quiet">Public GitHub projects compile in your browser, including local imports and dependencies pinned in copper.mod / copper.lock. Electrical IR and saved PCB scenes also open directly.</p>
+    <p class="quiet">GitHub projects compile in your browser, including local imports and dependencies pinned in copper.mod / copper.lock. Private repositories need a token under Private repository access. Electrical IR and saved PCB scenes also open directly.</p>
     <button id="project-discover" type="submit" class="primary">Find designs</button><button id="project-cancel" type="button" hidden>Cancel loading</button>
   </form>
+  <details id="github-access"><summary>Private repository access <span id="github-token-state" class="quiet"></span></summary>
+    <p class="quiet">Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">fine-grained token</a> limited to the repositories you need, with <strong>Contents: Read-only</strong> permission. It is kept only in this tab until the tab closes and is sent only to api.github.com, never to other URLs or into exported reviews.</p>
+    <form id="github-token-form"><label class="field">GitHub token<input id="github-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label><button type="submit" class="primary">Use token</button><button id="github-token-forget" type="button" hidden>Forget token</button></form>
+    <p id="github-token-status" role="status" aria-live="polite"></p>
+  </details>
   <p id="project-status" role="status" aria-live="polite"></p>
   <div id="project-choices" hidden><p id="project-revision" class="quiet"></p><label class="field">Design file<select id="project-files" size="8" aria-label="Project design files"></select></label><button id="project-open" type="button" class="primary">Open selected design</button></div>
 </dialog>

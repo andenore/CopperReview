@@ -1,5 +1,15 @@
-/* Read-only URL loading. GitHub refs resolve once, then every file uses that commit. */
-const API='https://api.github.com/repos/',RAW='https://raw.githubusercontent.com/';
+/* Read-only URL loading. GitHub refs resolve once, then every file uses that commit.
+ * An optional GitHub token is sent only to api.github.com; files then come from the
+ * contents API, since raw.githubusercontent.com cannot serve private files cross-origin. */
+const API='https://api.github.com/repos/',RAW='https://raw.githubusercontent.com/',API_ORIGIN='https://api.github.com';
+let githubToken='';
+export const validGithubToken=value=>/^(?:gh[pousr]_[A-Za-z0-9]{20,251}|github_pat_[A-Za-z0-9_]{20,251})$/.test(value);
+export function setGithubToken(value=''){value=value.trim();if(value&&!validGithubToken(value))throw Error('That does not look like a GitHub token (github_pat_… or ghp_…).');githubToken=value;}
+export const hasGithubToken=()=>!!githubToken;
+function githubHeaders(url){
+  const target=new URL(url);if(target.origin!==API_ORIGIN||!githubToken)return {};
+  return {Authorization:`Bearer ${githubToken}`,'X-GitHub-Api-Version':'2022-11-28',...(/^\/repos\/[^/]+\/[^/]+\/contents\//.test(target.pathname)?{Accept:'application/vnd.github.raw+json'}:{})};
+}
 export const MAX_REMOTE_BYTES=49*1024*1024;
 const segment=value=>encodeURIComponent(value);
 const pathUrl=path=>path.split('/').map(segment).join('/');
@@ -29,8 +39,11 @@ export async function remoteBytes(url,{signal,fetcher=fetch,limit=MAX_REMOTE_BYT
   const controller=new AbortController(),abort=()=>controller.abort(signal?.reason);if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
   const timer=setTimeout(()=>controller.abort(Error('Download timed out. Try again or use a direct file URL.')),20000);
   try{
-    let response;try{response=await fetcher(url,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer'});}catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw Error('Could not download this URL. Check access, connectivity and whether the host allows browser downloads (CORS).');}
-    if(!response.ok){if(response.status===403||response.status===429)throw Error('Access or API rate limit prevented loading. Try again later or open a downloaded file.');if(response.status===404)throw Error('Project, ref or file was not found. Private repositories need a separate authentication flow.');throw Error(`Download failed (HTTP ${response.status}).`);}
+    let response;try{response=await fetcher(url,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',headers:githubHeaders(url)});}catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw Error('Could not download this URL. Check access, connectivity and whether the host allows browser downloads (CORS).');}
+    if(!response.ok){const authed=!!githubHeaders(url).Authorization;
+      if(response.status===401&&authed)throw Error('GitHub rejected the token. It may be expired or revoked; replace it under Private repository access.');
+      if(response.status===403||response.status===429)throw Error(authed?'GitHub refused access or the API rate limit was reached. Check the token can read this repository (organisations may need to approve it).':'Access or API rate limit prevented loading. Add a GitHub token for a higher limit, try again later, or open a downloaded file.');
+      if(response.status===404)throw Error(authed?'Project, ref or file was not found, or the token cannot read this repository.':'Project, ref or file was not found. Private repositories need a GitHub token (Private repository access).');throw Error(`Download failed (HTTP ${response.status}).`);}
     if(Number(response.headers.get('Content-Length'))>limit)throw Error(`Download exceeds ${Math.floor(limit/1024/1024)} MiB.`);
     const reader=response.body?.getReader();if(!reader){const bytes=await response.arrayBuffer();if(bytes.byteLength>limit)throw Error('Download exceeds the size limit.');return bytes;}
     const chunks=[];let size=0;
@@ -41,7 +54,8 @@ export async function remoteBytes(url,{signal,fetcher=fetch,limit=MAX_REMOTE_BYT
 export const apiJson=async(url,options)=>JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await remoteBytes(url,{...options,limit:8*1024*1024})));
 export function githubFile(project,path){
   cleanPath(path.split('/'));
-  return {path,url:`${RAW}${segment(project.owner)}/${segment(project.repo)}/${project.commit}/${pathUrl(path)}`,origin:{provider:'github',repository:project.url,commit:project.commit,path,url:`${project.url}/blob/${project.commit}/${pathUrl(path)}`}};
+  const url=githubToken?`${API}${segment(project.owner)}/${segment(project.repo)}/contents/${pathUrl(path)}?ref=${project.commit}`:`${RAW}${segment(project.owner)}/${segment(project.repo)}/${project.commit}/${pathUrl(path)}`;
+  return {path,url,origin:{provider:'github',repository:project.url,commit:project.commit,path,url:`${project.url}/blob/${project.commit}/${pathUrl(path)}`}};
 }
 const treeCaches=new WeakMap();
 export async function githubTree(project,options={}){
@@ -52,7 +66,7 @@ export async function githubTree(project,options={}){
   treeCache.set(key,tree.tree);if(treeCache.size>8)treeCache.delete(treeCache.keys().next().value);return tree.tree;
 }
 export async function githubCommit(repository,revision,options={}){
-  const parsed=projectUrl(`https://${repository}`);if(parsed.provider!=='github'||parsed.kind!=='repository')throw Error('Browser dependencies require public GitHub module repositories.');
+  const parsed=projectUrl(`https://${repository}`);if(parsed.provider!=='github'||parsed.kind!=='repository')throw Error('Browser dependencies require GitHub module repositories.');
   if(/^[a-f0-9]{40}$/.test(revision))return {...parsed,commit:revision};
   const commit=await apiJson(`${API}${segment(parsed.owner)}/${segment(parsed.repo)}/commits/${segment(revision)}`,options);
   if(!/^[a-f0-9]{40}$/.test(commit.sha))throw Error('GitHub did not return an immutable dependency commit.');return {...parsed,commit:commit.sha};
@@ -67,6 +81,9 @@ export async function discoverProject(value,{ref='',signal,fetcher=fetch}={}){
   const files=tree.filter(f=>f.type==='blob'&&['100644','100755'].includes(f.mode)&&(!project.path||f.path.startsWith(project.path+'/'))&&/\.(?:copper|kicad_pcb|(?:ir|scene)\.json)$|(?:^|\/)electrical[^/]*\.json$/i.test(f.path)&&!/(?:^|\/)(?:\.copper-cache|node_modules|target)\//.test(f.path)).map(f=>({...githubFile(project,f.path),size:f.size}));
   files.sort((a,b)=>Number(!/(?:^|\/)board\.copper$/.test(a.path))-Number(!/(?:^|\/)board\.copper$/.test(b.path))||a.path.localeCompare(b.path));
   return {...project,files};
+}
+export async function checkGithubToken(options={}){
+  const limits=await apiJson(`${API_ORIGIN}/rate_limit`,options);return limits?.resources?.core||limits?.rate||{};
 }
 export async function downloadDesign(file,options={}){
   const bytes=await remoteBytes(file.url,options);return {bytes,name:file.path.split('/').at(-1),origin:file.origin};
