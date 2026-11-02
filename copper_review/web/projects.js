@@ -39,7 +39,7 @@ export async function remoteBytes(url,{signal,fetcher=fetch,limit=MAX_REMOTE_BYT
   const controller=new AbortController(),abort=()=>controller.abort(signal?.reason);if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
   const timer=setTimeout(()=>controller.abort(Error('Download timed out. Try again or use a direct file URL.')),20000);
   try{
-    let response;try{response=await fetcher(url,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',headers:githubHeaders(url)});}catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw Error('Could not download this URL. Check access, connectivity and whether the host allows browser downloads (CORS).');}
+    let response;try{const headers=githubHeaders(url);response=await fetcher(url,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',...(headers.Authorization?{headers}:{})});}catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw Error('Could not download this URL. Check access, connectivity and whether the host allows browser downloads (CORS).');}
     if(!response.ok){const authed=!!githubHeaders(url).Authorization;
       if(response.status===401&&authed)throw Error('GitHub rejected the token. It may be expired or revoked; replace it under Private repository access.');
       if(response.status===403||response.status===429)throw Error(authed?'GitHub refused access or the API rate limit was reached. Check the token can read this repository (organisations may need to approve it).':'Access or API rate limit prevented loading. Add a GitHub token for a higher limit, try again later, or open a downloaded file.');

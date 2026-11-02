@@ -20,6 +20,20 @@ are independent; the application does not assert that a PCB matches an IR.
 
 ## Linked views
 
+- **Schematic** (the default) draws generated sheets from the IR; it is not an
+  authored drawing. Module scopes, then signal connectivity, split the board: a
+  part with more than 20 signal nets gets its own sheet with the headers and small
+  parts that only reach it, other clusters hold at most 36 parts. Columns follow
+  output-to-input direction, including through series two-pin parts. Power and
+  ground pins become rail flags and ground symbols (one per net, marked ×n);
+  declared supplies decide a net's role, and pins claiming both power and ground
+  (generic headers) are ignored. Decoupling/support passives fold into `C×n`
+  badges on the rail flag of the pin they decouple; plain pull resistors of at
+  least 1 kΩ fold into ↑/↓ notes. Shunts, series, termination, divider and filter
+  parts stay drawn. Each sheet lists its folded parts and **Show passives** draws
+  them all. A net is a wire only where every pin faces the same column gap, so wires
+  never cross a symbol; other connections use labels, with ↗ when the net continues
+  on another sheet. Explorer and focus-picker choices open the sheet that shows them.
 - **Focused schematic** draws a pin-labelled slice with one symbol per component.
   It starts at a configured peripheral when present. The focus picker includes
   interfaces, components and rails. Explorer items and interface titles focus in

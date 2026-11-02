@@ -48,3 +48,22 @@ test('downloads enforce streamed bounds, cancellation and readable network failu
  await assert.rejects(()=>remoteBytes('https://example.org/file',{fetcher:async()=>{throw Error('Network error');}}),/CORS/);
  const controller=new AbortController();controller.abort(Error('Cancelled by user'));await assert.rejects(()=>remoteBytes('https://example.org/file',{signal:controller.signal,fetcher:async(_,options)=>{assert(options.signal.aborted);throw options.signal.reason;}}),/Cancelled/);
 });
+test('a GitHub token is sent only to api.github.com and switches files to the contents API',async()=>{
+ const {setGithubToken,githubFile}=await import('../copper_review/web/projects.js');
+ const token='github_pat_'+'Ab1'.repeat(10),requests=[],fetcher=async(url,options)=>{requests.push([url,options]);return url.includes('/commits/')?json({sha:commit}):url.includes('/git/trees/')?json({tree:[{path:'board.copper',type:'blob',mode:'100644',size:3}]}):new Response('abc');};
+ assert.throws(()=>setGithubToken('hunter2'),/GitHub token/);
+ setGithubToken(token);
+ try{
+  const project=await discoverProject('https://github.com/owner/board',{fetcher});await downloadDesign(project.files[0],{fetcher});
+  assert.equal(project.files[0].url,`${base}/contents/board.copper?ref=${commit}`);
+  for(const [,options]of requests)assert.equal(options.headers.Authorization,`Bearer ${token}`);
+  assert.equal(requests.at(-1)[1].headers.Accept,'application/vnd.github.raw+json');assert.equal(requests[0][1].headers.Accept,undefined);
+  requests.length=0;await downloadDesign((await discoverProject('https://example.org/board.scene.json',{fetcher})).files[0],{fetcher});
+  assert.equal(requests[0][1].headers,undefined,'other hosts never see the token');
+  const hidden=async url=>{try{await remoteBytes(`${base}/commits/HEAD`,{fetcher:async u=>new Response('',{status:u===`${base}/commits/HEAD`?404:url})});}catch(e){return e.message;}};
+  assert.match(await hidden(404),/cannot see owner\/board/);assert.match(await hidden(200),/readable with the token, but the ref "HEAD" was not found/);
+  assert.match(await (async()=>{try{await remoteBytes(`${base}/commits/HEAD`,{fetcher:async()=>new Response('',{status:401})});}catch(e){return e.message;}})(),/rejected the token/);
+ }finally{setGithubToken('');}
+ assert.equal(githubFile({owner:'owner',repo:'board',commit,url:'https://github.com/owner/board'},'a.copper').url,`https://raw.githubusercontent.com/owner/board/${commit}/a.copper`);
+ await assert.rejects(()=>remoteBytes(`https://raw.githubusercontent.com/owner/board/${commit}/a.copper`,{fetcher:async()=>new Response('',{status:404})}),/owner\/board: not found \(file a\.copper\)\. If the repository is private/);
+});

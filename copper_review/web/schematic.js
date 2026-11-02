@@ -100,6 +100,10 @@ function columns(model,refs,netsOf){
   for(const pins of members.values()){
     for(const a of pins)for(const b of pins)if(a.component!==b.component){neighbors.get(a.component).add(b.component);if(outputOnly(a)&&inputOnly(b)){out.get(a.component).add(b.component);directed.add(a.component);directed.add(b.component);}}
   }
+  // A series two-pin part passes direction on (driver → receiver); the part itself sits between them.
+  const link=(a,b)=>{out.get(a).add(b);directed.add(a);directed.add(b);};
+  for(const r of refs){const c=model.components.get(r);if(!twoPin(c))continue;const [x,y]=c.pins.map(p=>members.get(p.net)||[]);
+    for(const [from,to]of [[x,y],[y,x]]){const drivers=from.filter(p=>p.component!==r&&outputOnly(p)),receivers=to.filter(p=>p.component!==r&&inputOnly(p));for(const d of drivers)for(const q of receivers)if(d.component!==q.component)link(d.component,q.component);}}
   // Drop feedback edges, then take longest paths through what remains.
   const state=new Map(),order=[];
   const visit=r=>{state.set(r,1);for(const s of out.get(r))if(!state.has(s))visit(s);else if(state.get(s)===1)out.get(r).delete(s);state.set(r,2);order.push(r);};

@@ -77,12 +77,20 @@ assets before using its source compiler button. Packaged distributions include
 
 ## Open from URL
 
-Use **Open URL** in the header or empty state. It accepts a public GitHub repository,
+Use **Open URL** in the header or empty state. It accepts a GitHub repository,
 folder, blob or raw file URL, or a direct HTTPS file URL on a host permitting browser
 downloads (CORS). A repository opens a file chooser; exports are never automatically
 selected or asserted to match current source. Discovery includes `.copper`,
 `.ir.json`, `.scene.json`, electrical JSON exports and `.kicad_pcb`. Paste a direct
 file link for other JSON filenames. Raw PCB files still require local server mode.
+
+Private repositories: paste a fine-grained personal access token (repository access
+limited to what you need, **Contents: Read-only**) under **Private repository
+access**. It is kept in the tab's session storage, attached only to `api.github.com`
+requests, and never written to exports. With a token, file bytes come from the
+contents API, because `raw.githubusercontent.com` cannot serve private files to a
+browser page. A 404 names the repository and ref or file and says whether the token
+can see that repository at all.
 
 The optional ref field selects a branch, tag or commit for repository links. For
 GitHub blob/tree/raw links it must match the URL; enter the full branch name here

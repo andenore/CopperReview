@@ -13,14 +13,15 @@ Python 3.11+ server additionally reads raw `.kicad_pcb` files without KiCad.
 See [WASM build, static hosting and current boundaries](docs/wasm-hosting.md).
 For schematic, power hierarchy and bus/interface review before layout, open the
 JSON produced by `copper compile` with **Open electrical IR**, or run
-`python -m copper_review --electrical-ir electrical.ir.json`. All three electrical
-views share a pin/net inspector and an intent/source/notes panel. See the
+`python -m copper_review --electrical-ir electrical.ir.json`. It opens on a generated
+**Schematic**; all four electrical views share a pin/net inspector and an intent/source/notes panel. See the
 [electrical workflow and input/feedback contracts](docs/electrical-review.md).
 **Compile .copper** and **Try example circuit** use the actual WASM compiler for
-self-contained source. **Open URL** compiles public GitHub source projects with
+self-contained source. **Open URL** compiles GitHub source projects with
 local imports and pinned library dependencies through the same Rust compiler.
-**Open URL** accepts public GitHub repository/file links or direct HTTPS design
-files. Choose the board source at its resolved commit; the browser reads
+**Open URL** accepts GitHub repository/file links or direct HTTPS design files.
+Private repositories need a fine-grained token with Contents: Read-only under
+**Private repository access**; it stays in the tab and is sent only to `api.github.com`. Choose the board source at its resolved commit; the browser reads
 `copper.mod` / `copper.lock`, verifies imported source bytes and opens the electrical
 review. CopperAssetTracker can be opened directly from its GitHub `board.copper`.
 Exported IR and PCB scene files remain supported.
