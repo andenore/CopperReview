@@ -140,26 +140,19 @@ and [Git trees API](https://docs.github.com/en/rest/git/trees).
 
 ## GitHub Pages
 
-The published viewer is at <https://andenore.github.io/CopperReviewPages/>.
-`andenore/CopperReviewPages` contains only the generated static site. CopperReview's
-source repository stays private: its current GitHub plan does not support Pages
-directly from that private repository. The hosting repository serves `main` at `/`
-with `.nojekyll`; no server, GitHub credentials or private project data are bundled.
+The published viewer is at <https://andenore.github.io/CopperReview/>, deployed
+from this repository by `.github/workflows/pages.yml` (Pages source: GitHub
+Actions). Run the workflow manually with `compiler_ref` set to an exact, published
+CopperScript commit that exports the review APIs; it builds that WASM, runs
+`npm test`, checks the WASM against its manifest, builds `dist/` and, with
+`publish` enabled, deploys it. No server, GitHub credentials or private project
+data are bundled. The current browser compiler (512 KiB standalone source limit)
+is `4969948eb5222708e1885841a4dc0cf47e06ee31` on `andenore/CopperScript`
+(`claude/raise-web-source-limit`).
 
-For updates, build/test this checkout against an exact published CopperScript
-commit, run `npm run build:static`, and commit the resulting `dist/` contents to
-the hosting repository. Keep its README/build provenance with the deployment.
-The initial project-capable compiler commit is
-`f260798be5af0a8c5f5cb0d0e5c978160e3abcab` on
-`andenore/CopperScript` (`codex/browser-project-review`).
-
-The manual `.github/workflows/pages.yml` builds the selected CopperScript revision,
-tests the actual WASM and uploads `dist/` as the Pages artifact. Supply a commit
-containing the new review export after the CopperScript change is published.
-`publish` defaults to false; enabling it deploys the checked artifact using the
-repository's GitHub Pages environment when the source repository plan supports
-Pages. Select GitHub Actions as the Pages source in that configuration.
-No hosted deployment or remote push is performed by local build commands.
+`andenore/CopperReviewPages` was the earlier hosting repository for the generated
+site while this source was private; it now redirects here.
+Local build commands never deploy or push.
 
 ## Validation
 

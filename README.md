@@ -1,6 +1,6 @@
 # CopperReview
 
-[Open CopperReview on GitHub Pages](https://andenore.github.io/CopperReviewPages/).
+[Open CopperReview on GitHub Pages](https://andenore.github.io/CopperReview/).
 
 A local electrical and PCB review tool for CopperScript. Inspect placed, partially routed, or
 fully routed board exports; select components, nets, and rectangular regions;
