@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {electricalModel} from '../copper_review/web/electrical-model.js';
-import {schematicSheets,layoutSheet,netRole,compactQuantity} from '../copper_review/web/schematic.js';
+import {schematicSheets,layoutSheet,netRole,compactQuantity,orderLanes} from '../copper_review/web/schematic.js';
 const pin=(name,domains,directions=['passive'])=>({name,number:name,profile:{domains,directions},bonds:[]});
 const volts=v=>({base_value:String(v),unit:'V',value:String(v)});
 const ohms=v=>({base_value:String(v),unit:'ohm',value:String(v)});
@@ -112,4 +112,20 @@ test('an LED and its resistor, or a crystal and its capacitors, stay together be
  assert.equal(new Set(['Y1','C_X1','C_X2'].map(col)).size,1,'crystal and load capacitors share a column');
  assert.equal(Math.abs(col('Y1')-col('U_IC')),1,'the crystal sits beside its IC');
  invariants(model,ctx);
+});
+test('logic pins strapped to a rail stay on the symbol; supply pins become flags',()=>{
+ const ir=board();ir.parts.push({name:'LVL',category:'logic.translator',pins:[pin('VCC',['power'],['input']),pin('GND',['ground'],['input']),pin('OE_N',['digital'],['input']),pin('DIR',['digital'],['input']),pin('A',['digital'],['input']),pin('B',['digital'],['output'])]});
+ ir.components.push(component('U_LVL','LVL'));ir.nets[0].endpoints.push('U_LVL.VCC','U_LVL.DIR');ir.nets[1].endpoints.push('U_LVL.GND','U_LVL.OE_N');ir.nets.find(n=>n.name==='OUT').endpoints.push('U_LVL.A');
+ const model=electricalModel(ir),ctx=schematicSheets(model),sheet=ctx.sheets.find(s=>s.refs.includes('U_LVL')),layout=layoutSheet(model,sheet,ctx),sym=layout.symbols.find(s=>s.ref==='U_LVL');
+ assert.deepEqual(sym.pins.map(p=>p.name).filter(n=>n==='OE_N'||n==='DIR').sort(),['DIR','OE_N'],'strapped logic pins are drawn on the symbol');
+ assert.deepEqual(sym.top.map(f=>f.names.join()),['VCC']);assert.deepEqual(sym.bottom.map(f=>f.names.join()),['GND']);
+ assert.equal(layout.labels.find(l=>l.pin==='U_LVL.OE_N').tie,'ground');assert.equal(layout.labels.find(l=>l.pin==='U_LVL.DIR').tie,'power');
+ invariants(model,ctx);
+});
+test('wire lanes in a gap are ordered to avoid crossings',()=>{
+ // A runs from y 0 (west) to 100 (east), B from 50 (west) to 150 (east): B's lane left of A's crosses nothing.
+ const a={lo:0,hi:100,west:[0],east:[100]},b={lo:50,hi:150,west:[50],east:[150]};orderLanes([a,b]);
+ assert(b.lane<a.lane,'B takes the left lane');
+ // Nets that do not overlap share a lane.
+ const c={lo:0,hi:40,west:[0],east:[40]},d={lo:60,hi:90,west:[60],east:[90]};assert.equal(orderLanes([c,d]),1);assert.equal(c.lane,d.lane);
 });

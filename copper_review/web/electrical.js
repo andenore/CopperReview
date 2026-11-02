@@ -151,7 +151,16 @@ export function createElectricalReview({message,onMode}){
       anchors.set(`bus:${B.bus.id}`,[lx,lo]);for(const n of B.members)anchors.set(`net:${n}`,[lx,lo]);
     }
     for(const w of L.wires){if(busOf.has(w.net))continue;const g=fadeable(draw('g',{'data-net':w.net},undefined,wires),relNets.has(w.net)),d=w.segments.map(([a,b,c,e])=>`M${a} ${b}L${c} ${e}`).join('');draw('path',{d,class:`electrical-sch-wire${net(w.net)}`},undefined,g);pickable(draw('path',{d,class:'electrical-graph-hit'},undefined,g),'net',w.net,w.net);for(const [x,y]of w.dots)draw('circle',{cx:x,cy:y,r:2.6,class:`electrical-sch-dot${net(w.net)}`},undefined,g);if(w.offsheet)pickable(draw('text',{x:w.offsheet.x,y:w.offsheet.y-4,'text-anchor':w.offsheet.anchor,class:`electrical-sch-label${net(w.net)}`},`${short(w.net)} ↗`,g),'net',w.net,`${w.net} continues on other sheets`);anchors.set(`net:${w.net}`,[w.segments[0][0],w.segments[0][1]]);}
-    for(const l of L.labels){const g=fadeable(draw('g',{},undefined,wires),relNets.has(l.net));draw('path',{d:`M${l.x0} ${l.y}L${l.x} ${l.y}`,class:`electrical-sch-stub${net(l.net)}`},undefined,g);pickable(draw('text',{x:l.x+(l.anchor==='start'?4:-4),y:l.y+4,'text-anchor':l.anchor,class:`electrical-sch-label${net(l.net)}`},`${short(l.net)}${l.offsheet?' ↗':''}`,g),'net',l.net,l.offsheet?`${l.net} (also on other sheets)`:l.net);if(!anchors.has(`net:${l.net}`))anchors.set(`net:${l.net}`,[l.x,l.y]);}
+    for(const l of L.labels){
+      if(l.tie){
+        // A logic pin strapped to a rail: stub, rail or ground mark, net name.
+        const g=fadeable(draw('g',{},undefined,wires),relNets.has(l.net)||relRefs.has(model.pins.get(l.pin)?.component)),dir=l.anchor==='start'?1:-1,x=l.x;
+        draw('path',{d:`M${l.x0} ${l.y}L${x} ${l.y}`,class:`electrical-sch-stub${net(l.net)}`},undefined,g);
+        draw('path',{d:l.tie==='ground'?`M${x} ${l.y-6}L${x} ${l.y+6}M${x+dir*3} ${l.y-4}L${x+dir*3} ${l.y+4}M${x+dir*6} ${l.y-2}L${x+dir*6} ${l.y+2}`:`M${x} ${l.y-6}L${x} ${l.y+6}`,class:l.tie==='ground'?`electrical-sch-ground${net(l.net)}`:`electrical-sch-power${net(l.net)}`},undefined,g);
+        pickable(draw('text',{x:x+dir*10,y:l.y+4,'text-anchor':l.anchor,class:l.tie==='ground'?'electrical-sch-tie-ground':'electrical-sch-rail'},short(l.net,14),g),'net',l.net,`${l.pin} tied to ${l.net}`);
+        continue;
+      }
+      const g=fadeable(draw('g',{},undefined,wires),relNets.has(l.net));draw('path',{d:`M${l.x0} ${l.y}L${l.x} ${l.y}`,class:`electrical-sch-stub${net(l.net)}`},undefined,g);pickable(draw('text',{x:l.x+(l.anchor==='start'?4:-4),y:l.y+4,'text-anchor':l.anchor,class:`electrical-sch-label${net(l.net)}`},`${short(l.net)}${l.offsheet?' ↗':''}`,g),'net',l.net,l.offsheet?`${l.net} (also on other sheets)`:l.net);if(!anchors.has(`net:${l.net}`))anchors.set(`net:${l.net}`,[l.x,l.y]);}
     for(const n of L.notes){fadeable(pickable(draw('text',{x:n.x,y:n.y,'text-anchor':n.anchor,class:'electrical-sch-note'},n.text,wires),'component',n.refs[0],n.title),relNets.has(n.net)||n.refs.some(r=>selected('component',r)));for(const r of n.refs)if(!anchors.has(`component:${r}`))anchors.set(`component:${r}`,[n.x,n.y-12]);}
     for(const sym of L.symbols){
       const c=model.components.get(sym.ref),g=fadeable(pickable(draw('g',{'data-symbol':sym.ref},undefined,parts),'component',sym.ref,`${sym.ref} · ${sym.part}${c.value?` · ${quantity(c.value)}`:''} · ${c.pins.length} pins`),relRefs.has(sym.ref)),cls=`electrical-sch-symbol${selected('component',sym.ref)?' selected':''}`;

@@ -91,3 +91,4 @@ body.electrical-maximized #electrical-review{height:100dvh;max-width:none;paddin
 .electrical-notes-items{padding:8px 16px 16px}.electrical-notes-row{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)}.electrical-notes-row>button:last-child{flex:none}
 .electrical-notes-go{flex:1;text-align:left;background:transparent;border-color:transparent;font-size:13px;display:flex;flex-direction:column;gap:4px}.electrical-notes-go:hover{border-color:var(--border)}.electrical-notes-go>div:first-child{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.electrical-notes-go .electrical-note-number{margin-top:0}
 .electrical-notes-row.resolved .electrical-notes-go>div:nth-child(2){text-decoration:line-through;color:var(--muted)}.electrical-notes-dialog>p{padding:0 16px}
+.electrical-sch .electrical-sch-tie-ground{fill:var(--muted);font-size:11px}

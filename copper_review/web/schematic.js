@@ -228,18 +228,42 @@ function columns(model,refs,netsOf){
   return {column,layers,members,parentOf};
 }
 
+/** Orders wire lanes in one column gap to avoid crossings; sets each net's lane, returns the lane count.
+ * Each net has its span (lo, hi) and the heights of its pins on the west and east side of the gap. */
+export function orderLanes(list){
+  const inside=(y,w)=>y>w.lo&&y<w.hi,overlap=(a,b)=>!(a.hi<b.lo-8||b.hi<a.lo-8);
+  const cost=(b,a)=>overlap(a,b)?a.west.filter(y=>inside(y,b)).length+b.east.filter(y=>inside(y,a)).length:0;
+  let order=list;
+  for(let pass=0;pass<6;pass++){
+    let moved=false;
+    for(const w of [...order]){
+      const rest=order.filter(x=>x!==w),here=order.indexOf(w);
+      let c=rest.reduce((sum,x)=>sum+cost(w,x),0),best=c,at=0;
+      for(let k=0;k<rest.length;k++){c+=cost(rest[k],w)-cost(w,rest[k]);if(c<best||c===best&&k+1===here){best=c;at=k+1;}}
+      if(at!==here){rest.splice(at,0,w);order=rest;moved=true;}
+    }
+    if(!moved)break;
+  }
+  // Each net takes the first lane right of every overlapping net before it, so lanes stay shared.
+  for(const [i,w]of order.entries())w.lane=Math.max(0,...order.slice(0,i).filter(x=>overlap(x,w)).map(x=>x.lane+1));
+  return Math.max(0,...order.map(w=>w.lane+1));
+}
 export function layoutSheet(source,sheet,{folded,view}){
   const model=view||source,refs=sheet.refs,inSheet=new Set(refs),netsOf=new Set();
   for(const r of refs)for(const p of model.components.get(r).pins)if(p.net&&pinRole(model,p)==='signal')netsOf.add(p.net);
   const {column,layers,members,parentOf}=columns(model,refs,netsOf);
-  const symbols=new Map(),pinAt=new Map();
+  const symbols=new Map(),pinAt=new Map(),ties=new Map();
+  const strapped=p=>{const d=p.profile.domains||[];return d.length>0&&!d.includes('power')&&!d.includes('ground');};
   const neighborColumns=p=>(members.get(p.net)||[]).filter(q=>q.component!==p.component).map(q=>column.get(q.component));
   for(const r of refs){
     const c=model.components.get(r),two=twoPin(c),col=column.get(r),left=[],right=[],top=new Map(),bottom=new Map();let nc=0;
     for(const p of c.pins){
       const role=pinRole(model,p);
       if(role==='nc'){nc++;continue;}
-      if(role==='power'||role==='ground'){const groups=role==='power'?top:bottom;if(!groups.has(p.net))groups.set(p.net,[]);groups.get(p.net).push(p);continue;}
+      // Only supply pins become rail flags. A logic pin strapped to a rail (OE_N, DIR, CS, EN)
+      // stays on the symbol side so the strap can be reviewed.
+      if((role==='power'||role==='ground')&&!two&&!/^(connector|passive)\./.test(c.partDefinition.category||'')&&strapped(p))ties.set(p.id,role);
+      else if(role==='power'||role==='ground'){const groups=role==='power'?top:bottom;if(!groups.has(p.net))groups.set(p.net,[]);groups.get(p.net).push(p);continue;}
       const cols=neighborColumns(p),avg=cols.length?mean(cols):col;
       const side=cols.length?(avg<col?left:avg>col?right:left):outputOnly(p)?right:inputOnly(p)?left:left.length<=right.length?left:right;side.push(p);
     }
@@ -277,11 +301,15 @@ export function layoutSheet(source,sheet,{folded,view}){
     if(pins.length>=2&&gaps.length===1)wired.set(net,{net,gap:gaps[0],pins,offsheet,ys:pins.map(p=>pinAt.get(p.id).y)});
     else for(const p of pins)labelled.push({net,pin:p,offsheet});
   }
+  for(const s of symbols.values())for(const p of [...s.left,...s.right])if(ties.has(p.id))labelled.push({net:p.net,pin:p,offsheet:false,tie:ties.get(p.id)});
   const lanes=new Map();
+  // Lanes in a gap are ordered to avoid crossings. A pin's horizontal run crosses another net's
+  // lane when that lane lies between the pin and its own lane and spans the pin's height, so the
+  // cost of putting net b left of net a is a's west pins inside b plus b's east pins inside a.
   for(const g of distinct([...wired.values()].map(w=>w.gap))){
-    const list=[...wired.values()].filter(w=>w.gap===g).sort((a,b)=>Math.min(...a.ys)-Math.min(...b.ys)),ends=[];
-    for(const w of list){const lo=Math.min(...w.ys),hi=Math.max(...w.ys);let lane=ends.findIndex(e=>e<lo-8);if(lane<0){lane=ends.length;ends.push(hi);}else ends[lane]=hi;w.lane=lane;}
-    lanes.set(g,ends.length);
+    const list=[...wired.values()].filter(w=>w.gap===g).sort((a,b)=>Math.min(...a.ys)-Math.min(...b.ys));
+    for(const w of list){w.lo=Math.min(...w.ys);w.hi=Math.max(...w.ys);w.west=[];w.east=[];for(const p of w.pins)(pinAt.get(p.id).side==='right'?w.west:w.east).push(pinAt.get(p.id).y);}
+    lanes.set(g,orderLanes(list));
   }
   const labelWidth=net=>Math.min(26,net.length)*6.4+14;
   const notesFor=new Map();
@@ -310,7 +338,7 @@ export function layoutSheet(source,sheet,{folded,view}){
     const top=pts.find(p=>p.y===lo);
     out.wires.push({net:w.net,pins:pts.map(p=>p.pin),segments,dots,offsheet:w.offsheet?{x:Math.min(top.end,lx)+(top.end<lx?2:-2),y:lo,anchor:top.end<lx?'start':'end'}:null});
   }
-  for(const l of labelled){const pt=pinPoint(l.pin);out.labels.push({net:l.net,pin:l.pin.id,x:pt.x+pt.dir*STUB,y:pt.y,anchor:pt.dir<0?'end':'start',x0:pt.x,offsheet:l.offsheet});}
+  for(const l of labelled){const pt=pinPoint(l.pin);out.labels.push({net:l.net,pin:l.pin.id,x:pt.x+pt.dir*STUB,y:pt.y,anchor:pt.dir<0?'end':'start',x0:pt.x,offsheet:l.offsheet,...(l.tie?{tie:l.tie}:{})});}
   const mark=f=>{const v=compactQuantity(model.components.get(f.ref).value);return f.kind==='pullup'?`↑${v}`:f.kind==='pulldown'?`↓${v}`:f.kind==='protect'?'ESD':`⟷${v||f.ref.split('/').pop()}`;};
   const describe=f=>{const c=model.components.get(f.ref),v=c.value?quantity(c.value):c.part.split('.').pop();return f.kind==='protect'?`${f.ref}: ESD/TVS protection on ${f.nets.join(', ')}`:f.kind==='series'?`${f.ref}: series ${v} between ${f.nets.join(' and ')}`:`${f.ref}: ${f.kind==='pullup'?'pull-up':'pull-down'} ${v} to ${f.rail}`;};
   for(const [net,fs]of notesFor)for(const p of (members.get(net)||[]).filter(p=>pinAt.has(p.id)&&!isPassive(model.components.get(p.component)))){

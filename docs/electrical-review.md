@@ -32,7 +32,10 @@ are independent; the application does not assert that a PCB matches an IR.
   their IC share the column beside it, each further hop steps one column outward,
   and each part lines up with the part it hangs off when the column has room. A
   two-pin part with one signal pin faces it toward its neighbour. Power and
-  ground pins become rail flags and ground symbols (one per net, marked ×n);
+  ground supply pins become rail flags and ground symbols (one per net, marked ×n);
+  a logic or analog pin of an IC strapped to a rail (OE_N, DIR, CS, EN) stays on the
+  symbol side with a small rail or ground mark and the net name, so straps can be
+  reviewed (connector and two-pin part pins on rails stay flags);
   declared supplies decide a net's role, and pins claiming both power and ground
   (generic headers) are ignored. Decoupling/support passives fold into `C×n`
   badges on the rail flag of the pin they decouple; plain pull resistors of at
@@ -44,7 +47,7 @@ are independent; the application does not assert that a PCB matches an IR.
   shunts (≤ 1 Ω, or a `shunt`/`sense` role), termination, divider and filter parts
   stay drawn. Each sheet lists its folded parts and **Show passives** draws them all.
   Values use short schematic forms (`4.7k`, `100nF`). A net is a wire only where every pin faces the same column gap, so wires
-  never cross a symbol; other connections use labels, with ↗ when the net continues
+  never cross a symbol; lanes in each gap are ordered to avoid wire crossings; other connections use labels, with ↗ when the net continues
   on another sheet. An interface (declared interface or configured peripheral) whose
   nets all run as wires between the same parts, on adjacent pins, is drawn as one
   thick bus line labelled with its name and net count; selecting it, or one of its
