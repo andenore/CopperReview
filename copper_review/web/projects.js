@@ -43,13 +43,33 @@ export async function remoteBytes(url,{signal,fetcher=fetch,limit=MAX_REMOTE_BYT
     if(!response.ok){const authed=!!githubHeaders(url).Authorization;
       if(response.status===401&&authed)throw Error('GitHub rejected the token. It may be expired or revoked; replace it under Private repository access.');
       if(response.status===403||response.status===429)throw Error(authed?'GitHub refused access or the API rate limit was reached. Check the token can read this repository (organisations may need to approve it).':'Access or API rate limit prevented loading. Add a GitHub token for a higher limit, try again later, or open a downloaded file.');
-      if(response.status===404)throw Error(authed?'Project, ref or file was not found, or the token cannot read this repository.':'Project, ref or file was not found. Private repositories need a GitHub token (Private repository access).');throw Error(`Download failed (HTTP ${response.status}).`);}
+      if(response.status===404)throw Error(await notFoundMessage(url,authed,fetcher,controller.signal));throw Error(`Download failed (HTTP ${response.status}).`);}
     if(Number(response.headers.get('Content-Length'))>limit)throw Error(`Download exceeds ${Math.floor(limit/1024/1024)} MiB.`);
     const reader=response.body?.getReader();if(!reader){const bytes=await response.arrayBuffer();if(bytes.byteLength>limit)throw Error('Download exceeds the size limit.');return bytes;}
     const chunks=[];let size=0;
     try{while(true){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit)throw Error('Download exceeds the size limit.');chunks.push(value);}}catch(error){await reader.cancel().catch(()=>{});throw error;}finally{reader.releaseLock();}
     const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return bytes.buffer;
   }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+}
+/* GitHub answers 404 both for missing refs/files and for repositories a token cannot see,
+ * so name the repository and item, and ask GitHub whether the repository itself is visible. */
+function githubTarget(url){
+  const target=new URL(url),parts=target.pathname.split('/').filter(Boolean).map(p=>decodeURIComponent(p));
+  if(target.origin===API_ORIGIN&&parts[0]==='repos'&&parts.length>=3){
+    const [, owner,repo,kind,...rest]=parts,item=kind==='commits'?`ref "${rest.join('/')}"`:kind==='contents'?`file ${rest.join('/')}`:kind==='git'?'repository listing':'';
+    return {owner,repo,item};
+  }
+  if(target.hostname==='raw.githubusercontent.com'&&parts.length>=4)return {owner:parts[0],repo:parts[1],item:`file ${parts.slice(3).join('/')}`};
+  return null;
+}
+async function notFoundMessage(url,authed,fetcher,signal){
+  const target=githubTarget(url);if(!target)return 'The file was not found at this URL.';
+  const name=`${target.owner}/${target.repo}`,item=target.item?` (${target.item})`:'';
+  if(!authed)return `${name}: not found${item}. If the repository is private, add a GitHub token under Private repository access.`;
+  let visible=null;try{const probe=`${API}${segment(target.owner)}/${segment(target.repo)}`;const response=await fetcher(probe,{signal,credentials:'omit',referrerPolicy:'no-referrer',headers:githubHeaders(probe)});visible=response.ok?true:response.status===404?false:null;}catch{}
+  if(visible===false)return `The GitHub token cannot see ${name}. Add it to the token's repository access (with Contents: Read-only), or check the owner and name.`;
+  if(visible===true)return `${name} is readable with the token, but the ${target.item||'requested item'} was not found. Check that the branch, tag or path exists on GitHub.`;
+  return `${name}: not found${item}, or the token cannot read this repository.`;
 }
 export const apiJson=async(url,options)=>JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await remoteBytes(url,{...options,limit:8*1024*1024})));
 export function githubFile(project,path){
