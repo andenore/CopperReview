@@ -82,3 +82,14 @@ test('a hub with many signal nets gets its own sheet and large boards split by c
  const drawn=ctx.sheets.flatMap(s=>s.refs);assert.equal(new Set(drawn).size,drawn.length,'each part is drawn once');
  invariants(model,ctx);
 });
+test('a tall column of undirected parts wraps into columns around its hub',()=>{
+ const ir=board(),hub={name:'HUBP',category:'semiconductor.mcu',pins:Array.from({length:30},(_,i)=>pin(`P${i}`,['digital']))};
+ ir.parts.push(hub);ir.components.push(component('U_HUBP','HUBP'));
+ for(let i=0;i<30;i++){ir.components.push(component(`J_W${i}`,'HDR'));ir.nets.push({name:`W${i}`,endpoints:[`U_HUBP.P${i}`,`J_W${i}.1`]});}
+ const model=electricalModel(ir),ctx=schematicSheets(model),sheet=ctx.sheets.find(s=>s.refs.includes('U_HUBP')),layout=layoutSheet(model,sheet,ctx);
+ assert(layout.height<=1700,`sheet stays wide, not tall (${Math.round(layout.height)})`);
+ const hubX=layout.symbols.find(s=>s.ref==='U_HUBP').x;
+ assert.deepEqual(layout.symbols.filter(s=>s.x===hubX).map(s=>s.ref),['U_HUBP'],'the hub keeps its own column');
+ assert(layout.symbols.some(s=>s.x<hubX)&&layout.symbols.some(s=>s.x>hubX),'neighbours sit on both sides');
+ invariants(model,ctx);
+});

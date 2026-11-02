@@ -4,7 +4,7 @@
 import {isPassive,quantity} from './electrical-model.js';
 import {engineeringText} from './core.js';
 
-const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SMALL=3,BAND=1100;
+const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SMALL=3,BAND=1100,WRAP=1500;
 const distinct=a=>[...new Set(a)];
 const scoped=(scope,s)=>scope?`${scope}/${s}`:s;
 const natural=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
@@ -172,7 +172,29 @@ function columns(model,refs,netsOf){
   const values=distinct([...rank.values()]).sort((a,b)=>a-b),column=new Map(refs.map(r=>[r,values.indexOf(rank.get(r))]));
   const layers=values.map((_,i)=>refs.filter(r=>column.get(r)===i).sort(natural)),position=new Map();
   const index=()=>{for(const layer of layers)layer.forEach((r,i)=>position.set(r,i));};index();
-  for(let pass=0;pass<6;pass++){for(const layer of pass%2?[...layers].reverse():layers){const score=r=>{const ns=[...neighbors.get(r)].filter(n=>inSheet.has(n));return ns.length?mean(ns.map(n=>position.get(n))):position.get(r);};layer.sort((a,b)=>score(a)-score(b)||natural(a,b));}index();}
+  const reorder=()=>{for(let pass=0;pass<6;pass++){for(const layer of pass%2?[...layers].reverse():layers){const score=r=>{const ns=[...neighbors.get(r)].filter(n=>inSheet.has(n));return ns.length?mean(ns.map(n=>position.get(n))):position.get(r);};layer.sort((a,b)=>score(a)-score(b)||natural(a,b));}index();}};
+  reorder();
+  // A column taller than a band wraps into side-by-side columns around its best-connected part,
+  // whose neighbours take the nearest columns so they can still be wired to it.
+  const heightOf=rs=>rs.reduce((sum,r)=>sum+estimate(r)+30,0);
+  if(layers.some(layer=>heightOf(layer)>WRAP)){
+    const wrapped=[];
+    for(const layer of layers){
+      if(heightOf(layer)<=WRAP){wrapped.push(layer);continue;}
+      // The hub may sit in its own column next to its satellites; it moves into the middle.
+      const links=r=>[...neighbors.get(r)].filter(n=>layer.includes(n)).length,hub=[...refs].sort((a,b)=>links(b)-links(a)||natural(a,b))[0];
+      if(!layer.includes(hub)){for(const other of [...layers,...wrapped]){const k=other.indexOf(hub);if(k>=0)other.splice(k,1);}layer.push(hub);}
+      const near=r=>neighbors.get(hub).has(r)?1:0,sides=[[],[]];
+      for(const r of layer.filter(r=>r!==hub).sort((a,b)=>near(b)-near(a)||links(b)-links(a)||position.get(a)-position.get(b))){
+        const side=sides[heightOf(sides[0].flat())<=heightOf(sides[1].flat())?0:1];
+        let col=side.find(c=>heightOf(c)+estimate(r)+30<=WRAP);if(!col){col=[];side.push(col);}col.push(r);
+      }
+      wrapped.push(...sides[0].reverse(),[hub],...sides[1]);
+    }
+    layers.splice(0,layers.length,...wrapped.filter(layer=>layer.length));
+    for(const [i,layer]of layers.entries())for(const r of layer)column.set(r,i);
+    index();reorder();
+  }
   return {column,layers,members};
 }
 

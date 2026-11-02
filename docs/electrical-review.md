@@ -24,7 +24,10 @@ are independent; the application does not assert that a PCB matches an IR.
   authored drawing. Module scopes, then signal connectivity, split the board: a
   part with more than 20 signal nets gets its own sheet with the headers and small
   parts that only reach it, other clusters hold at most 36 parts. Columns follow
-  output-to-input direction, including through series two-pin parts. Power and
+  output-to-input direction, including through series two-pin parts. A column
+  taller than about 1500 px wraps into side-by-side columns around its best-connected
+  part, whose neighbours take the nearest columns, so sheets stay wide rather than
+  tall. Power and
   ground pins become rail flags and ground symbols (one per net, marked ×n);
   declared supplies decide a net's role, and pins claiming both power and ground
   (generic headers) are ignored. Decoupling/support passives fold into `C×n`
