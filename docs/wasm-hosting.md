@@ -142,10 +142,10 @@ and [Git trees API](https://docs.github.com/en/rest/git/trees).
 
 The published viewer is at <https://andenore.github.io/CopperReview/>, deployed
 from this repository by `.github/workflows/pages.yml` (Pages source: GitHub
-Actions). Run the workflow manually with `compiler_ref` set to an exact, published
-CopperScript commit that exports the review APIs; it builds that WASM, runs
-`npm test`, checks the WASM against its manifest, builds `dist/` and, with
-`publish` enabled, deploys it. No server, GitHub credentials or private project
+Actions). Every push to `main` builds the WASM from the exact CopperScript commit
+pinned in `.copperscript-version`, runs `npm test`, checks the WASM against its
+manifest, builds `dist/` and deploys it. To change compilers, update that file.
+A manual run can try another commit through `compiler_ref`. No server, GitHub credentials or private project
 data are bundled. The current browser compiler (512 KiB standalone source limit)
 is `4969948eb5222708e1885841a4dc0cf47e06ee31` on `andenore/CopperScript`
 (`claude/raise-web-source-limit`).
