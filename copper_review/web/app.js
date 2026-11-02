@@ -3,6 +3,8 @@ import {discoverProject,downloadDesign,setGithubToken,hasGithubToken,checkGithub
 import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
 import {createElectricalReview} from './electrical.js';
+import {chipify} from './chips.js';
+for(const id of ['category','priority','note-status'])chipify(document.getElementById(id));
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');

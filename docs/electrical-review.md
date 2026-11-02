@@ -29,11 +29,23 @@ are independent; the application does not assert that a PCB matches an IR.
   declared supplies decide a net's role, and pins claiming both power and ground
   (generic headers) are ignored. Decoupling/support passives fold into `C×n`
   badges on the rail flag of the pin they decouple; plain pull resistors of at
-  least 1 kΩ fold into ↑/↓ notes. Shunts, series, termination, divider and filter
-  parts stay drawn. Each sheet lists its folded parts and **Show passives** draws
-  them all. A net is a wire only where every pin faces the same column gap, so wires
+  least 1 kΩ fold into ↑/↓ notes (`↑4.7k`). Series links between two plain signal
+  nets (0 Ω jumpers, damping resistors above 1 Ω up to 100 Ω, signal-path inductors
+  and beads) fold into a `⟷33Ω` note on the far side, and the two nets are drawn as
+  one under the first name; pin tooltips keep the pin's own net. `protection.*`
+  parts that clamp signals to rails fold into an `ESD` note on each signal. Current
+  shunts (≤ 1 Ω, or a `shunt`/`sense` role), termination, divider and filter parts
+  stay drawn. Each sheet lists its folded parts and **Show passives** draws them all.
+  Values use short schematic forms (`4.7k`, `100nF`). A net is a wire only where every pin faces the same column gap, so wires
   never cross a symbol; other connections use labels, with ↗ when the net continues
-  on another sheet. Explorer and focus-picker choices open the sheet that shows them.
+  on another sheet. An interface (declared interface or configured peripheral) whose
+  nets all run as wires between the same parts, on adjacent pins, is drawn as one
+  thick bus line labelled with its name and net count; selecting it, or one of its
+  nets or pins, draws the nets separately. Selecting anything fades what is not on
+  its signal nets (**Fade unrelated** turns this off); rails only count when selected
+  directly, and clicking empty drawing space clears the selection. Unconnected-pin
+  counts show only on the selected part. Explorer and focus-picker choices open the
+  sheet that shows them.
 - **Focused schematic** draws a pin-labelled slice with one symbol per component.
   It starts at a configured peripheral when present. The focus picker includes
   interfaces, components and rails. Explorer items and interface titles focus in
@@ -91,10 +103,13 @@ are independent; the application does not assert that a PCB matches an IR.
   overview. Passive support components and power-rail passive loads have their own
   counted disclosures; the full IR and source excerpts remain unchanged.
 
-One selection drives the inspector and intent panel across all views. The
-inspector retains exact instance paths, net aliases, pin names/numbers, available
-ratings, unpowered behavior and all pins without a net. **Intent** shows declared
+One selection drives the side panel across all views. Its top shows the selection
+with exact instance paths, net aliases, pin names/numbers, available ratings,
+unpowered behavior and all pins without a net. **Details** shows declared
 supplies, interfaces, component properties and library document references.
+The review limits (connectivity and ratings come from the IR; purpose, protocol
+grouping, power sequencing and device behavior are not validated) are stated once
+in the line under the canvas. Drawing elements carry hover tooltips.
 **Source** is a resolved IR excerpt, not recovered `.copper` text. Original
 comments or requirements absent from the IR cannot be reconstructed.
 
@@ -107,6 +122,16 @@ Fit view there may enlarge a small sheet. Power, bus and
 focused schematic zoom settings are independent. On narrow
 screens the page stacks and the canvas keeps its own scroll area. Passive visibility
 is remembered with the review. Searching the explorer includes collapsed passives.
+
+### Notes
+
+On the Schematic, double-click an element or press **N** to write a note about the
+selection in a small editor next to it: category and priority chips, the
+observation, and an optional desired behavior (Ctrl+Enter saves, Esc cancels).
+Saved notes appear as numbered markers where their entity is drawn (red for high
+priority, grey once resolved); click one to edit, resolve or reopen it. The sheet
+list shows `✎ n` for sheets with notes. **Notes** lists every note and has the same
+editor for the other views (N opens it there).
 
 ## Input and feedback identity
 
@@ -132,8 +157,13 @@ Electrical notes use a separate `copper-electrical-review/v1` contract:
 }
 ```
 
-Each annotation contains an `id`, `selection`, `view`, `power_state`, `observation`,
-`desired_behavior`, `created_at` and `updated_at`. Selection kinds are `component`,
+Each annotation contains an `id`, `selection`, `view`, `power_state`, `category`,
+`priority`, `status`, `observation`, `desired_behavior`, `created_at` and
+`updated_at`. As in PCB reviews, `observation` is the perceived problem and
+`desired_behavior` the requested outcome; priority is `low`, `medium` or `high` and
+status `open` or `resolved`. Categories are `connectivity`, `power`, `interface`,
+`part_choice`, `protection` and `other`. Notes written before these fields existed
+load as `other`, `medium`, `open`. Selection kinds are `component`,
 `pin`, `net` and `bus`; IDs retain exact resolved instance/net identities. Bus IDs
 are prefixed `interface:`, `peripheral:` or `net:`. Loading requires the exact input
 hash and existing selected entities. Notes, view, selection, focus and chosen state

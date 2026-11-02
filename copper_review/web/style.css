@@ -77,3 +77,12 @@ body.electrical-maximized #electrical-review{height:100dvh;max-width:none;paddin
 #github-token-status{overflow-wrap:anywhere;font-size:12px}
 #github-token-status.error{color:#f5aaa0}
 #electrical-canvas.panning,#electrical-canvas.panning *{cursor:grabbing}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px}.chip{font-size:11px;padding:3px 9px;border-radius:999px;background:transparent;color:var(--muted)}.chip[aria-pressed=true]{border-color:var(--copper);color:var(--copper);background:#3d3025}
+#electrical-canvas{position:relative}.electrical-sheet-fade{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text)}
+.electrical-sch-fade{transition:opacity .15s}.electrical-sch-focus .electrical-sch-fade:not(.rel){opacity:.22}
+.electrical-sch-bus{fill:none;stroke:var(--mint);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}.electrical-sch .electrical-sch-bus-label{fill:var(--mint);font-size:11px;font-weight:600}
+.electrical-sch-marker{cursor:pointer}.electrical-sch-marker circle{fill:var(--copper);stroke:#111a1e;stroke-width:1.5}.electrical-sch-marker.high circle{fill:#e5736d}.electrical-sch-marker.resolved circle{fill:#5d737c}.electrical-sch .electrical-sch-marker text{fill:#111a1e;font-size:10px;font-weight:700}
+.electrical-note-pop{position:absolute;z-index:5;width:310px;padding:10px;background:var(--panel);border:1px solid var(--copper);border-radius:8px;box-shadow:0 8px 24px #0009}
+.electrical-note-form textarea{width:100%;min-height:64px;box-sizing:border-box}.electrical-note-form details{margin:6px 0}.electrical-note-target{font:12px ui-monospace,Consolas,monospace;color:var(--copper);overflow-wrap:anywhere}.electrical-note-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.electrical-note{display:flex;align-items:flex-start;gap:6px}.electrical-note.resolved>button:first-of-type{text-decoration:line-through;color:var(--muted)}.electrical-note-number{flex:none;min-width:18px;height:18px;border-radius:9px;background:var(--copper);color:#111a1e;font:700 10px/18px ui-monospace,monospace;text-align:center;margin-top:4px}.electrical-note-number.high{background:#e5736d}.electrical-note.resolved .electrical-note-number{background:#5d737c}
+.electrical-sidebar #electrical-inspector h3{margin-top:0}

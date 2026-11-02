@@ -2,6 +2,7 @@
  * intent: power and ground pins become flags, support passives fold into badges, and a
  * net is drawn as a wire only where it cannot cross a symbol; otherwise it gets labels. */
 import {isPassive,quantity} from './electrical-model.js';
+import {engineeringText} from './core.js';
 
 const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SMALL=3,BAND=1100;
 const distinct=a=>[...new Set(a)];
@@ -22,18 +23,45 @@ export function netRole(model,name){
 }
 const pinRole=(model,p)=>p.net?netRole(model,p.net):'nc';
 const twoPin=c=>c.pins.length===2;
+/** Short drawing values: 4.7k, 33Ω, 100nF, 10µH. */
+export function compactQuantity(q){
+  if(!q)return '';const v=engineeringText(q.value),unit=String(q.unit||''),ohm=/^([a-zA-Zµ]?)ohms?$/i.exec(unit);
+  const base=Number(q.base_value),trim=x=>String(Number(x.toPrecision(6)));
+  if(ohm&&q.base_value!=null&&Number.isFinite(base))return base>=1e6?`${trim(base/1e6)}M`:base>=1e3?`${trim(base/1e3)}k`:`${trim(base)}Ω`;
+  return ohm?(ohm[1]?`${v}${ohm[1].replace(/^u$/,'µ')}`:`${v}Ω`):`${v}${unit.replace(/^u/,'µ')}`;
+}
+// Series links: 0 Ω jumpers, damping resistors up to 100 Ω and signal-path inductors or beads.
+// Current shunts (≤ 1 Ω) and anything marked as a shunt or sense part stay drawn.
+function seriesLink(c){
+  const cat=c.partDefinition.category||'',ohms=Number(c.value?.base_value);
+  if(/shunt|sense/.test(`${c.properties?.role||''}`))return false;
+  if(/resistor/.test(cat))return c.value!=null&&Number.isFinite(ohms)&&(ohms===0||ohms>1&&ohms<=100);
+  return /inductor|ferrite|bead/.test(cat)&&!/power/.test(cat);
+}
 
 /** Passives folded out of the drawing. Every fold stays listed and selectable. */
 function folding(model,showPassives){
   const folded=new Map();if(showPassives)return folded;
   for(const c of model.components.values()){
+    // ESD/TVS parts that only clamp signals to rails become a badge on each protected signal.
+    if(/^protection\./.test(c.partDefinition.category||'')){
+      const nets=distinct(c.pins.map(p=>p.net).filter(Boolean)),signals=nets.filter(n=>netRole(model,n)==='signal');
+      if(signals.length&&signals.length<nets.length)folded.set(c.ref,{kind:'protect',ref:c.ref,net:signals[0],nets:signals});
+      continue;
+    }
     if(!isPassive(c))continue;
     const nets=c.pins.map(p=>p.net);
     if(c.properties?.role==='decoupling'||c.properties?.decouples||nets.some(Boolean)&&nets.filter(Boolean).every(n=>netRole(model,n)!=='signal')){
       const target=typeof c.properties?.decouples==='string'?scoped(c.scope,c.properties.decouples):null,rail=c.pins.map(p=>p.net).find(n=>n&&netRole(model,n)!=='ground')||c.pins.find(p=>p.net)?.net||null;
       folded.set(c.ref,{kind:'support',ref:c.ref,pin:model.pins.has(target)?target:null,net:rail});continue;
     }
-    // Pull resistors only: shunts, terminations and series resistors (< 1 kΩ) stay drawn.
+    // A series link between two plain signal nets folds; its two nets are drawn as one.
+    if(twoPin(c)&&nets.every(Boolean)&&nets[0]!==nets[1]&&nets.every(n=>netRole(model,n)==='signal')&&seriesLink(c)){
+      const others=nets.map(n=>model.nets.get(n).pins.filter(p=>p.component!==c.ref));
+      if(others.every(o=>o.length&&o.every(p=>!isPassive(model.components.get(p.component)))))folded.set(c.ref,{kind:'series',ref:c.ref,net:nets[0],nets});
+      continue;
+    }
+    // Pull resistors only: shunts and terminations stay drawn.
     if(!twoPin(c)||!nets.every(Boolean)||!/resistor/.test(c.partDefinition.category||'')||!(Number(c.value?.base_value)>=1000))continue;
     const fixed=nets.filter(n=>netRole(model,n)!=='signal'),signal=nets.filter(n=>netRole(model,n)==='signal');
     if(fixed.length!==1||signal.length!==1)continue;
@@ -44,6 +72,20 @@ function folding(model,showPassives){
   return folded;
 }
 
+/** The model as drawn: nets joined by a folded series link become one net under the first name. */
+function mergedModel(model,folded){
+  const series=[...folded.values()].filter(f=>f.kind==='series'),merged=new Map();if(!series.length)return {view:model,merged};
+  const parent=new Map(),find=n=>{while(parent.get(n)!==n)n=parent.get(n);return n;};
+  for(const f of series){for(const n of f.nets)if(!parent.has(n))parent.set(n,n);const [a,b]=f.nets.map(find).sort(natural);if(a!==b)parent.set(b,a);}
+  const alias=new Map([...parent.keys()].map(n=>[n,find(n)]));
+  for(const [n,r]of alias){if(!merged.has(r))merged.set(r,[]);merged.get(r).push(n);}
+  const remap=p=>alias.has(p.net)?{...p,net:alias.get(p.net),rawNet:p.net}:p,gone=new Set(series.map(f=>f.ref));
+  const components=new Map([...model.components].map(([r,c])=>[r,c.pins.some(p=>alias.has(p.net))?{...c,pins:c.pins.map(remap)}:c]));
+  const nets=new Map(model.nets);
+  for(const [r,names]of merged){names.sort(natural);const pins=names.flatMap(n=>model.nets.get(n).pins).filter(p=>!gone.has(p.component)).map(remap);nets.set(r,{...model.nets.get(r),name:r,pins,supplies:[],merged:names});for(const n of names)if(n!==r)nets.delete(n);}
+  return {view:{...model,components,nets},merged};
+}
+
 function components(refs,linked){
   const parent=new Map(refs.map(r=>[r,r])),find=r=>{while(parent.get(r)!==r){parent.set(r,parent.get(parent.get(r)));r=parent.get(r);}return r;};
   for(const group of linked)for(const r of group.slice(1))parent.set(find(r),find(group[0]));
@@ -51,8 +93,8 @@ function components(refs,linked){
 }
 
 /** Split the board into sheets: module scopes first, then signal connectivity. */
-export function schematicSheets(model,{showPassives=false}={}){
-  const folded=folding(model,showPassives),signalNets=new Map();
+export function schematicSheets(source,{showPassives=false}={}){
+  const folded=folding(source,showPassives),{view:model,merged}=mergedModel(source,folded),signalNets=new Map();
   const visible=[...model.components.values()].filter(c=>!folded.has(c.ref));
   for(const c of visible)signalNets.set(c.ref,distinct(c.pins.map(p=>p.net).filter(n=>n&&netRole(model,n)==='signal')));
   const linksOf=refs=>{const members=new Map();for(const r of refs)for(const n of signalNets.get(r)){if(!members.has(n))members.set(n,[]);members.get(n).push(r);}return [...members.values()];};
@@ -87,10 +129,11 @@ export function schematicSheets(model,{showPassives=false}={}){
   }
   const sheetOf=new Map();for(const s of sheets)for(const r of s.refs)sheetOf.set(r,s.id);
   for(const f of folded.values()){
-    const host=f.pin?model.pins.get(f.pin).component:model.nets.get(f.net)?.pins.map(p=>p.component).find(r=>sheetOf.has(r)&&!folded.has(r));
+    const net=[...merged].find(([,names])=>names.includes(f.net))?.[0]||f.net;
+    const host=f.pin?model.pins.get(f.pin).component:model.nets.get(net)?.pins.map(p=>p.component).find(r=>sheetOf.has(r)&&!folded.has(r));
     if(host&&sheetOf.has(host))sheetOf.set(f.ref,sheetOf.get(host));
   }
-  return {sheets,folded,sheetOf};
+  return {sheets,folded,sheetOf,view:model,merged};
 }
 
 /** Columns follow signal direction; undirected parts sit between their neighbours. */
@@ -133,8 +176,8 @@ function columns(model,refs,netsOf){
   return {column,layers,members};
 }
 
-export function layoutSheet(model,sheet,{folded}){
-  const refs=sheet.refs,inSheet=new Set(refs),netsOf=new Set();
+export function layoutSheet(source,sheet,{folded,view}){
+  const model=view||source,refs=sheet.refs,inSheet=new Set(refs),netsOf=new Set();
   for(const r of refs)for(const p of model.components.get(r).pins)if(p.net&&pinRole(model,p)==='signal')netsOf.add(p.net);
   const {column,layers,members}=columns(model,refs,netsOf);
   const symbols=new Map(),pinAt=new Map();
@@ -154,7 +197,7 @@ export function layoutSheet(model,sheet,{folded}){
       left.length=0;right.length=0;if(both.length===2){left.push(both[0]);right.push(both[1]);}else left.push(...both);
     }
     for(const side of [left,right])side.sort((a,b)=>natural(a.number??a.name,b.number??b.name));
-    const shortName=c.part.split('.').pop(),value=c.value?quantity(c.value):'',title=r.split('/').pop(),inline=two&&right.length===1;
+    const shortName=c.part.split('.').pop(),value=c.value?compactQuantity(c.value):'',title=r.split('/').pop(),inline=two&&right.length===1;
     const text=Math.ceil(Math.max(title.length,(value||shortName).length)*6.4);
     const w=two?TWO:Math.max(130,(Math.max(0,...left.map(p=>p.name.length))+Math.max(0,...right.map(p=>p.name.length)))*CHAR+44,Math.max(top.size,bottom.size)*72,Math.max(title.length,shortName.length)*CHAR+24);
     const h=two?16:HEAD+Math.max(1,left.length,right.length)*PIN+FOOT;
@@ -185,7 +228,8 @@ export function layoutSheet(model,sheet,{folded}){
   }
   const labelWidth=net=>Math.min(26,net.length)*6.4+14;
   const notesFor=new Map();
-  for(const f of folded.values())if(f.kind!=='support'){if(!notesFor.has(f.net))notesFor.set(f.net,[]);notesFor.get(f.net).push(f);}
+  const drawnNet=n=>model.nets.has(n)?n:[...model.nets.values()].find(x=>x.merged?.includes(n))?.name;
+  for(const f of folded.values())if(f.kind!=='support')for(const n of distinct((f.nets||[f.net]).map(drawnNet).filter(Boolean))){if(!notesFor.has(n))notesFor.set(n,[]);notesFor.get(n).push(f);}
   const colWidth=layers.map(layer=>Math.max(0,...layer.map(r=>symbols.get(r).extent)));
   const sideSpace=(col,side)=>Math.max(0,...labelled.filter(l=>{const a=pinAt.get(l.pin.id);return a.s.col===col&&a.side===side;}).map(l=>labelWidth(l.net)),...[...notesFor.keys()].flatMap(net=>(members.get(net)||[]).filter(p=>pinAt.has(p.id)&&pinAt.get(p.id).s.col===col&&pinAt.get(p.id).side===side)).map(()=>70));
   const gapWidth=g=>STUB*2+(g>=0?sideSpace(g,'right'):0)+(g<layers.length-1?sideSpace(g+1,'left'):0)+(lanes.get(g)||0)*LANE+(lanes.get(g)?24:12);
@@ -197,7 +241,7 @@ export function layoutSheet(model,sheet,{folded}){
   const pinPoint=p=>{const a=pinAt.get(p.id);return {x:a.side==='left'?a.s.x:a.s.x+a.s.w,y:a.y,dir:a.side==='left'?-1:1};};
   for(const s of symbols.values()){
     const sym={ref:s.ref,title:s.title,subtitle:s.subtitle,part:s.part,two:s.two,inline:s.inline,x:s.x,y:s.y,w:s.w,h:s.h,nc:s.nc,pins:[],top:[],bottom:[]};
-    for(const side of ['left','right'])for(const p of s[side]){const pt=pinPoint(p);sym.pins.push({id:p.id,name:p.name,number:p.number,net:p.net,side,x:pt.x,y:pt.y,end:pt.x+pt.dir*STUB});}
+    for(const side of ['left','right'])for(const p of s[side]){const pt=pinPoint(p);sym.pins.push({id:p.id,name:p.name,number:p.number,net:p.net,raw:p.rawNet||p.net,side,x:pt.x,y:pt.y,end:pt.x+pt.dir*STUB});}
     const spread=(groups,y,dir)=>groups.map((g,i)=>{const split=s.two&&groups.length===2,gx=split?s.x+(i?s.w-4:4):s.x+s.w*(i+1)/(groups.length+1);const badges=[...folded.values()].filter(f=>f.kind==='support'&&f.pin&&model.pins.get(f.pin).component===s.ref&&f.net===g.net);return {net:g.net,pins:g.pins.map(p=>p.id),names:g.pins.map(p=>p.name),x:gx,y,end:y+dir*16,anchor:split?(i?'start':'end'):'middle',badges:badges.map(f=>f.ref)};});
     sym.top=spread(s.top,s.y,-1);sym.bottom=spread(s.bottom,s.y+s.h,1);
     out.symbols.push(sym);
@@ -207,12 +251,16 @@ export function layoutSheet(model,sheet,{folded}){
     const lo=Math.min(...pts.map(p=>p.y)),hi=Math.max(...pts.map(p=>p.y)),segments=[[lx,lo,lx,hi],...pts.map(p=>[p.x,p.y,lx,p.y])];
     const dots=pts.length>2?pts.filter(p=>p.y>lo&&p.y<hi).map(p=>[lx,p.y]):[];
     const top=pts.find(p=>p.y===lo);
-    out.wires.push({net:w.net,segments,dots,offsheet:w.offsheet?{x:Math.min(top.end,lx)+(top.end<lx?2:-2),y:lo,anchor:top.end<lx?'start':'end'}:null});
+    out.wires.push({net:w.net,pins:pts.map(p=>p.pin),segments,dots,offsheet:w.offsheet?{x:Math.min(top.end,lx)+(top.end<lx?2:-2),y:lo,anchor:top.end<lx?'start':'end'}:null});
   }
   for(const l of labelled){const pt=pinPoint(l.pin);out.labels.push({net:l.net,pin:l.pin.id,x:pt.x+pt.dir*STUB,y:pt.y,anchor:pt.dir<0?'end':'start',x0:pt.x,offsheet:l.offsheet});}
+  const mark=f=>{const v=compactQuantity(model.components.get(f.ref).value);return f.kind==='pullup'?`↑${v}`:f.kind==='pulldown'?`↓${v}`:f.kind==='protect'?'ESD':`⟷${v||f.ref.split('/').pop()}`;};
+  const describe=f=>{const c=model.components.get(f.ref),v=c.value?quantity(c.value):c.part.split('.').pop();return f.kind==='protect'?`${f.ref}: ESD/TVS protection on ${f.nets.join(', ')}`:f.kind==='series'?`${f.ref}: series ${v} between ${f.nets.join(' and ')}`:`${f.ref}: ${f.kind==='pullup'?'pull-up':'pull-down'} ${v} to ${f.rail}`;};
   for(const [net,fs]of notesFor)for(const p of (members.get(net)||[]).filter(p=>pinAt.has(p.id)&&!isPassive(model.components.get(p.component)))){
-    const pt=pinPoint(p);const text=fs.map(f=>`${f.kind==='pullup'?'↑':'↓'}${quantity(model.components.get(f.ref).value)}`).join(' ');
-    out.notes.push({net,refs:fs.map(f=>f.ref),text,x:pt.x+pt.dir*(STUB+2),y:pt.y+13,anchor:pt.dir<0?'end':'start',title:fs.map(f=>`${f.ref}: ${f.kind==='pullup'?'pull-up':'pull-down'} ${quantity(model.components.get(f.ref).value)} to ${f.rail}`).join('\n')});
+    // A series link is marked on its far side only: the pins whose own net is not the drawn name.
+    const here=fs.filter(f=>f.kind!=='series'||(p.rawNet&&p.rawNet!==net&&f.nets.includes(p.rawNet)));if(!here.length)continue;
+    const pt=pinPoint(p);
+    out.notes.push({net,refs:here.map(f=>f.ref),text:here.map(mark).join(' '),x:pt.x+pt.dir*(STUB+2),y:pt.y+13,anchor:pt.dir<0?'end':'start',title:here.map(describe).join('\n')});
   }
   out.width=Math.max(out.width,...out.labels.map(l=>l.anchor==='start'?l.x+labelWidth(l.net):0))+24;
   return out;
