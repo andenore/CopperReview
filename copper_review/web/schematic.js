@@ -4,7 +4,7 @@
 import {isPassive,quantity} from './electrical-model.js';
 import {engineeringText} from './core.js';
 
-const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SMALL=3,BAND=1100,WRAP=1500;
+const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SMALL=3,BAND=1100,WRAP=1500,SMALL_PINS=4;
 const distinct=a=>[...new Set(a)];
 const scoped=(scope,s)=>scope?`${scope}/${s}`:s;
 const natural=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
@@ -195,13 +195,43 @@ function columns(model,refs,netsOf){
     for(const [i,layer]of layers.entries())for(const r of layer)column.set(r,i);
     index();reorder();
   }
-  return {column,layers,members};
+  // Small parts that share a signal net (an LED and its resistor, a crystal and its load
+  // capacitors) stay together: the members next to their IC keep one column beside it, each
+  // further hop steps one column outward, and every member lines up with the part it hangs off.
+  const isSmall=r=>model.components.get(r).pins.length<=SMALL_PINS,parentOf=new Map();
+  const groups=components(refs.filter(isSmall),[...members.values()].map(pins=>distinct(pins.map(p=>p.component)).filter(isSmall))).filter(g=>g.length>1);
+  const target=new Map();
+  for(const g of groups){
+    const inGroup=new Set(g),count=new Map();
+    for(const r of g)for(const n of neighbors.get(r))if(!inGroup.has(n)&&!isSmall(n))count.set(n,(count.get(n)||0)+1);
+    const anchor=[...count].sort((a,b)=>b[1]-a[1]||natural(a[0],b[0]))[0]?.[0];
+    const queue=anchor?g.filter(r=>neighbors.get(r).has(anchor)):[];if(!queue.length)queue.push([...g].sort((a,b)=>neighbors.get(b).size-neighbors.get(a).size||natural(a,b))[0]);
+    const depth=new Map(queue.map(r=>[r,1]));if(anchor)for(const r of queue)parentOf.set(r,anchor);
+    for(let i=0;i<queue.length;i++)for(const n of [...neighbors.get(queue[i])].sort(natural))if(inGroup.has(n)&&!depth.has(n)){depth.set(n,depth.get(queue[i])+1);parentOf.set(n,queue[i]);queue.push(n);}
+    for(const r of g)if(!depth.has(r))depth.set(r,1);
+    const first=g.filter(r=>depth.get(r)===1),at=anchor?column.get(anchor):null;let home=Math.round(mean(first.map(r=>column.get(r))));
+    const side=at===null||home>at||home===at&&mean(first.map(r=>column.get(r)))>=at?1:-1;if(at!==null&&home===at)home=at+side;
+    for(const r of g)target.set(r,home+side*(Math.min(depth.get(r),6)-1));
+  }
+  if(target.size){
+    const shift=Math.max(0,-Math.min(...target.values()));
+    for(const r of refs)column.set(r,(target.has(r)?target.get(r):column.get(r))+shift);
+    const used=distinct([...column.values()]).sort((a,b)=>a-b);
+    const rebuilt=used.map(c=>refs.filter(r=>column.get(r)===c).sort((a,b)=>(position.get(a)??0)-(position.get(b)??0)));
+    layers.splice(0,layers.length,...rebuilt);for(const [i,layer]of layers.entries())for(const r of layer)column.set(r,i);
+    index();reorder();
+    // Keep each group in one block within a column.
+    const groupOf=new Map(groups.flatMap((g,i)=>g.map(r=>[r,i])));
+    for(const layer of layers){const out=[],done=new Set();for(const r of layer){if(done.has(r))continue;const k=groupOf.get(r);const block=k===undefined?[r]:layer.filter(x=>groupOf.get(x)===k);for(const x of block){done.add(x);out.push(x);}}layer.splice(0,layer.length,...out);}
+    index();
+  }
+  return {column,layers,members,parentOf};
 }
 
 export function layoutSheet(source,sheet,{folded,view}){
   const model=view||source,refs=sheet.refs,inSheet=new Set(refs),netsOf=new Set();
   for(const r of refs)for(const p of model.components.get(r).pins)if(p.net&&pinRole(model,p)==='signal')netsOf.add(p.net);
-  const {column,layers,members}=columns(model,refs,netsOf);
+  const {column,layers,members,parentOf}=columns(model,refs,netsOf);
   const symbols=new Map(),pinAt=new Map();
   const neighborColumns=p=>(members.get(p.net)||[]).filter(q=>q.component!==p.component).map(q=>column.get(q.component));
   for(const r of refs){
@@ -216,7 +246,8 @@ export function layoutSheet(source,sheet,{folded,view}){
     if(two){
       // Two-pin parts read left to right; with a rail flag the free side carries the text.
       const both=[...left,...right].sort((a,b)=>mean(neighborColumns(a).concat(col))-mean(neighborColumns(b).concat(col)));
-      left.length=0;right.length=0;if(both.length===2){left.push(both[0]);right.push(both[1]);}else left.push(...both);
+      left.length=0;right.length=0;if(both.length===2){left.push(both[0]);right.push(both[1]);}
+      else if(both.length===1&&mean(neighborColumns(both[0]).concat(col))>col)right.push(both[0]);else left.push(...both);
     }
     for(const side of [left,right])side.sort((a,b)=>natural(a.number??a.name,b.number??b.name));
     const shortName=c.part.split('.').pop(),value=c.value?compactQuantity(c.value):'',title=r.split('/').pop(),inline=two&&right.length===1;
@@ -226,7 +257,11 @@ export function layoutSheet(source,sheet,{folded,view}){
     symbols.set(r,{ref:r,part:c.part,title,subtitle:two?value||shortName:shortName,two,inline,col,w,h,extent:two?(inline?Math.max(TWO,text):TWO+8+text):w,left,right,top:[...top].map(([net,pins])=>({net,pins})),bottom:[...bottom].map(([net,pins])=>({net,pins})),nc});
   }
   // Vertical stacking per column, leaving room for rail flags and ground symbols.
-  const colY=[];for(const [i,layer]of layers.entries()){let y=24;for(const r of layer){const s=symbols.get(r);y+=s.top.length?46:s.two?18:0;s.y=y;y+=s.h+(s.bottom.length?46:s.two?20:0)+30;}colY[i]=y;}
+  // A grouped part sits level with the part it hangs off when its column has room; two passes
+  // let parts in earlier columns align to parents placed later.
+  const want=r=>{const s=symbols.get(r),parent=symbols.get(parentOf.get(r));return parent?.y===undefined?s.y:Math.round(parent.y+parent.h/2-s.h/2);};
+  const colY=[],stack=sorted=>{for(const [i,layer]of layers.entries()){if(sorted){const slots=layer.flatMap((r,k)=>parentOf.has(r)&&parentOf.has(parentOf.get(r))&&symbols.get(parentOf.get(r))?.y!==undefined?[k]:[]),moved=slots.map(k=>layer[k]).sort((a,b)=>want(a)-want(b));slots.forEach((k,j)=>{layer[k]=moved[j];});}let y=24;for(const r of layer){const s=symbols.get(r),parent=symbols.get(parentOf.get(r));y+=s.top.length?46:s.two?18:0;s.y=Math.max(y,parent?.y===undefined?0:Math.round(parent.y+parent.h/2-s.h/2));y=s.y+s.h+(s.bottom.length?46:s.two?20:0)+30;}colY[i]=y;}};
+  stack(false);stack(true);stack(true);
   const pinY=(s,side,i)=>s.two?s.y+s.h/2:s.y+HEAD+PIN/2+i*PIN;
   // Reorder side pins by where their nets go, then fix pin rows.
   for(const s of symbols.values())for(const side of ['left','right'])s[side].forEach((p,i)=>pinAt.set(p.id,{s,side,y:pinY(s,side,i)}));

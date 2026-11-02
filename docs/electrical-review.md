@@ -27,7 +27,11 @@ are independent; the application does not assert that a PCB matches an IR.
   output-to-input direction, including through series two-pin parts. A column
   taller than about 1500 px wraps into side-by-side columns around its best-connected
   part, whose neighbours take the nearest columns, so sheets stay wide rather than
-  tall. Power and
+  tall. Small parts (up to 4 pins) that share a signal net, such as an LED and its
+  resistor or a crystal and its load capacitors, stay together: the members next to
+  their IC share the column beside it, each further hop steps one column outward,
+  and each part lines up with the part it hangs off when the column has room. A
+  two-pin part with one signal pin faces it toward its neighbour. Power and
   ground pins become rail flags and ground symbols (one per net, marked ×n);
   declared supplies decide a net's role, and pins claiming both power and ground
   (generic headers) are ignored. Decoupling/support passives fold into `C×n`

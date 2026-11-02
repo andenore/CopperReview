@@ -93,3 +93,23 @@ test('a tall column of undirected parts wraps into columns around its hub',()=>{
  assert(layout.symbols.some(s=>s.x<hubX)&&layout.symbols.some(s=>s.x>hubX),'neighbours sit on both sides');
  invariants(model,ctx);
 });
+test('an LED and its resistor, or a crystal and its capacitors, stay together beside their IC',()=>{
+ const ir=board();
+ ir.parts.push({name:'LED',category:'optoelectronics.led',pins:[pin('A',[]),pin('K',[])]},{name:'XTAL',category:'passive.crystal',pins:[pin('1',[]),pin('2',[])]},
+  {name:'IC',category:'semiconductor.mcu',pins:[pin('VDD',['power'],['input']),pin('GND',['ground'],['input']),...['L1','L2','X1','X2','A','B','C','D'].map(n=>pin(n,['digital']))]});
+ ir.components.push(component('U_IC','IC'),component('R_L1','R',{value:ohms(1000)}),component('R_L2','R',{value:ohms(1000)}),component('D_L1','LED'),component('D_L2','LED'),component('Y1','XTAL'),component('C_X1','C',{value:{base_value:'1.2e-11',unit:'pF',value:'12'}}),component('C_X2','C',{value:{base_value:'1.2e-11',unit:'pF',value:'12'}}));
+ for(const n of ['A','B','C','D'])ir.components.push(component(`J_${n}`,'HDR'));
+ ir.nets[0].endpoints.push('U_IC.VDD');ir.nets[1].endpoints.push('U_IC.GND','D_L1.K','D_L2.K','C_X1.2','C_X2.2');
+ ir.nets.push({name:'L1',endpoints:['U_IC.L1','R_L1.1']},{name:'L1_A',endpoints:['R_L1.2','D_L1.A']},{name:'L2',endpoints:['U_IC.L2','R_L2.1']},{name:'L2_A',endpoints:['R_L2.2','D_L2.A']},
+  {name:'X1',endpoints:['U_IC.X1','Y1.1','C_X1.1']},{name:'X2',endpoints:['U_IC.X2','Y1.2','C_X2.1']},...['A','B','C','D'].map(n=>({name:`P_${n}`,endpoints:[`U_IC.${n}`,`J_${n}.1`]})));
+ const model=electricalModel(ir),ctx=schematicSheets(model),sheet=ctx.sheets.find(s=>s.refs.includes('U_IC')),layout=layoutSheet(model,sheet,ctx);
+ const at=ref=>layout.symbols.find(s=>s.ref===ref),cols=[...new Set(layout.symbols.map(s=>s.x))].sort((a,b)=>a-b),col=ref=>cols.indexOf(at(ref).x),mid=ref=>at(ref).y+at(ref).h/2;
+ for(const [r,d]of [['R_L1','D_L1'],['R_L2','D_L2']]){
+  assert.equal(Math.abs(col(d)-col(r)),1,`${d} sits in the column next to ${r}`);
+  assert.equal(Math.sign(col(d)-col(r)),Math.sign(col(r)-col('U_IC')),`${d} is on the far side of ${r} from the IC`);
+  assert.equal(mid(d),mid(r),`${d} is level with ${r}`);
+ }
+ assert.equal(new Set(['Y1','C_X1','C_X2'].map(col)).size,1,'crystal and load capacitors share a column');
+ assert.equal(Math.abs(col('Y1')-col('U_IC')),1,'the crystal sits beside its IC');
+ invariants(model,ctx);
+});
