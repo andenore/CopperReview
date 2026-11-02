@@ -8,7 +8,7 @@ export async function electricalInput(bytes,filename){
 let current=null;
 export function cancelCompiler(){if(current)current.cancel();}
 export function compileSource(source){
-  if(new TextEncoder().encode(source).length>32768)return Promise.reject(Error('The browser compiler accepts at most 32 KiB of self-contained source.'));
+  if(new TextEncoder().encode(source).length>524288)return Promise.reject(Error('The browser compiler accepts at most 512 KiB of self-contained source.'));
   return runCompiler({source});
 }
 export function compileProject(snapshot,resolve,{signal,onProgress=()=>{}}={}){
@@ -24,9 +24,9 @@ function runCompiler(payload,{signal,resolve:resolveSources,onProgress=()=>{}}={
     const pending={cancel:()=>finish(Error('Compilation cancelled.'))};current=pending;
     signal?.addEventListener('abort',abort,{once:true});
     function finish(error,value){if(finished)return;finished=true;work.abort(error||Error('Compilation complete.'));clearTimeout(timer);clearTimeout(deadline);signal?.removeEventListener('abort',abort);worker.terminate();if(current===pending)current=null;error?reject(error):resolve(value);}
-    function send(value){if(finished)return;clearTimeout(timer);timer=setTimeout(()=>finish(Error(`CopperScript analysis exceeded its ${project?15:5}-second limit.`)),project?15000:5000);worker.postMessage(value);}
-    timer=setTimeout(()=>finish(Error('CopperScript WASM loading timed out.')),20000);
-    if(project)deadline=setTimeout(()=>finish(Error('Project resolution exceeded its 120-second limit.')),120000);
+    function send(value){if(finished)return;clearTimeout(timer);timer=setTimeout(()=>finish(Error(`CopperScript analysis exceeded its ${project?60:30}-second limit.`)),project?60000:30000);worker.postMessage(value);}
+    timer=setTimeout(()=>finish(Error('CopperScript WASM loading timed out.')),60000);
+    if(project)deadline=setTimeout(()=>finish(Error('Project resolution exceeded its 300-second limit.')),300000);
     worker.onerror=event=>{event.preventDefault();finish(Error(event.message||'Could not load CopperScript WASM.'));};
     worker.onmessage=async event=>{
       const msg=event.data;
