@@ -44,12 +44,12 @@ and WASM URLs. No `/api/` server or session token is used in static mode.
 - **Compile .copper** opens a source file read-only and runs CopperScript in a
   dedicated browser worker. **Try example circuit** runs the bundled educational
   circuit. Successful compilation opens the ordinary electrical review views.
-- Standalone file uploads accept self-contained source up to 32 KiB and the bundled
+- Standalone file uploads accept self-contained source up to 512 KiB and the bundled
   demonstration library. Uploading one file provides no filesystem context;
   `WEB_IMPORT` directs imported source to **Open URL** instead. Public GitHub
   projects support local and transitive remote imports with pinned source bytes.
-- The worker has a 20-second loading deadline and a 5-second standalone analysis
-  deadline. Project analysis gets 15 seconds per pass and 120 seconds overall.
+- The worker has a 60-second loading deadline and a 30-second standalone analysis
+  deadline. Project analysis gets 60 seconds per pass and 300 seconds overall.
   Cancellation, traps and late results cannot replace a newer design. Failures
   leave the previous design explicitly identified and available for review.
 - The compiler panel exposes native ERC findings and component/pin/net query
@@ -121,7 +121,7 @@ Requests are browser-side GETs without credentials or the local server token.
 There is no authentication or proxy service; private repositories, API rate limits,
 blocked CORS and incomplete repository trees produce explicit errors. Downloads
 are capped at 49 MiB (repository metadata at 8 MiB), with a 20-second request
-deadline. Standalone source retains its 32 KiB bound; project sources are limited
+deadline. Standalone source is bounded at 512 KiB; project sources are limited
 to 512 KiB per file, 512 loaded files and 8 MiB total. Snapshot JSON is capped at
 24 MiB and dependency expansion at 32 passes. Cancelled or failed loads keep the
 previous design. Notes remain bound to exact design hashes.
