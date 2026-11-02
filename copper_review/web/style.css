@@ -59,7 +59,11 @@
 #project-files{white-space:normal;resize:none}
 
 #project-origin:not([hidden]){display:block}
-.electrical-sheet-bar{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}.electrical-sheet-bar .field{min-width:260px;max-width:100%}.electrical-sheet-bar p{flex:1 1 280px;margin:0 0 6px}#electrical-sheet{display:block;width:100%;max-width:520px}
+.electrical-sheet-bar{position:sticky;top:0;left:0;z-index:2;display:flex;gap:14px;align-items:center;flex-wrap:wrap;width:max-content;max-width:100%;padding:6px 8px;background:#111a1ee6;border-bottom-right-radius:6px}.electrical-sheet-bar>span{cursor:help;font-size:12px}#electrical-sheet{width:auto;max-width:min(520px,60vw);padding:4px 6px}
+#electrical-review .electrical-sheet-bar .electrical-folded{position:relative;margin:0;font-size:12px}.electrical-sheet-bar .electrical-folded summary{cursor:pointer}.electrical-sheet-bar .electrical-folded>div{position:absolute;top:100%;left:0;z-index:3;min-width:320px;max-height:50vh;overflow:auto;margin-top:6px;padding:6px;background:var(--panel);border:1px solid var(--border);border-radius:6px}
+#electrical-canvas:has(>.electrical-sheet-bar){padding:0}#electrical-canvas>.electrical-sch{margin:4px 12px 12px}
+body.electrical-maximized>header,body.electrical-maximized .electrical-heading,body.electrical-maximized #compiler-result,body.electrical-maximized #electrical-disclaimer,body.electrical-maximized .electrical-explorer,body.electrical-maximized .electrical-sidebar{display:none!important}
+body.electrical-maximized #electrical-review{height:100dvh;max-width:none;padding:8px 10px}body.electrical-maximized .electrical-toolbar{margin:6px 0}body.electrical-maximized .electrical-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}body.electrical-maximized #electrical-canvas{height:auto;max-width:none}
 .electrical-sch text{fill:var(--text);font:12px ui-monospace,Consolas,monospace}.electrical-sch .electrical-sch-meta{fill:var(--muted);font-size:11px}.electrical-sch .electrical-sch-ref{font-weight:600;fill:var(--copper)}.electrical-sch .electrical-sch-pin{font-size:11px}.electrical-sch .electrical-sch-pin.selected{fill:var(--copper)}
 .electrical-sch-symbol{fill:var(--panel);stroke:#6f8f8a;stroke-width:1.4}.electrical-sch-symbol.selected{stroke:var(--copper);stroke-width:2.4}
 .electrical-sch-wire{fill:none;stroke:var(--mint);stroke-width:1.5}.electrical-sch-dot{fill:var(--mint)}.electrical-sch-stub{stroke:#7f9c97;stroke-width:1.3}

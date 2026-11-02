@@ -101,7 +101,9 @@ comments or requirements absent from the IR cannot be reconstructed.
 On desktop the explorer, canvas and inspector/intent panes have bounded scroll
 areas. Large schematics can scroll horizontally and vertically at readable size;
 **Fit view** fits the drawing and **100%** restores its natural size. In the Schematic view the
-wheel zooms under the pointer and right- or middle-drag pans. Power, bus and
+wheel zooms under the pointer and right- or middle-drag pans. **Maximize** hides the page
+header and side panels to give the drawing the whole window (Esc restores), and
+Fit view there may enlarge a small sheet. Power, bus and
 focused schematic zoom settings are independent. On narrow
 screens the page stacks and the canvas keeps its own scroll area. Passive visibility
 is remembered with the review. Searching the explorer includes collapsed passives.
