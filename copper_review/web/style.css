@@ -59,6 +59,13 @@
 #project-files{white-space:normal;resize:none}
 
 #project-origin:not([hidden]){display:block}
+.electrical-sheet-bar{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}.electrical-sheet-bar .field{min-width:260px;max-width:100%}.electrical-sheet-bar p{flex:1 1 280px;margin:0 0 6px}#electrical-sheet{display:block;width:100%;max-width:520px}
+.electrical-sch text{fill:var(--text);font:12px ui-monospace,Consolas,monospace}.electrical-sch .electrical-sch-meta{fill:var(--muted);font-size:11px}.electrical-sch .electrical-sch-ref{font-weight:600;fill:var(--copper)}.electrical-sch .electrical-sch-pin{font-size:11px}.electrical-sch .electrical-sch-pin.selected{fill:var(--copper)}
+.electrical-sch-symbol{fill:var(--panel);stroke:#6f8f8a;stroke-width:1.4}.electrical-sch-symbol.selected{stroke:var(--copper);stroke-width:2.4}
+.electrical-sch-wire{fill:none;stroke:var(--mint);stroke-width:1.5}.electrical-sch-dot{fill:var(--mint)}.electrical-sch-stub{stroke:#7f9c97;stroke-width:1.3}
+.electrical-sch-wire.selected,.electrical-sch-stub.selected{stroke:var(--copper);stroke-width:2.6}.electrical-sch-dot.selected{fill:var(--copper)}
+.electrical-sch-power{fill:none;stroke:#e5906d;stroke-width:1.5}.electrical-sch-ground{fill:none;stroke:var(--muted);stroke-width:1.5}.electrical-sch-power.selected,.electrical-sch-ground.selected{stroke:var(--copper);stroke-width:2.6}
+.electrical-sch .electrical-sch-rail{fill:#e5906d;font-size:11px}.electrical-sch .electrical-sch-label{fill:#9ecbff;font-size:11px}.electrical-sch .electrical-sch-label.selected{fill:var(--copper)}.electrical-sch .electrical-sch-note{fill:var(--mint);font-size:10px}
 #github-access{margin:16px 0 4px;border-top:1px solid var(--border);padding-top:12px}
 #github-access summary{cursor:pointer;font-size:13px}
 #github-access a{color:var(--copper)}
