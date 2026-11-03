@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import secrets
-from urllib.parse import unquote
+import socket
+from urllib.parse import parse_qs, unquote, urlsplit
 import webbrowser
 
 from .importer import STAGES, import_pcb
@@ -39,6 +41,49 @@ def static_asset(path):
     return (name, mime) if mime else None
 
 
+# A served project exposes only CopperScript sources and manifests, read fresh per request.
+PROJECT_SKIP = {".git", ".copper-cache", "node_modules", "target"}
+MAX_PROJECT_SOURCE = 512 * 1024
+MAX_PROJECT_MANIFEST = 8 * 1024 * 1024
+MAX_PROJECT_FILES = 2000
+
+
+def project_files(root):
+    """Folder-relative paths of .copper sources and copper.mod/copper.lock, without symlinks."""
+    root = Path(root).resolve()
+    found = {}
+    for directory, folders, names in os.walk(root):
+        folders[:] = sorted(f for f in folders if f not in PROJECT_SKIP and not (Path(directory) / f).is_symlink())
+        for name in sorted(names):
+            path = Path(directory) / name
+            if path.is_symlink() or not (name.endswith(".copper") or name in ("copper.mod", "copper.lock")):
+                continue
+            limit = MAX_PROJECT_SOURCE if name.endswith(".copper") else MAX_PROJECT_MANIFEST
+            size = path.stat().st_size
+            if size > limit:
+                continue
+            found[path.relative_to(root).as_posix()] = size
+            if len(found) > MAX_PROJECT_FILES:
+                raise ValueError(f"Project has more than {MAX_PROJECT_FILES} source files")
+    return found
+
+
+def lan_addresses():
+    """Best-effort addresses another machine can use to reach this one."""
+    addresses = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))  # No packet is sent; this only picks the outbound interface.
+            addresses.add(probe.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        addresses.update(info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
+    except OSError:
+        pass
+    return sorted(a for a in addresses if not a.startswith("127.")) or ["127.0.0.1"]
+
+
 def source_identity(path):
     if not path:
         return None
@@ -46,7 +91,9 @@ def source_identity(path):
     return {"filename": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def make_handler(initial_scene, token):
+def make_handler(initial_scene, token, project=None, board=None, public=False):
+    project = Path(project).resolve() if project else None
+
     class Handler(BaseHTTPRequestHandler):
         scene = initial_scene
 
@@ -63,8 +110,10 @@ def make_handler(initial_scene, token):
             self.wfile.write(payload)
 
         def allowed(self, auth=False):
-            host = f"127.0.0.1:{self.server.server_port}"
-            if self.headers.get("Host") != host:
+            # Loopback servers accept only their own Host (DNS rebinding); a server bound to the
+            # network is reached by many names and relies on the session token for its API.
+            host = self.headers.get("Host", "") if public else f"127.0.0.1:{self.server.server_port}"
+            if not host or self.headers.get("Host") != host:
                 self.send(403, {"error": "Invalid local host"})
                 return False
             if auth and not secrets.compare_digest(self.headers.get("X-Copper-Token", ""), token):
@@ -82,6 +131,28 @@ def make_handler(initial_scene, token):
                 return
             if path == "/api/scene":
                 self.send(200, type(self).scene)
+                return
+            if path == "/api/project":
+                if not project:
+                    self.send(200, None)
+                    return
+                try:
+                    files = project_files(project)
+                except (OSError, ValueError) as exc:
+                    self.send(500, {"error": f"Could not read project: {exc}"})
+                    return
+                self.send(200, {"name": project.name, "board": board, "files": [{"path": p, "size": s} for p, s in files.items()]})
+                return
+            if path == "/api/project/file":
+                name = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+                try:
+                    listed = project_files(project) if project else {}
+                except (OSError, ValueError):
+                    listed = {}
+                if name not in listed:
+                    self.send(404, {"error": "Not a project source file"})
+                    return
+                self.send(200, (project / name).read_bytes(), "application/octet-stream")
                 return
             asset = static_asset(path)
             if not asset or not ((WEB / asset[0]).is_file() or asset[0].startswith("wasm/")):
@@ -131,7 +202,10 @@ def main():
     parser.add_argument("--electrical-ir", type=Path, help="CopperScript compiled electrical IR JSON (no PCB required)")
     parser.add_argument("--stage", choices=STAGES, default="unknown", help="Declared review stage, not a verified routing status")
     parser.add_argument("--source", type=Path, help="Optional .copper source whose filename and hash accompany the board")
-    parser.add_argument("--port", type=int, default=0, help="Loopback port; 0 selects an available port")
+    parser.add_argument("--project", type=Path, help="CopperScript project folder; the browser compiles it on every page load")
+    parser.add_argument("--entry", help="Board source inside --project when the folder has several (e.g. boards/main/board.copper)")
+    parser.add_argument("--host", default="127.0.0.1", help="Address to listen on; 0.0.0.0 serves other machines on your network (plain HTTP)")
+    parser.add_argument("--port", type=int, default=0, help="Port; 0 selects an available port")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--export-scene", type=Path, help="Write a portable normalized scene JSON and exit")
     args = parser.parse_args()
@@ -140,6 +214,20 @@ def main():
             parser.error("Board exceeds 50 MiB")
         if args.board and args.electrical_ir:
             parser.error("Choose a PCB or --electrical-ir, not both")
+        if args.project and (args.board or args.electrical_ir):
+            parser.error("Choose --project, a PCB or --electrical-ir, not several")
+        if args.entry and not args.project:
+            parser.error("--entry needs --project")
+        if args.project:
+            if not args.project.is_dir():
+                parser.error(f"Project folder not found: {args.project}")
+            files = project_files(args.project)
+            if args.entry and args.entry.replace("\\", "/") not in files:
+                parser.error(f"--entry {args.entry} is not a .copper file in {args.project}")
+            if not any(p.endswith(".copper") for p in files):
+                parser.error(f"No .copper sources in {args.project}")
+            if not (WEB / "wasm" / "manifest.json").is_file():
+                print("CopperReview: the browser compiler is not built; run `npm run build:wasm` in the CopperReview checkout.", flush=True)
         electrical_path = args.electrical_ir or (args.board if args.board and args.board.suffix.lower() == '.json' else None)
         if electrical_path and electrical_path.stat().st_size > MAX_UPLOAD:
             parser.error("Electrical IR exceeds 50 MiB")
@@ -153,11 +241,21 @@ def main():
             print(f"Scene saved: {args.export_scene.resolve()}")
             return
         token = secrets.token_urlsafe(32)
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(scene, token))
+        public = args.host not in ("127.0.0.1", "localhost")
+        entry = args.entry.replace("\\", "/") if args.entry else None
+        server = ThreadingHTTPServer((args.host, args.port), make_handler(scene, token, args.project, entry, public=public))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"
         print(f"CopperReview: {url}", flush=True)
-        print("Read-only PCB inspection. Annotations save in this browser; export JSON to keep/share them. Ctrl+C stops the server.", flush=True)
+        if public:
+            hosts = lan_addresses() if args.host in ("0.0.0.0", "") else [args.host]
+            for host in hosts:
+                print(f"  network: http://{host}:{server.server_port}/#token={token}", flush=True)
+            print("Served over plain HTTP to your network. Anyone with the link (including its token) can read "
+                  "the design" + (" and its project sources" if args.project else "") + "; share it only on networks you trust.", flush=True)
+        if args.project:
+            print(f"Project: {args.project.resolve()} (reload the page to recompile after editing)", flush=True)
+        print("Read-only inspection. Annotations save in this browser; export JSON to keep/share them. Ctrl+C stops the server.", flush=True)
         if not args.no_browser:
             webbrowser.open(url)
         try:

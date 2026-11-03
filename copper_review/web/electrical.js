@@ -1,6 +1,7 @@
 import {powerGraph,busGraph,layoutGraph,routeGraph} from './topology.js';
 import {electricalModel,focusCircuit,powerTopology,isPassive,quantity,ELECTRICAL_SCHEMA} from './electrical-model.js';
 import {schematicSheets,layoutSheet,netRole,compactQuantity} from './schematic.js';
+import {randomId} from './hash.js';
 import {chips} from './chips.js';
 
 const $=id=>document.getElementById(id);
@@ -333,7 +334,7 @@ export function createElectricalReview({message,onMode}){
   function saveDraft(){
     if(!selection||!draft.observation.trim()){message('Select an electrical entity and enter an observation.',true);return false;}
     const old=editing===null?null:notes[editing],now=new Date().toISOString();
-    const note={id:old?.id||crypto.randomUUID(),selection:{...selection},view,power_state:powerState||null,category:draft.category,priority:draft.priority,status:old?.status||'open',observation:draft.observation.trim(),desired_behavior:draft.desired.trim(),created_at:old?.created_at||now,updated_at:now};
+    const note={id:old?.id||randomId(),selection:{...selection},view,power_state:powerState||null,category:draft.category,priority:draft.priority,status:old?.status||'open',observation:draft.observation.trim(),desired_behavior:draft.desired.trim(),created_at:old?.created_at||now,updated_at:now};
     if(old)notes[editing]=note;else notes.push(note);editing=null;draft=blankDraft();save();render();return true;
   }
   function editNote(i){

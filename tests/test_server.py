@@ -78,3 +78,59 @@ class ServerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ProjectServerTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.TemporaryDirectory()
+        root = Path(self.dir.name) / "Bench"
+        (root / "src").mkdir(parents=True)
+        (root / ".git").mkdir()
+        (root / "board.copper").write_text("board Bench { }")
+        (root / "src" / "part.copper").write_text("module Part { }")
+        (root / "copper.mod").write_text("module example/bench\n")
+        (root / "notes.txt").write_text("not served")
+        (root / ".git" / "hidden.copper").write_text("module Hidden { }")
+        (Path(self.dir.name) / "outside.copper").write_text("module Outside { }")
+        self.root = root
+
+    def tearDown(self):
+        self.server.shutdown(); self.server.server_close(); self.thread.join(); self.dir.cleanup()
+
+    def start(self, public=False):
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "test-token", self.root, None, public=public))
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}"
+
+    def get(self, path, **headers):
+        return urlopen(Request(self.url + path, headers={"X-Copper-Token": "test-token", **headers}))
+
+    def test_project_lists_and_serves_only_sources_fresh(self):
+        self.start()
+        with self.get("/api/project") as response:
+            project = json.load(response)
+        self.assertEqual(project["name"], "Bench")
+        self.assertEqual(sorted(f["path"] for f in project["files"]), ["board.copper", "copper.mod", "src/part.copper"])
+        (self.root / "board.copper").write_text("board Bench { component R: RESISTOR; }")
+        with self.get("/api/project/file?path=board.copper") as response:
+            self.assertIn(b"RESISTOR", response.read())
+        for path in ["notes.txt", "../outside.copper", ".git/hidden.copper", "src/../../outside.copper", ""]:
+            with self.assertRaises(HTTPError) as ctx:
+                self.get("/api/project/file?path=" + path)
+            self.assertEqual(ctx.exception.code, 404, path)
+        with self.assertRaises(HTTPError) as ctx:
+            urlopen(Request(self.url + "/api/project/file?path=board.copper"))
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_network_mode_accepts_any_host_but_still_needs_the_token(self):
+        self.start(public=True)
+        with self.get("/api/project", Host="192.168.1.90:8791") as response:
+            self.assertEqual(json.load(response)["name"], "Bench")
+        with self.assertRaises(HTTPError) as ctx:
+            urlopen(Request(self.url + "/api/project", headers={"Host": "192.168.1.90:8791"}))
+        self.assertEqual(ctx.exception.code, 403)
+        with self.assertRaises(HTTPError) as ctx:
+            self.get("/api/project", Host="192.168.1.90:8791", Origin="https://example.com")
+        self.assertEqual(ctx.exception.code, 403)

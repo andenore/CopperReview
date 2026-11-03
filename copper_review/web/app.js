@@ -1,4 +1,5 @@
 import {compileGithubProject,compileLocalProject,localBoardSources} from './project-compiler.js';
+import {randomId} from './hash.js';
 import {discoverProject,downloadDesign,setGithubToken,hasGithubToken,checkGithubToken} from './projects.js';
 import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
@@ -9,7 +10,8 @@ import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointI
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
 const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
-const localServer=!!token&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
+// The CLI server prints a #token link; it may be reached by loopback or (with --host) a network address over HTTP.
+const localServer=!!token&&(['127.0.0.1','localhost','[::1]'].includes(location.hostname)||location.protocol==='http:');
 let documentRevision=0,remoteLoad=null,electricalOrigin=null;
 let startupReady=Promise.resolve(),documentBaseline='static';
 const documentIdentity=data=>data?.input?.sha256||data?.board?.sha256||'empty';
@@ -123,6 +125,16 @@ async function openLocalBoard(path){
   catch(error){if(revision!==documentRevision)return;$('compiler-cancel').hidden=true;throw Error(`${error.message}${state.scene||electrical.hasModel()?' Previous design remains open.':''}`);}
   if(revision!==documentRevision)return;
   await openDesignFile(new File([bytes],path.split('/').pop()),false,{origin:{provider:'local',folder:folderName,path},prepared,revision});
+}
+/** A project served with `copper-review --project`: read its sources fresh and compile them, so a reload recompiles. */
+async function openServedProject(project){
+  const files=new Map();message(`Reading ${project.files.length} project file(s) from ${project.name}…`);
+  await Promise.all(project.files.map(async f=>{const response=await fetch(`./api/project/file?path=${encodeURIComponent(f.path)}`,{headers:{'X-Copper-Token':token},cache:'no-store'});if(!response.ok)throw Error(`Could not read ${f.path} from the server.`);files.set(f.path,new Blob([await response.arrayBuffer()]));}));
+  folderFiles=new Map([...files].sort(([a],[b])=>a.localeCompare(b)));folderName=project.name;
+  const boards=project.board?[project.board]:await localBoardSources(folderFiles);
+  if(!boards.length)throw Error(`No board source in ${project.name}.`);
+  if(boards.length===1){await openLocalBoard(boards[0]);return;}
+  const list=$('folder-boards');list.replaceChildren();for(const path of boards){const option=document.createElement('option');option.value=option.textContent=path;list.append(option);}list.selectedIndex=0;$('folder-dialog').showModal();list.focus();
 }
 $('folder-open').onclick=guarded(async()=>{const path=$('folder-boards').value;$('folder-dialog').close();if(path)await openLocalBoard(path);});
 $('folder-boards').ondblclick=()=>$('folder-open').click();
@@ -484,9 +496,10 @@ $('review-file').onchange=guarded(async event=>{
 });
 $('export-review').onclick=guarded(()=>{download(`${state.scene.board.name}.review.json`,reviewText());message('Review exported. Paste its contents into your next LLM prompt.');});
 $('export-scene').onclick=guarded(()=>download(`${state.scene.board.name}.scene.json`,JSON.stringify(state.scene,null,2)+'\n'));
-$('copy-review').onclick=guarded(async()=>{await navigator.clipboard.writeText(reviewText());message('Review JSON copied.');});
+// The clipboard API needs a secure context; a network address falls back to a selected text area.
+$('copy-review').onclick=guarded(async()=>{const text=reviewText();try{await navigator.clipboard.writeText(text);}catch{const t=document.createElement('textarea');t.value=text;document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw Error('Copy is unavailable here; use Export review JSON.');}message('Review JSON copied.');});
 $('save-note').onclick=guarded(()=>{
-  const note=makeAnnotation(state.scene,state.selection,state.layers,{category:$('category').value,priority:$('priority').value,status:$('note-status').value,observation:$('observation').value,desired_behavior:$('desired').value,boardWide:$('board-wide').checked,issues:issuesFromForm()},state.editing || crypto.randomUUID());
+  const note=makeAnnotation(state.scene,state.selection,state.layers,{category:$('category').value,priority:$('priority').value,status:$('note-status').value,observation:$('observation').value,desired_behavior:$('desired').value,boardWide:$('board-wide').checked,issues:issuesFromForm()},state.editing || randomId());
   if(state.editing){const i=state.annotations.findIndex(a=>a.id===state.editing);note.created_at=state.annotations[i].created_at;note.updated_at=new Date().toISOString();state.annotations[i]=note;}else state.annotations.push(note);
   renderNotes();saveLocal();resetForm();requestDraw();message('Annotation saved.');
 });
@@ -520,4 +533,8 @@ document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'
   const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setMode(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')fit();if(e.key==='Escape'){clearSelection();resetForm();}});
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();const first=state.width===0;state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if(first && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
 setEnabled();
-startupReady=guarded(async()=>{const revision=documentRevision;let data=null;if(localServer){const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});data=await response.json();if(!response.ok)throw new Error(data.error);documentBaseline=documentIdentity(data);}try{data=await rememberedDocument(documentBaseline)||data;}catch{}if(data&&revision===documentRevision)loadDocument(data);})();
+startupReady=guarded(async()=>{const revision=documentRevision;let data=null,project=null;if(localServer){const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});data=await response.json();if(!response.ok)throw new Error(data.error);documentBaseline=documentIdentity(data);
+  if(!data){const served=await fetch('./api/project',{headers:{'X-Copper-Token':token},cache:'no-store'});project=await served.json();if(!served.ok)throw new Error(project.error);}}
+  // Opening waits for startup to finish; this is startup, so release that wait first.
+  if(project){startupReady=null;await openServedProject(project);return;}
+  try{data=await rememberedDocument(documentBaseline)||data;}catch{}if(data&&revision===documentRevision)loadDocument(data);})();

@@ -1,4 +1,5 @@
 import init,{review,review_project} from './wasm/copper_web.js';
+import {sha256} from './hash.js';
 
 try{
   const response=await fetch(new URL('./wasm/manifest.json',import.meta.url));
@@ -6,7 +7,7 @@ try{
   const manifest=await response.json();
   const binary=await fetch(new URL('./wasm/copper_web_bg.wasm',import.meta.url));
   if(!binary.ok)throw Error('Compiler binary is unavailable.');
-  const bytes=await binary.arrayBuffer(),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+  const bytes=await binary.arrayBuffer(),hash=await sha256(bytes);
   if(hash!==manifest.wasm_sha256)throw Error('Compiler assets do not match their build manifest.');
   await init({module_or_path:bytes});
   self.postMessage({type:'ready',manifest});

@@ -68,6 +68,28 @@ python -m copper_review path/to/board.kicad_pcb --source path/to/board.copper --
 the source or establish the identity of transitive dependencies. Existing
 CopperScript export commands produce the input; no compiler changes are needed.
 
+To serve a CopperScript project folder and compile it in the browser:
+
+```powershell
+npm run build:wasm   # once: the browser compiler
+uv run copper-review --project ../BysseControl-32 --port 8769
+```
+
+The server lists and serves only the folder's `.copper` sources and
+`copper.mod` / `copper.lock` (skipping `.git`, `.copper-cache`, `node_modules`,
+`target` and symlinks), read fresh on every request and only with the session
+token. The page compiles them on load, so **reload after editing to recompile**.
+Dependencies pinned in `copper.lock` are downloaded from GitHub and checked against
+the lock. `--entry boards/main/board.copper` picks the board when the folder has
+several; otherwise the page asks.
+
+`--host 0.0.0.0` listens on your network as well and prints a `network:` link per
+address. It is plain HTTP: anyone holding the link (with its token) can read the
+design and, with `--project`, its sources, so use it only on networks you trust.
+The API still requires the token; static files do not. Hashing and note IDs fall
+back to built-in implementations because browsers withhold `crypto.subtle` from
+non-HTTPS network addresses.
+
 ## Review workflow
 
 1. Open an exported board. Choose its review stage explicitly.

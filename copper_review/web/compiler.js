@@ -1,5 +1,6 @@
 /* Native CopperScript runs in a bounded, replaceable worker; files stay local. */
-export async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');}
+import {sha256} from './hash.js';
+export {sha256};
 export async function electricalInput(bytes,filename){
   const ir=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
   if(ir.schema!=='copperscript-ir/v0.1'||ir.kind!=='board')throw Error('Expected CopperScript electrical board IR.');

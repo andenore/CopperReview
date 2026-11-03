@@ -1,4 +1,5 @@
 /* Pure geometry and review contract, also exercised by Node's built-in tests. */
+import {randomId} from './hash.js';
 export const REVIEW_SCHEMA = 'copper-review/v2';
 // v1 reviews (full geometry copies in each context) still load; their contexts are recomputed.
 export const READABLE_REVIEW_SCHEMAS = ['copper-review/v1', REVIEW_SCHEMA];
@@ -192,7 +193,7 @@ export function snapshotSelection(scene,selection,layers) {
         'tracks and outlines list whole segments touching the region; zone and filled-shape outlines are clipped to it',
       context:regionContext(scene,selection.region,layers)} : null};
 }
-export function makeAnnotation(scene,selection,layers,fields,id=globalThis.crypto.randomUUID()) {
+export function makeAnnotation(scene,selection,layers,fields,id=randomId()) {
   if(!fields.observation.trim()) throw new Error('Write an observation before saving.');
   const cited=fields.issues || [];
   if(!selection.components.length && !selection.nets.length && !selection.region && !fields.boardWide && !cited.length)
