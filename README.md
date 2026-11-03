@@ -146,6 +146,23 @@ iteration; it does not edit `.copper` intent, enforce solver constraints or veri
 3D enclosure clearance. Features absent from the PCB export cannot be recovered
 from the drawing alone.
 
+## 3D view
+
+`copper-review BOARD.kicad_pcb` serves the `*.3dshapes/*.wrl` files beside the
+board, and the **3D** button draws them placed on the board (drag orbits, shift
+or right-drag pans, wheel zooms). A CopperScript export writes a body for every
+footprint into `CopperScript.3dshapes/` and tags each footprint with a
+`CopperScriptBody` property; the same files are what KiCad shows, so the two
+views agree. Bodies the compiler generated are approximate and are counted as
+such in the status line.
+
+Limits: only VRML files from `.3dshapes` folders next to the board are read
+(STEP models are not rendered; the generated body stands in); the board is its
+bounding rectangle at an assumed 1.6 mm; back-side parts and non-zero model
+rotation or offset are placed best-effort and have not been compared with KiCad.
+A board opened from the file picker, a URL or a compiled `.copper` source has no
+served folder, so the button reports that no bodies were found.
+
 ## Viewing and storage
 
 - Wheel: zoom under the pointer. Right/middle-drag: pan. **Fit board**: overview.
@@ -187,7 +204,8 @@ connectors used to store hole contours are not physical edges or tracks.
 There is no DRC or connectivity solver. Logical net guides display membership,
 including already connected pads; they are not a verified ratsnest or open-net
 count. Fully routed is a reviewer declaration. Copper fills are not recomputed.
-Non-copper text labels/dimensions and 3D models are omitted; custom/trapezoidal
+Non-copper text labels/dimensions are omitted, and 3D models are only drawn in the 3D view (see
+[3D view](#3d-view)); custom/trapezoidal
 pads use bounding rectangles with visible import warnings. Legacy arc syntax
 is rejected; Bezier graphics are reported as unsupported. The importer targets
 modern CopperScript exports, not every possible KiCad construct. Electrical-only

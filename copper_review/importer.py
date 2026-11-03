@@ -72,6 +72,23 @@ def xy(node, name):
     return [number(item[1]), number(item[2])]
 
 
+def xyz(node, name, default):
+    group = first(node, name)
+    item = first(group, "xyz") if group else None
+    if not item or len(item) < 4:
+        return list(default)
+    return [number(item[1]), number(item[2]), number(item[3])]
+
+
+def footprint_models(fp, props):
+    """3D model references as written; files are resolved by the viewer, never read here."""
+    models = [{"path": m[1], "offset_mm": xyz(m, "offset", (0, 0, 0)), "scale": xyz(m, "scale", (1, 1, 1)),
+               "rotate_deg": xyz(m, "rotate", (0, 0, 0))}
+              for m in children(fp, "model") if len(m) > 1 and isinstance(m[1], str)]
+    body = props.get("CopperScriptBody")
+    return models, body if isinstance(body, str) and body else None
+
+
 def rotate(point, angle, origin=(0, 0)):
     angle = math.radians(angle)
     c, s = math.cos(angle), math.sin(angle)
@@ -234,6 +251,11 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                      "position_mm": origin, "rotation_deg": angle,
                      "side": "back" if first(fp, "layer", ["layer", "F.Cu"])[1].startswith("B.") else "front",
                      "locked": "locked" in fp or first(fp, "locked", ["locked", "no"])[-1] == "yes", "pads": [], "graphics": []}
+        models, body_model = footprint_models(fp, props)
+        if models:
+            component["models"] = models
+        if body_model:
+            component["body_model"] = body_model
         for pi, pad in enumerate(children(fp, "pad")):
             if len(pad) < 4:
                 raise ValueError(f"Invalid pad on {ref}")

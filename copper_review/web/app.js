@@ -5,10 +5,13 @@ import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
 import {createElectricalReview} from './electrical.js';
 import {chipify} from './chips.js';
+import {createView3d} from './view3d.js';
+import {parseVrml,modelPaths,buildSoup} from './model3d.js';
 for(const id of ['category','priority','note-status'])chipify(document.getElementById(id));
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
+const view3dCanvas=$('view3d-canvas');let view3d=null,bodies=new Map();
 const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
 // The CLI server prints a #token link; it may be reached by loopback or (with --host) a network address over HTTP.
 const localServer=!!token&&(['127.0.0.1','localhost','[::1]'].includes(location.hostname)||location.protocol==='http:');
@@ -469,6 +472,7 @@ function loadScene(scene) {
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
   renderLayers();renderEntities();renderNotes();fit();setEnabled();
+  bodies=new Map();if(!view3dCanvas.hidden)show3d(true);
 }
 function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,issueSource()),null,2)+'\n';}
 function download(name,text,type='application/json') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -509,7 +513,29 @@ for(const tab of ['components','nets','issues'])$(`tab-${tab}`).onclick=()=>{sta
 for(const mode of ['component','net','region'])$(`mode-${mode}`).onclick=()=>setMode(mode);
 for(const id of ['show-labels','show-pad-labels','show-guides','show-zones','isolate','show-issues'])$(id).onchange=()=>{clearHover();requestDraw();};
 $('issue-ids').oninput=()=>{requestDraw();if(state.tab==='issues')renderEntities();};
-$('fit').onclick=()=>fit();$('clear').onclick=()=>{clearSelection();resetForm();};
+async function fetchBody(path){
+  if(bodies.has(path))return bodies.get(path);
+  const response=await fetch(`/api/board-asset?path=${encodeURIComponent(path)}`,{headers:{'X-Copper-Token':token}});
+  const body=response.ok?parseVrml(await response.text()):null;bodies.set(path,body);return body;
+}
+async function show3d(on){
+  $('view-3d').setAttribute('aria-pressed',String(on));$('view-3d').classList.toggle('active',on);
+  canvas.hidden=on;view3dCanvas.hidden=!on;if(!on)return;
+  const scene=state.scene;
+  if(!scene){message('Open a board first.',true);return show3d(false);}
+  try{view3d||=createView3d(view3dCanvas);}catch(e){message(`3D view failed: ${e.message}`,true);return show3d(false);}
+  if(!view3d){message('This browser has no WebGL.',true);return show3d(false);}
+  const paths=modelPaths(scene);
+  if(!paths.length){message('This board names no 3D bodies. Export it with a CopperScript that writes them.',true);return show3d(false);}
+  await Promise.all(paths.map(p=>fetchBody(p).catch(()=>null)));
+  if(state.scene!==scene||view3dCanvas.hidden)return;
+  const soup=buildSoup(scene,bodies),{drawn,approximate,missing}=soup.summary;
+  if(!drawn){message('No 3D bodies found. Open the board with `copper-review BOARD` so its .3dshapes folder is served.',true);return show3d(false);}
+  view3d.setSoup(soup,scene.board.bounds_mm);
+  message(`3D: ${drawn} bodies${approximate?` (${approximate} generated, approximate)`:''}${missing?` · ${missing} without a body`:''} · board thickness assumed 1.6 mm`);
+}
+$('view-3d').onclick=guarded(()=>show3d(view3dCanvas.hidden));
+$('fit').onclick=()=>{if(!view3dCanvas.hidden&&view3d&&state.scene)view3d.fit(state.scene.board.bounds_mm);else fit();};$('clear').onclick=()=>{clearSelection();resetForm();};
 canvas.oncontextmenu=e=>e.preventDefault();
 canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
 canvas.addEventListener('pointerdown',e=>{

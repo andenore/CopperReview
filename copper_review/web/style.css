@@ -97,3 +97,5 @@ body.electrical-maximized #electrical-review{height:100dvh;max-width:none;paddin
 #electrical-canvas:has(>svg.electrical-topology){display:flex;flex-direction:column;gap:4px}
 #electrical-canvas>svg.electrical-topology{margin:auto;flex:none}
 #electrical-canvas:has(>.electrical-sheet-bar){padding:0 12px 12px}
+canvas[hidden]{display:none}
+#view-3d[aria-pressed="true"]{border-color:#a17550;background:#3d3025;color:var(--copper)}

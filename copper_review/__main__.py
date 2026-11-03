@@ -18,6 +18,7 @@ from .electrical import import_electrical
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 50 * 1024 * 1024
+MAX_MODEL = 8 * 1024 * 1024
 # Every web asset of these types is served, so a new module cannot be left out.
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".svg": "image/svg+xml", ".copper": "text/plain; charset=utf-8",
@@ -91,7 +92,22 @@ def source_identity(path):
     return {"filename": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False):
+def board_asset(root, name):
+    """Bytes of `<dir>.3dshapes/<file>.wrl` beside the board, or None; nothing else is served."""
+    parts = name.split("/") if root and name and "\\" not in name else []
+    if len(parts) != 2 or not parts[0].endswith(".3dshapes") or not parts[1].lower().endswith(".wrl") or ".." in parts:
+        return None
+    directory = Path(root) / parts[0]
+    path = directory / parts[1]
+    try:
+        if directory.is_symlink() or path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_MODEL:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None):
     project = Path(project).resolve() if project else None
 
     class Handler(BaseHTTPRequestHandler):
@@ -142,6 +158,13 @@ def make_handler(initial_scene, token, project=None, board=None, public=False):
                     self.send(500, {"error": f"Could not read project: {exc}"})
                     return
                 self.send(200, {"name": project.name, "board": board, "files": [{"path": p, "size": s} for p, s in files.items()]})
+                return
+            if path == "/api/board-asset":
+                data = board_asset(board_dir, parse_qs(urlsplit(self.path).query).get("path", [""])[0])
+                if data is None:
+                    self.send(404, {"error": "Not a 3D model beside the board"})
+                    return
+                self.send(200, data, "model/vrml")
                 return
             if path == "/api/project/file":
                 name = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
@@ -243,7 +266,9 @@ def main():
         token = secrets.token_urlsafe(32)
         public = args.host not in ("127.0.0.1", "localhost")
         entry = args.entry.replace("\\", "/") if args.entry else None
-        server = ThreadingHTTPServer((args.host, args.port), make_handler(scene, token, args.project, entry, public=public))
+        server = ThreadingHTTPServer((args.host, args.port), make_handler(
+            scene, token, args.project, entry, public=public,
+            board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"
         print(f"CopperReview: {url}", flush=True)

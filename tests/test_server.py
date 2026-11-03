@@ -134,3 +134,22 @@ class ProjectServerTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as ctx:
             self.get("/api/project", Host="192.168.1.90:8791", Origin="https://example.com")
         self.assertEqual(ctx.exception.code, 403)
+
+
+class BoardAssetTests(unittest.TestCase):
+    def test_only_wrl_models_in_a_3dshapes_folder_beside_the_board_are_served(self):
+        import tempfile
+        from copper_review.__main__ import board_asset
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Board.3dshapes").mkdir()
+            (root / "Board.3dshapes" / "a.wrl").write_bytes(b"#VRML V2.0 utf8\n")
+            (root / "Board.3dshapes" / "a.step").write_bytes(b"step")
+            (root / "secret.wrl").write_bytes(b"no")
+            (root / "plain").mkdir()
+            (root / "plain" / "a.wrl").write_bytes(b"no")
+            self.assertEqual(board_asset(root, "Board.3dshapes/a.wrl"), b"#VRML V2.0 utf8\n")
+            for name in ["Board.3dshapes/a.step", "secret.wrl", "plain/a.wrl", "Board.3dshapes/missing.wrl", "../x.3dshapes/a.wrl",
+                         "Board.3dshapes/../secret.wrl", "/Board.3dshapes/a.wrl", "Board.3dshapes\\a.wrl", "", "a/b/c.wrl"]:
+                self.assertIsNone(board_asset(root, name), name)
+            self.assertIsNone(board_asset(None, "Board.3dshapes/a.wrl"))

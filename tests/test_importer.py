@@ -40,6 +40,27 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(c["pads"][0]["rotation_deg"], 45)
         self.assertEqual(c["source_path"], "power.input.B1")
 
+    def test_model_references_and_generated_body_are_kept_unresolved(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (footprint "R" (layer "F.Cu") (at 1 2)
+            (property "Reference" "R1")
+            (property "CopperScriptBody" "${KIPRJMOD}/CopperScript.3dshapes/r.wrl")
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))
+            (model "${KIPRJMOD}/CopperScript.3dshapes/r.wrl"
+              (offset (xyz 0 0 0)) (scale (xyz 0.39370078740157477 0.39370078740157477 0.39370078740157477))
+              (rotate (xyz 0 0 90)))
+            (model "plain.step"))
+          (footprint "Q" (layer "F.Cu") (at 3 4) (property "Reference" "Q1")
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))))'''
+        first, second = import_pcb(data, "m.kicad_pcb")["components"]
+        self.assertEqual(first["body_model"], "${KIPRJMOD}/CopperScript.3dshapes/r.wrl")
+        self.assertEqual([m["path"] for m in first["models"]], ["${KIPRJMOD}/CopperScript.3dshapes/r.wrl", "plain.step"])
+        self.assertEqual(first["models"][0]["rotate_deg"], [0, 0, 90])
+        self.assertAlmostEqual(first["models"][0]["scale"][0], 1 / 2.54)
+        self.assertEqual(first["models"][1]["scale"], [1, 1, 1])
+        self.assertNotIn("models", second)
+        self.assertNotIn("body_model", second)
+
     def test_through_hole_layers_and_blind_via_span(self):
         data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (2 "In1.Cu" power) (4 "In2.Cu" power) (31 "B.Cu" signal))
           (via blind (at 1 2) (size .6) (drill .3) (layers "F.Cu" "In2.Cu") (net 0)))'''
