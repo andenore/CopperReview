@@ -129,3 +129,12 @@ test('wire lanes in a gap are ordered to avoid crossings',()=>{
  // Nets that do not overlap share a lane.
  const c={lo:0,hi:40,west:[0],east:[40]},d={lo:60,hi:90,west:[60],east:[90]};assert.equal(orderLanes([c,d]),1);assert.equal(c.lane,d.lane);
 });
+test('passive pins that claim power do not make a signal net a rail',()=>{
+ const pin=(name,domains,directions)=>({name,profile:{domains,directions},bonds:[]});
+ const ir={schema:'copperscript-ir/v0.1',kind:'board',name:'gate',
+  parts:[{name:'drv',category:'semiconductor.ic',pins:[pin('Y',['digital'],['output']),pin('VCC',['power'],['input'])]},{name:'res',category:'component.generic',pins:[pin('P1',['analog','power'],['passive']),pin('P2',['analog','power'],['passive'])]},{name:'fet',category:'component.generic',pins:[pin('G',['digital'],['input']),pin('D',['analog','power'],['passive'])]}],
+  components:[{ref:'U',part:'drv'},{ref:'R',part:'res',value:{value:'1',unit:'kohm',base_value:'1000'}},{ref:'Q',part:'fet'}],
+  nets:[{name:'DRV',endpoints:['U.Y','R.P1']},{name:'GATE',endpoints:['R.P2','Q.G']},{name:'RAIL',endpoints:['U.VCC']}],supplies:[]};
+ const m=electricalModel(ir);
+ assert.deepEqual(['DRV','GATE','RAIL'].map(n=>netRole(m,n)),['signal','signal','power']);
+});

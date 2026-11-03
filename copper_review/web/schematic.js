@@ -4,7 +4,7 @@
 import {isPassive,quantity} from './electrical-model.js';
 import {engineeringText} from './core.js';
 
-const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SMALL=3,BAND=1100,WRAP=1500,SMALL_PINS=4;
+const PIN=20,HEAD=40,FOOT=16,STUB=18,LANE=10,CHAR=7,TWO=48,HUB=20,MAX_SHEET=36,SLACK=1.2,SMALL=3,BAND=1100,WRAP=1500,SMALL_PINS=4;
 const distinct=a=>[...new Set(a)];
 const scoped=(scope,s)=>scope?`${scope}/${s}`:s;
 const natural=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
@@ -17,8 +17,11 @@ export function netRole(model,name){
   // Declared supplies win. Pins that claim both power and ground (generic headers) say nothing.
   if(n.supplies.some(s=>s.voltage?.base_value==='0'))return 'ground';
   if(n.supplies.length)return 'power';
+  // Passive pins (resistors, connectors, FET drains) often claim the power domain generically;
+  // only a driven or receiving pin makes an undeclared net a rail.
   const only=(p,domain,other)=>p.profile.domains?.includes(domain)&&!p.profile.domains.includes(other);
-  const ground=n.pins.filter(p=>only(p,'ground','power')).length,power=n.pins.filter(p=>only(p,'power','ground')).length;
+  const active=p=>(p.profile.directions||[]).some(d=>d!=='passive');
+  const ground=n.pins.filter(p=>only(p,'ground','power')).length,power=n.pins.filter(p=>only(p,'power','ground')&&active(p)).length;
   return ground&&ground>=power?'ground':power?'power':'signal';
 }
 const pinRole=(model,p)=>p.net?netRole(model,p.net):'nc';
@@ -98,35 +101,56 @@ export function schematicSheets(source,{showPassives=false}={}){
   const visible=[...model.components.values()].filter(c=>!folded.has(c.ref));
   for(const c of visible)signalNets.set(c.ref,distinct(c.pins.map(p=>p.net).filter(n=>n&&netRole(model,n)==='signal')));
   const linksOf=refs=>{const members=new Map();for(const r of refs)for(const n of signalNets.get(r)){if(!members.has(n))members.set(n,[]);members.get(n).push(r);}return [...members.values()];};
-  const pins=r=>model.components.get(r).pins.length;
+  const pins=r=>model.components.get(r).pins.length,railsOf=r=>distinct(model.components.get(r).pins.map(p=>p.net).filter(n=>n&&netRole(model,n)==='power'));
   const sheets=[];
+  // Remove the busiest part, then pack what falls apart back around it in balanced sheets, so a
+  // driver keeps its channels instead of each channel getting a sheet of its own.
   function split(refs){
-    if(refs.length<=MAX_SHEET)return [refs];
+    if(refs.length<=MAX_SHEET*SLACK)return [refs];
     const hub=[...refs].sort((a,b)=>signalNets.get(b).length-signalNets.get(a).length||natural(a,b))[0],rest=refs.filter(r=>r!==hub);
     const pieces=components(rest,linksOf(rest)),shared=p=>p.filter(r=>signalNets.get(r).some(n=>signalNets.get(hub).includes(n))).length;
-    const home=pieces.filter(p=>p.length<MAX_SHEET).sort((a,b)=>shared(b)-shared(a))[0];
-    if(home&&shared(home))home.push(hub);else pieces.push([hub]);
-    return pieces.flatMap(split);
+    const big=pieces.filter(p=>p.length>MAX_SHEET),small=pieces.filter(p=>p.length<=MAX_SHEET).sort((a,b)=>Number(!shared(b))-Number(!shared(a))||natural(a[0],b[0]));
+    const total=1+small.reduce((n,p)=>n+p.length,0),target=Math.ceil(total/Math.ceil(total/(MAX_SHEET*SLACK))),bins=[[hub]];
+    for(const p of small){if(bins.at(-1).length+p.length>target&&bins.at(-1).length)bins.push([]);bins.at(-1).push(...p);}
+    return [...bins,...big.flatMap(split)];
   }
   const scopes=distinct(visible.map(c=>c.scope)).sort(natural);
   for(const scope of scopes){
     const refs=visible.filter(c=>c.scope===scope).map(c=>c.ref);
     if(refs.length<=MAX_SHEET){sheets.push({id:`sheet:${scope}:all`,title:scope||model.name,scope,anchor:refs[0],refs});continue;}
     const hubs=refs.filter(r=>signalNets.get(r).length>HUB),rest=refs.filter(r=>!hubs.includes(r));
-    const hubSheets=hubs.map(h=>({refs:[h],hub:true})),small=[],clusters=[];
+    const hubSheets=hubs.map(h=>({refs:[h],hub:true})),clusters=[];let small=[];
     for(const piece of components(rest,linksOf(rest)).flatMap(split)){
       if(piece.length>SMALL){clusters.push({refs:piece});continue;}
       // Headers and single parts that only meet one hub sit on that hub's sheet.
       const reached=hubSheets.filter(s=>piece.some(r=>signalNets.get(r).some(n=>signalNets.get(s.refs[0]).includes(n))));
       if(reached.length===1&&reached[0].refs.length+piece.length<=MAX_SHEET)reached[0].refs.push(...piece);else small.push(...piece);
     }
+    // Power-path parts (fuses, inductors, input connectors, LDOs) share no signal net with anything.
+    // They join the sheet of the regulator they share rails with rather than "Other parts".
+    const powerParts=small.filter(r=>!signalNets.get(r).length&&railsOf(r).length);
+    if(powerParts.length){
+      const wanted=new Set(powerParts.flatMap(railsOf)),drives=r=>model.components.get(r).pins.some(p=>wanted.has(p.net)&&p.profile.domains?.includes('power')&&p.profile.directions?.includes('output'));
+      const score=s=>distinct(s.refs.flatMap(railsOf)).filter(n=>wanted.has(n)).length+(s.refs.some(drives)?10:0);
+      let home=[...hubSheets,...clusters].filter(s=>s.refs.length+powerParts.length<=MAX_SHEET*SLACK&&score(s)).sort((a,b)=>score(b)-score(a))[0];
+      if(!home){home={refs:[]};clusters.push(home);}
+      home.refs.push(...powerParts);home.power=true;small=small.filter(r=>!powerParts.includes(r));
+    }
     const other=[];for(const r of small.sort(natural)){if(!other.length||other.at(-1).refs.length>=MAX_SHEET)other.push({refs:[],other:true});other.at(-1).refs.push(r);}
     for(const s of [...hubSheets,...clusters.sort((a,b)=>b.refs.length-a.refs.length),...other]){
       const anchor=s.hub?s.refs[0]:[...s.refs].sort((a,b)=>Number(isPassive(model.components.get(a)))-Number(isPassive(model.components.get(b)))||pins(b)-pins(a)||natural(a,b))[0];
-      const label=s.other?'Other parts':anchor.split('/').pop();
+      const label=s.other?'Other parts':s.power?`Power · ${anchor.split('/').pop()}`:anchor.split('/').pop();
       sheets.push({id:`sheet:${scope}:${s.other?`other-${other.indexOf(s)}`:anchor}`,title:`${scope?scope+' · ':''}${label}`,scope,anchor,refs:s.refs});
     }
   }
+  // On each sheet, rails that join a power-path part to another power-path part or a regulator are
+  // drawn as wires between those parts; other ICs' supply pins keep their rail flags.
+  const pathParts=new Set(visible.filter(c=>!signalNets.get(c.ref).length&&railsOf(c.ref).length).map(c=>c.ref));
+  const railParts=new Set([...pathParts,...(source.rails||[]).flatMap(r=>r.sources.map(id=>source.pins.get(id)?.component).filter(Boolean))]);
+  for(const s of sheets){const on=new Set(s.refs),count=new Map();s.railParts=s.refs.filter(r=>railParts.has(r));for(const r of s.railParts)for(const n of railsOf(r))count.set(n,(count.get(n)||0)+1);
+    s.wired=[...count].filter(([n,k])=>k>1&&s.refs.some(r=>pathParts.has(r)&&railsOf(r).includes(n))).map(([n])=>n);
+    // Wired rails run from their source (regulator output, fuse, inductor) to their loads.
+    s.flow=(source.rails||[]).filter(r=>s.wired.includes(r.net)).flatMap(r=>distinct(r.sources.map(id=>source.pins.get(id)?.component).filter(c=>on.has(c))).flatMap(a=>r.loads.filter(b=>b!==a&&on.has(b)&&railParts.has(b)).map(b=>[a,b])));}
   const sheetOf=new Map();for(const s of sheets)for(const r of s.refs)sheetOf.set(r,s.id);
   for(const f of folded.values()){
     const net=[...merged].find(([,names])=>names.includes(f.net))?.[0]||f.net;
@@ -137,7 +161,7 @@ export function schematicSheets(source,{showPassives=false}={}){
 }
 
 /** Columns follow signal direction; undirected parts sit between their neighbours. */
-function columns(model,refs,netsOf){
+function columns(model,refs,netsOf,flow=[]){
   const inSheet=new Set(refs),out=new Map(refs.map(r=>[r,new Set()])),neighbors=new Map(refs.map(r=>[r,new Set()])),directed=new Set();
   const members=new Map();for(const r of refs)for(const p of model.components.get(r).pins)if(netsOf.has(p.net)){if(!members.has(p.net))members.set(p.net,[]);members.get(p.net).push(p);}
   for(const pins of members.values()){
@@ -147,6 +171,7 @@ function columns(model,refs,netsOf){
   const link=(a,b)=>{out.get(a).add(b);directed.add(a);directed.add(b);};
   for(const r of refs){const c=model.components.get(r);if(!twoPin(c))continue;const [x,y]=c.pins.map(p=>members.get(p.net)||[]);
     for(const [from,to]of [[x,y],[y,x]]){const drivers=from.filter(p=>p.component!==r&&outputOnly(p)),receivers=to.filter(p=>p.component!==r&&inputOnly(p));for(const d of drivers)for(const q of receivers)if(d.component!==q.component)link(d.component,q.component);}}
+  for(const [a,b]of flow)if(out.has(a)&&out.has(b))link(a,b);
   // Drop feedback edges, then take longest paths through what remains.
   const state=new Map(),order=[];
   const visit=r=>{state.set(r,1);for(const s of out.get(r))if(!state.has(s))visit(s);else if(state.get(s)===1)out.get(r).delete(s);state.set(r,2);order.push(r);};
@@ -198,7 +223,8 @@ function columns(model,refs,netsOf){
   // Small parts that share a signal net (an LED and its resistor, a crystal and its load
   // capacitors) stay together: the members next to their IC keep one column beside it, each
   // further hop steps one column outward, and every member lines up with the part it hangs off.
-  const isSmall=r=>model.components.get(r).pins.length<=SMALL_PINS,parentOf=new Map();
+  // Parts on a power flow (fuses, inductors) keep their flow columns instead of grouping.
+  const onFlow=new Set(flow.flat()),isSmall=r=>model.components.get(r).pins.length<=SMALL_PINS&&!onFlow.has(r),parentOf=new Map();
   const groups=components(refs.filter(isSmall),[...members.values()].map(pins=>distinct(pins.map(p=>p.component)).filter(isSmall))).filter(g=>g.length>1);
   const target=new Map();
   for(const g of groups){
@@ -249,16 +275,17 @@ export function orderLanes(list){
   return Math.max(0,...order.map(w=>w.lane+1));
 }
 export function layoutSheet(source,sheet,{folded,view}){
-  const model=view||source,refs=sheet.refs,inSheet=new Set(refs),netsOf=new Set();
-  for(const r of refs)for(const p of model.components.get(r).pins)if(p.net&&pinRole(model,p)==='signal')netsOf.add(p.net);
-  const {column,layers,members,parentOf}=columns(model,refs,netsOf);
+  const model=view||source,refs=sheet.refs,inSheet=new Set(refs),netsOf=new Set(),railWires=new Set(sheet.wired||[]),railParts=new Set(sheet.railParts||[]);
+  const roleOf=p=>p.net&&railWires.has(p.net)&&railParts.has(p.component)?'signal':pinRole(model,p);
+  for(const r of refs)for(const p of model.components.get(r).pins)if(p.net&&roleOf(p)==='signal')netsOf.add(p.net);
+  const {column,layers,members,parentOf}=columns(model,refs,netsOf,sheet.flow);
   const symbols=new Map(),pinAt=new Map(),ties=new Map();
   const strapped=p=>{const d=p.profile.domains||[];return d.length>0&&!d.includes('power')&&!d.includes('ground');};
   const neighborColumns=p=>(members.get(p.net)||[]).filter(q=>q.component!==p.component).map(q=>column.get(q.component));
   for(const r of refs){
     const c=model.components.get(r),two=twoPin(c),col=column.get(r),left=[],right=[],top=new Map(),bottom=new Map();let nc=0;
     for(const p of c.pins){
-      const role=pinRole(model,p);
+      const role=roleOf(p);
       if(role==='nc'){nc++;continue;}
       // Only supply pins become rail flags. A logic pin strapped to a rail (OE_N, DIR, CS, EN)
       // stays on the symbol side so the strap can be reviewed.
@@ -299,6 +326,12 @@ export function layoutSheet(source,sheet,{folded,view}){
   for(const net of [...netsOf].sort(natural)){
     const pins=(members.get(net)||[]).filter(p=>pinAt.has(p.id)),gaps=distinct(pins.map(gapOf)),offsheet=model.nets.get(net).pins.some(p=>!inSheet.has(p.component)&&!folded.has(p.component));
     if(pins.length>=2&&gaps.length===1)wired.set(net,{net,gap:gaps[0],pins,offsheet,ys:pins.map(p=>pinAt.get(p.id).y)});
+    else if(railWires.has(net)){
+      // A rail wires its busiest column gap; pins facing elsewhere carry its label.
+      const gap=gaps.map(g=>[g,pins.filter(p=>gapOf(p)===g)]).sort((a,b)=>b[1].length-a[1].length||a[0]-b[0])[0],main=gap[1].length>=2?gap[1]:[];
+      if(main.length)wired.set(net,{net,gap:gap[0],pins:main,offsheet,ys:main.map(p=>pinAt.get(p.id).y)});
+      for(const p of pins)if(!main.includes(p))labelled.push({net,pin:p,offsheet});
+    }
     else for(const p of pins)labelled.push({net,pin:p,offsheet});
   }
   for(const s of symbols.values())for(const p of [...s.left,...s.right])if(ties.has(p.id))labelled.push({net:p.net,pin:p,offsheet:false,tie:ties.get(p.id)});

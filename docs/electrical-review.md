@@ -23,7 +23,15 @@ are independent; the application does not assert that a PCB matches an IR.
 - **Schematic** (the default) draws generated sheets from the IR; it is not an
   authored drawing. Module scopes, then signal connectivity, split the board: a
   part with more than 20 signal nets gets its own sheet with the headers and small
-  parts that only reach it, other clusters hold at most 36 parts. Columns follow
+  parts that only reach it, other clusters hold about 36 parts (up to 20% more
+  to keep a cluster whole). A cluster too big for one sheet loses its busiest part,
+  and the pieces are packed back around it in balanced sheets, so a driver keeps
+  its channels. An undeclared net counts as a rail only when a driven or receiving
+  pin claims power; passive pins (resistors, connectors, FET drains) that claim the
+  power domain generically do not make it one. Power-path parts with no signal net
+  (fuses, inductors, input connectors, LDOs) join the sheet of the regulator they
+  share rails with; there, the rails between those parts and regulators are wires
+  running from source to load, while other ICs' supply pins keep flags. Columns follow
   output-to-input direction, including through series two-pin parts. A column
   taller than about 1500 px wraps into side-by-side columns around its best-connected
   part, whose neighbours take the nearest columns, so sheets stay wide rather than

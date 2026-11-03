@@ -310,7 +310,7 @@ function draw() {
   for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?'#526662':'#c19562';ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle='#82d5c019';ctx.strokeStyle='#84d4c0';ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
-  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm Â· grid ${spacing} mm${state.hiddenLabels?` Â· ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
+  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
 function hit(point,forHover=false) {
   if(!state.scene)return {};
@@ -338,11 +338,11 @@ function select(kind,name,add=false) {
 }
 function updateSelection() {
   const s=state.selection;const rows=[];
-  if(s.components.length)for(const ref of s.components){const c=state.scene.components.find(c=>c.reference===ref);rows.push(`${ref} Â· ${c.source_path===ref?'':c.source_path+' Â· '}${c.side}\nX ${c.position_mm[0].toFixed(3)} Â· Y ${c.position_mm[1].toFixed(3)} mm Â· ${c.rotation_deg.toFixed(1)}Â°`);}
-  if(s.nets.length)for(const net of s.nets){const n=state.scene.nets.find(n=>n.name===net);rows.push(`Net ${net} Â· ${n.pads.length} pads`);}
-  if(s.region){const b=s.region;rows.push(`Region Â· X ${b[0].toFixed(3)}â€¦${b[2].toFixed(3)} mm\nY ${b[1].toFixed(3)}â€¦${b[3].toFixed(3)} mm`);}
+  if(s.components.length)for(const ref of s.components){const c=state.scene.components.find(c=>c.reference===ref);rows.push(`${ref} · ${c.source_path===ref?'':c.source_path+' · '}${c.side}\nX ${c.position_mm[0].toFixed(3)} · Y ${c.position_mm[1].toFixed(3)} mm · ${c.rotation_deg.toFixed(1)}°`);}
+  if(s.nets.length)for(const net of s.nets){const n=state.scene.nets.find(n=>n.name===net);rows.push(`Net ${net} · ${n.pads.length} pads`);}
+  if(s.region){const b=s.region;rows.push(`Region · X ${b[0].toFixed(3)}…${b[2].toFixed(3)} mm\nY ${b[1].toFixed(3)}…${b[3].toFixed(3)} mm`);}
   $('selection-detail').textContent=rows.join('\n\n') || 'Select a component, net, or drag a region on the board.';
-  $('selection-status').textContent=`${s.components.length} components Â· ${s.nets.length} nets${s.region?' Â· region':''}`;
+  $('selection-status').textContent=`${s.components.length} components · ${s.nets.length} nets${s.region?' · region':''}`;
   renderEntities();requestDraw();
 }
 function renderEntities() {
@@ -367,8 +367,8 @@ function renderIssues(search) {
     if(!`${issue.id} ${issue.code} ${issue.title} ${issue.nets.join(' ')}`.toLowerCase().includes(search))continue;
     const button=document.createElement('button');button.className='entity';button.type='button';
     button.classList.toggle('selected',citedIssueIds().includes(issue.id));
-    const label=document.createElement('span');label.textContent=`${issue.id} Â· ${issue.code}`;
-    const detail=document.createElement('span');detail.className='secondary';detail.textContent=issue.window_mm?`${issue.count}Ã—`:'no position';
+    const label=document.createElement('span');label.textContent=`${issue.id} · ${issue.code}`;
+    const detail=document.createElement('span');detail.className='secondary';detail.textContent=issue.window_mm?`${issue.count}×`:'no position';
     button.append(label,detail);button.title=issue.title;
     button.onclick=e=>{
       const ids=e.shiftKey?citedIssueIds():[];if(!ids.includes(issue.id))ids.push(issue.id);$('issue-ids').value=ids.join(', ');
@@ -389,8 +389,8 @@ function issuesFromForm() {
 function storageKey(){return `copper-review:v1:${state.scene.board.sha256}`;}
 function saveLocal() {
   if(!state.scene)return;
-  try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value,copperscript_issues:issueSource()}));$('autosave-status').textContent='Saved in this browser Â· export JSON to share';}
-  catch {$('autosave-status').textContent='Local storage unavailable/full Â· export JSON now';}
+  try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value,copperscript_issues:issueSource()}));$('autosave-status').textContent='Saved in this browser · export JSON to share';}
+  catch {$('autosave-status').textContent='Local storage unavailable/full · export JSON now';}
 }
 function renderNotes() {
   $('note-count').textContent=state.annotations.length;$('note-list').replaceChildren();
@@ -398,8 +398,8 @@ function renderNotes() {
   for(const a of state.annotations){const row=document.createElement('div');row.className='note-row';
     const priority=document.createElement('span');priority.className=`priority ${a.priority}`;priority.textContent=a.priority;
     const button=document.createElement('button');button.className='note';const title=document.createElement('span');title.className='note-title';title.textContent=a.observation;
-    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} Â· ${a.status} Â· ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
-    const remove=document.createElement('button');remove.className='delete-note';remove.textContent='Ã—';remove.title='Delete annotation';remove.setAttribute('aria-label',`Delete annotation: ${a.observation}`);
+    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} · ${a.status} · ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
+    const remove=document.createElement('button');remove.className='delete-note';remove.textContent='×';remove.title='Delete annotation';remove.setAttribute('aria-label',`Delete annotation: ${a.observation}`);
     remove.onclick=()=>{state.annotations=state.annotations.filter(n=>n.id!==a.id);if(state.editing===a.id)resetForm();renderNotes();saveLocal();requestDraw();};
     row.append(priority,button,remove);$('note-list').append(row);
   }
@@ -429,7 +429,7 @@ function loadScene(scene) {
     // Keep the unreadable notes instead of overwriting them with the next autosave.
     try{if(raw)localStorage.setItem(`${storageKey()}:unreadable:${new Date().toISOString()}`,raw);}catch{}
     message('Saved local notes could not be read; they were kept under an ":unreadable" key. Load an exported review to recover.',true);}
-  $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components Â· ${scene.nets.length} nets Â· ${scene.tracks.length} tracks Â· ${scene.vias.length} vias Â· ${scene.board.sha256.slice(0,12)}`;
+  $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
   renderLayers();renderEntities();renderNotes();fit();setEnabled();
@@ -483,11 +483,11 @@ canvas.addEventListener('pointerdown',e=>{
   else if(!pan){const found=hit(point);if(state.mode==='net' && found.net)select('nets',found.net,e.shiftKey);else if(state.mode==='component' && found.component)select('components',found.component.reference,e.shiftKey);else if(!e.shiftKey)clearSelection();}
 });
 canvas.addEventListener('pointermove',e=>{
-  if(!state.scene)return;const point=world(e);$('cursor').textContent=`X ${point[0].toFixed(3)} mm Â· Y ${point[1].toFixed(3)} mm`;
+  if(!state.scene)return;const point=world(e);$('cursor').textContent=`X ${point[0].toFixed(3)} mm · Y ${point[1].toFixed(3)} mm`;
   if(state.drag){const drag=state.drag,s=screen(e);drag.moved=true;
     if(drag.pan){state.offset=[drag.offset[0]+s[0]-drag.screen[0],drag.offset[1]+s[1]-drag.screen[1]];requestDraw();}
     else if(state.mode==='region'){state.selection.region=[Math.min(drag.start[0],point[0]),Math.min(drag.start[1],point[1]),Math.max(drag.start[0],point[0]),Math.max(drag.start[1],point[1])].map(round);updateSelection();}
-  }else{const found=hit(point,true);setHover(found);$('hover-info').hidden=!(found.component || found.net);$('hover-info').textContent=[found.component?.reference,found.pad?`Pad ${padLabel(found.pad)}`:'',found.net?`Net ${found.net}`:'',found.track?`${found.track.layer} Â· ${found.track.width_mm} mm`:''].filter(Boolean).join(' Â· ');}
+  }else{const found=hit(point,true);setHover(found);$('hover-info').hidden=!(found.component || found.net);$('hover-info').textContent=[found.component?.reference,found.pad?`Pad ${padLabel(found.pad)}`:'',found.net?`Net ${found.net}`:'',found.track?`${found.track.layer} · ${found.track.width_mm} mm`:''].filter(Boolean).join(' · ');}
 });
 function endDrag(e){if(state.drag && state.mode==='region' && !state.drag.pan && state.selection.region && (state.selection.region[2]-state.selection.region[0]<.01 || state.selection.region[3]-state.selection.region[1]<.01)){state.selection.region=null;updateSelection();}state.drag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);}
 canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
