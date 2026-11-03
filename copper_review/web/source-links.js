@@ -26,7 +26,11 @@ export function findDeclaration(sources,ir,kind,path){
     const owner=scopeModule(ir,parts);if(!owner)return null;
     moduleName=owner.split(/[./]/).pop();
     const declaration=new RegExp(`^[ \\t]*module[ \\t]+${escape(moduleName)}\\b`,'m');
-    candidates=files.filter(([,text])=>declaration.test(text));
+    // Several packages may define a module of that name: prefer files whose path names the
+    // definition's qualifier (lib.Regulator → …/lib/…), then the project over dependencies.
+    const qualifier=owner.split(/[./]/).slice(0,-1),stems=id=>id.replace(/\.copper$/,'').split('/');
+    const rank=id=>(qualifier.some(q=>stems(id).includes(q))?2:0)+(id.startsWith('workspace/')?1:0);
+    candidates=files.filter(([,text])=>declaration.test(text)).sort(([a],[b])=>rank(b)-rank(a));
   }else candidates=files.filter(([id])=>id===`workspace/${sources.entry}`);
   const pattern=new RegExp(`\\b${kind}[ \\t]+${escape(name)}\\b`);
   for(const [id,text]of candidates){

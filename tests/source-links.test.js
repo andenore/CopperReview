@@ -16,6 +16,13 @@ test('declarations are found in the module that owns the scope, at the right lin
  assert.equal(findDeclaration(sources,ir,'component','NOPE/U1'),null);
  assert.equal(findDeclaration(null,ir,'component','U1'),null);
 });
+test('a module name defined by several packages resolves by its qualifier, then the project',()=>{
+ const files={'dependency/github.com/acme/lib/power.copper':'module Reg {\n  component U1: x.Y;\n}\n','workspace/src/reg.copper':'module Reg {\n\n  component U1: x.Z;\n}\n',
+   'workspace/board.copper':'board B { }\n'};
+ const pick=module=>findDeclaration({root:'',entry:'board.copper',files},{module_instances:[{ref:'R',module}],module_definitions:[{name:module,module_instances:[]}]},'component','R/U1').id;
+ assert.equal(pick('lib.Reg'),'dependency/github.com/acme/lib/power.copper');
+ assert.equal(pick('board.Reg'),'workspace/src/reg.copper');
+});
 test('GitHub links point at the pinned commit, for the project and for dependencies',()=>{
  const commit='a'.repeat(40),lib='b'.repeat(40),origin={provider:'github',repository:'https://github.com/acme/board',commit,path:'boards/main/board.copper'};
  assert.equal(githubLink(sources,'workspace/src/power.copper',5,origin),`https://github.com/acme/board/blob/${commit}/boards/main/src/power.copper#L5`);

@@ -328,7 +328,7 @@ export function layoutSheet(source,sheet,{folded,view}){
     if(pins.length>=2&&gaps.length===1)wired.set(net,{net,gap:gaps[0],pins,offsheet,ys:pins.map(p=>pinAt.get(p.id).y)});
     else if(railWires.has(net)){
       // A rail wires its busiest column gap; pins facing elsewhere carry its label.
-      const gap=gaps.map(g=>[g,pins.filter(p=>gapOf(p)===g)]).sort((a,b)=>b[1].length-a[1].length||a[0]-b[0])[0],main=gap[1].length>=2?gap[1]:[];
+      const gap=gaps.map(g=>[g,pins.filter(p=>gapOf(p)===g)]).sort((a,b)=>b[1].length-a[1].length||a[0]-b[0])[0],main=gap?.[1].length>=2?gap[1]:[];
       if(main.length)wired.set(net,{net,gap:gap[0],pins:main,offsheet,ys:main.map(p=>pinAt.get(p.id).y)});
       for(const p of pins)if(!main.includes(p))labelled.push({net,pin:p,offsheet});
     }

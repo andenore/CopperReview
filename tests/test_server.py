@@ -116,7 +116,10 @@ class ProjectServerTests(unittest.TestCase):
         (self.root / "board.copper").write_text("board Bench { component R: RESISTOR; }")
         with self.get("/api/project/file?path=board.copper") as response:
             self.assertIn(b"RESISTOR", response.read())
-        for path in ["notes.txt", "../outside.copper", ".git/hidden.copper", "src/../../outside.copper", ""]:
+        with self.get("/api/project/file?path=src/part.copper") as response:
+            self.assertTrue(response.read())
+        for path in ["notes.txt", "../outside.copper", ".git/hidden.copper", "src/../../outside.copper", "",
+                     "/etc/passwd.copper", "src\part.copper", str(self.root.parent / "outside.copper")]:
             with self.assertRaises(HTTPError) as ctx:
                 self.get("/api/project/file?path=" + path)
             self.assertEqual(ctx.exception.code, 404, path)

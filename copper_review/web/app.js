@@ -25,12 +25,14 @@ const electrical=createElectricalReview({message,
   onSelect:sel=>{if(mode==='both')showOnBoard(sel.kind,sel.id,{quiet:true});},
   links:{board:{has:(kind,id)=>!!boardTarget(kind,id),show:(kind,id)=>showOnBoard(kind,id)},
     source:{has:(kind,id)=>!!sourceTarget(kind,id),open:(kind,id)=>openSource(kind,id)}}});
-const available=m=>m==='electrical'?electrical.hasModel():m==='both'?electrical.hasModel()&&!!state.scene:true;
+// Both needs a schematic and a board that share parts; an unrelated pair stays apart.
+const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:true;
 function setMode(next,{remember=true}={}){
   if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
   const changed=next!==mode;mode=next;document.body.dataset.mode=mode;
   electrical.show(mode!=='layout');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
-  for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);}
+  for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
+    b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
   $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
   updateHeading();
   if(remember)try{localStorage.setItem('copper-review:mode',mode);}catch{}
@@ -41,9 +43,9 @@ for(const b of document.querySelectorAll('#mode-switch [data-mode]'))b.onclick=(
 /** Parts on the board found by the schematic's names, and the other way round. */
 function linkSummary(){
   if(!electrical.hasModel()||!state.scene)return null;
-  const model=electrical.model(),board=new Set(state.scene.components.map(c=>c.source_path||c.reference));
-  const schematic=[...model.components.keys()],both=schematic.filter(r=>board.has(r)||state.scene.components.some(c=>c.reference===r));
-  return {both:both.length,schematicOnly:schematic.length-both.length,boardOnly:state.scene.components.filter(c=>!model.components.has(c.source_path||c.reference)&&!model.components.has(c.reference)).length};
+  const model=electrical.model(),board=new Set(state.scene.components.flatMap(c=>[c.source_path,c.reference]));
+  const both=[...model.components.keys()].filter(r=>board.has(r)).length;
+  return {both,schematicOnly:model.components.size-both,boardOnly:state.scene.components.filter(c=>!model.components.has(c.source_path)&&!model.components.has(c.reference)).length};
 }
 function updateHeading(){
   const model=electrical.hasModel()?electrical.model():null,scene=state.scene;
@@ -84,8 +86,8 @@ $('show-about').onclick=()=>{const box=document.createElement('div');
 $('show-github-access').onclick=()=>{showProjectDialog();$('github-access').open=true;$('github-token').focus();};
 function showProjectOrigin(origin){const label=$('project-origin');label.hidden=!origin;label.textContent=origin?origin.provider==='github'?`${String(origin.repository||'').replace('https://github.com/','')} @ ${String(origin.commit||'').slice(0,12)} · ${origin.path}`:origin.provider==='local'?`${origin.folder}/${origin.path} · local folder`:origin.url:'';label.title=origin?.url||'';}
 function loadDocument(data){
-  if(data?.schema==='copper-review-electrical/v1'){electrical.load(data);electricalOrigin=data.input.origin||null;sources=data.sources||null;setMode(state.scene?'both':'electrical');}
-  else{loadScene(data);electrical.render();setMode(electrical.hasModel()?'both':'layout');}
+  if(data?.schema==='copper-review-electrical/v1'){electrical.load(data);electricalOrigin=data.input.origin||null;sources=data.sources||null;setMode(available('both')?'both':'electrical');}
+  else{loadScene(data);electrical.render();setMode(available('both')?'both':'layout');}
   showCompilerResult(data);
 }
 function beginOpen(){if(remoteLoad){remoteLoad.abort();remoteLoad=null;projectBusy(false);}const revision=++documentRevision;cancelCompiler();$('compiler-cancel').hidden=true;return revision;}
@@ -100,6 +102,9 @@ async function openDesignFile(file,{origin=null,prepared=null,revision=beginOpen
     }else if(file.name.toLowerCase().endsWith('.json')){
       value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
       if(value.schema==='copperscript-ir/v0.1')value=await electricalInput(bytes,file.name);
+      // Notes and issue lists belong to an open design (openFiles adds them); a URL can still name one.
+      else if(value.schema===ISSUES_SCHEMA||READABLE_REVIEW_SCHEMAS.includes(value.schema)||value.schema==='copper-electrical-review/v1')
+        throw Error(`${file.name} is a ${value.schema===ISSUES_SCHEMA?'CopperScript issue list':'review notes file'}, not a design. Open its design first, then add it with Open → File….`);
     }else{
       if(!localServer)throw Error('Raw KiCad PCB import currently needs the local importer. Open an exported .scene.json in the hosted viewer.');
       const response=await fetch('./api/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Copper-Token':token,'X-Copper-Filename':encodeURIComponent(file.name)},body:bytes});value=await response.json();if(!response.ok)throw Error(value.error);documentBaseline=documentIdentity(value);
@@ -541,7 +546,7 @@ function openSource(kind,id){
   const links=$('source-links');links.replaceChildren();
   const origin=electricalOrigin,github=githubLink(sources,found.id,found.line,origin,electrical.input()?.project?.modules||[]);
   if(github){const a=document.createElement('a');a.href=github;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open on GitHub';links.append(a);}
-  if(origin?.provider==='local'&&origin.root&&found.id.startsWith('workspace/')){const a=document.createElement('a');a.href=`vscode://file/${origin.root.replace(/\\/g,'/')}/${displayPath(sources,found.id)}:${found.line}`;a.textContent='Open in VS Code';links.append(a);}
+  if(origin?.provider==='local'&&origin.root&&found.id.startsWith('workspace/')){const a=document.createElement('a');a.href=`vscode://file/${origin.root.replace(/\\/g,'/').replace(/^\/+/,'')}/${displayPath(sources,found.id)}:${found.line}`;a.textContent='Open in VS Code';links.append(a);}
   if(!$('source-dialog').open)$('source-dialog').showModal();
   pre.querySelector('.current')?.scrollIntoView({block:'center'});
 }
@@ -696,15 +701,22 @@ new ResizeObserver(entries=>document.documentElement.style.setProperty('--topbar
 setMode('layout',{remember:false});
 setEnabled();
 startupReady=guarded(async()=>{const revision=documentRevision;let data=null,project=null;
-  if(localServer){const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});data=await response.json();if(!response.ok)throw new Error(data.error);documentBaseline=documentIdentity(data);
-    const served=await fetch('./api/project',{headers:{'X-Copper-Token':token},cache:'no-store'});project=await served.json();if(!served.ok)throw new Error(project.error);}
+  // A #token link on a page that is not the CLI server (a static http host, a stale link) opens as static.
+  if(localServer)try{
+    const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});const scene=await response.json();if(!response.ok)throw new Error(scene.error);
+    const served=await fetch('./api/project',{headers:{'X-Copper-Token':token},cache:'no-store'});const listing=await served.json();if(!served.ok)throw new Error(listing.error);
+    data=scene;project=listing;documentBaseline=documentIdentity(data);
+  }catch(error){message(`Local server unavailable (${error.message}); opened as a static viewer.`,true);}
   let preferred=null;try{preferred=localStorage.getItem('copper-review:mode');}catch{}
   const remembered=async slot=>{try{return await rememberedDocument(documentBaseline,slot);}catch{return null;}};
-  const layout=data||await remembered('layout')||(project?null:await remembered('last'));
-  if(layout&&revision===documentRevision&&layout.schema!=='copper-review-electrical/v1')loadDocument(layout);
+  // A design opened here since this server input was loaded wins over it, as before; the baseline
+  // keeps an unrelated saved design from replacing a new server input.
+  const isSchematic=d=>d?.schema==='copper-review-electrical/v1',legacy=project?null:await remembered('last');
+  const layout=await remembered('layout')||(isSchematic(legacy)?null:legacy)||(isSchematic(data)?null:data);
+  if(layout&&revision===documentRevision)loadDocument(layout);
   // Opening waits for startup to finish; this is startup, so release that wait first.
   if(project){startupReady=null;await openServedProject(project);}
-  else{const schematic=await remembered('electrical')||(layout?.schema==='copper-review-electrical/v1'?layout:null);if(schematic&&revision===documentRevision)loadDocument(schematic);}
+  else{const schematic=await remembered('electrical')||(isSchematic(legacy)?legacy:null)||(isSchematic(data)?data:null);if(schematic&&revision===documentRevision)loadDocument(schematic);}
   // A served schematic and board open side by side; otherwise the mode last chosen here, if any.
   if(data&&project)setMode('both',{remember:false});else if(preferred)setMode(preferred,{remember:false});
 })();

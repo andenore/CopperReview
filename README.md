@@ -16,7 +16,7 @@ The **Electrical · Layout · Both** switch in the top bar picks what is shown (
 **Both** puts the schematic and the board side by side with a draggable divider;
 selecting a part or net on either side selects and centres it on the other. Parts
 match by CopperScript path (or reference) and nets by name; the top bar counts parts
-found on only one side, and nothing proves the board was built from that exact source.
+found on only one side (Both stays off when they share no part), and nothing proves the board was built from that exact source.
 Outside **Both**, **Show on board** and **Show in schematic** (S) jump across, and
 **Source** opens the declaration in the CopperScript project (found by searching the
 compiled sources, since the IR does not record source lines yet), with **Open on

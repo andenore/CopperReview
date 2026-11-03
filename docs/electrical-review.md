@@ -16,7 +16,7 @@ See [source snapshots and limits](wasm-hosting.md#open-from-url).
 No PCB or placement data is needed. Layout review (board geometry) keeps its own
 annotations and `copper-review/v2` contract. The top bar's **Electrical · Layout ·
 Both** switch picks what is shown; opening one kind of document keeps the other open.
-In **Both** the schematic and the board sit side by side (drag the divider, or use
+**Both** is offered only when the schematic and the board share part references. In it the schematic and the board sit side by side (drag the divider, or use
 the arrow keys on it) and a selection on either side selects and centres the same part
 or net on the other. The schematic's side panel is the shared inspector there; layout
 notes are written in **Layout**. Parts match by CopperScript path (the board export's

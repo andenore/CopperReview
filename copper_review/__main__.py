@@ -68,6 +68,26 @@ def project_files(root):
     return found
 
 
+def project_file(root, name):
+    """The file a project listing would include at folder-relative `name`, or None; no tree walk."""
+    root = Path(root).resolve()
+    parts = name.split("/") if isinstance(name, str) else []
+    if not parts or any(part in ("", ".", "..") or part in PROJECT_SKIP for part in parts):
+        return None
+    leaf = parts[-1]
+    if not (leaf.endswith(".copper") or leaf in ("copper.mod", "copper.lock")):
+        return None
+    path = root
+    for part in parts:
+        path = path / part
+        if path.is_symlink():
+            return None
+    if not path.is_file() or path.resolve().parent != root.joinpath(*parts[:-1]).resolve():
+        return None
+    limit = MAX_PROJECT_SOURCE if leaf.endswith(".copper") else MAX_PROJECT_MANIFEST
+    return path if path.stat().st_size <= limit else None
+
+
 def lan_addresses():
     """Best-effort addresses another machine can use to reach this one."""
     addresses = set()
@@ -149,13 +169,14 @@ def make_handler(initial_scene, token, project=None, board=None, public=False):
             if path == "/api/project/file":
                 name = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
                 try:
-                    listed = project_files(project) if project else {}
-                except (OSError, ValueError):
-                    listed = {}
-                if name not in listed:
+                    found = project_file(project, name) if project else None
+                    data = found.read_bytes() if found else None
+                except OSError:
+                    data = None
+                if data is None:
                     self.send(404, {"error": "Not a project source file"})
                     return
-                self.send(200, (project / name).read_bytes(), "application/octet-stream")
+                self.send(200, data, "application/octet-stream")
                 return
             asset = static_asset(path)
             if not asset or not ((WEB / asset[0]).is_file() or asset[0].startswith("wasm/")):
