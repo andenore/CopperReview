@@ -160,7 +160,7 @@ def make_handler(initial_scene, token, project=None, board=None, public=False):
                 return
             name, mime = asset
             if not (WEB / name).is_file():
-                self.send(404, {"error": "Asset unavailable; build WASM assets before compiling source"})
+                self.send(404, {"error": "Asset unavailable; run npm run fetch:wasm before compiling source"})
                 return
             self.send(200, (WEB / name).read_bytes(), mime)
 
@@ -227,7 +227,7 @@ def main():
             if not any(p.endswith(".copper") for p in files):
                 parser.error(f"No .copper sources in {args.project}")
             if not (WEB / "wasm" / "manifest.json").is_file():
-                print("CopperReview: the browser compiler is not built; run `npm run build:wasm` in the CopperReview checkout.", flush=True)
+                print("CopperReview: the browser compiler is missing; run `npm run fetch:wasm` in the CopperReview checkout (or `npm run build:wasm` with Rust and CopperScript).", flush=True)
         electrical_path = args.electrical_ir or (args.board if args.board and args.board.suffix.lower() == '.json' else None)
         if electrical_path and electrical_path.stat().st_size > MAX_UPLOAD:
             parser.error("Electrical IR exceeds 50 MiB")

@@ -19,19 +19,20 @@ function runCompiler(payload,{signal,resolve:resolveSources,onProgress=()=>{}}={
   cancelCompiler();
   return new Promise((resolve,reject)=>{
     if(signal?.aborted){reject(signal.reason);return;}
-    const work=new AbortController(),worker=new Worker(new URL('./compiler-worker.js',import.meta.url),{type:'module'});let timer,deadline,finished=false,rounds=0;
+    const work=new AbortController(),worker=new Worker(new URL('./compiler-worker.js',import.meta.url),{type:'module'});let timer,deadline,finished=false,rounds=0,stage='loading the compiler worker';
     const project=!!payload.project;
     const abort=()=>finish(signal.reason||Error('Compilation cancelled.'));
     const pending={cancel:()=>finish(Error('Compilation cancelled.'))};current=pending;
     signal?.addEventListener('abort',abort,{once:true});
     function finish(error,value){if(finished)return;finished=true;work.abort(error||Error('Compilation complete.'));clearTimeout(timer);clearTimeout(deadline);signal?.removeEventListener('abort',abort);worker.terminate();if(current===pending)current=null;error?reject(error):resolve(value);}
     function send(value){if(finished)return;clearTimeout(timer);timer=setTimeout(()=>finish(Error(`CopperScript analysis exceeded its ${project?60:30}-second limit.`)),project?60000:30000);worker.postMessage(value);}
-    timer=setTimeout(()=>finish(Error('CopperScript WASM loading timed out.')),60000);
+    timer=setTimeout(()=>finish(Error(`CopperScript WASM loading timed out while ${stage}.${stage==='starting WebAssembly'?' This browser may block WebAssembly on this address (for example Edge enhanced security); allow the site or open it on the server computer.':''}`)),60000);
     if(project)deadline=setTimeout(()=>finish(Error('Project resolution exceeded its 300-second limit.')),300000);
     worker.onerror=event=>{event.preventDefault();finish(Error(event.message||'Could not load CopperScript WASM.'));};
     worker.onmessage=async event=>{
       const msg=event.data;
-      if(msg.type==='ready'){onProgress('Checking source and dependencies with CopperScript…');send(payload);}
+      if(msg.type==='stage'){stage=msg.stage;onProgress(`Loading CopperScript: ${msg.stage}…`);}
+      else if(msg.type==='ready'){onProgress('Checking source and dependencies with CopperScript…');send(payload);}
       else if(msg.type==='result'){
         clearTimeout(timer);
         if(msg.result.schema==='copperscript.project-plan/v1'){

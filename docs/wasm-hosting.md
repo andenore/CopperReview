@@ -9,7 +9,14 @@ and import discovery through the same package resolver and compiler.
 
 ## Build
 
-Use an explicit CopperScript checkout containing `copper-web::review_source`,
+For local use you do not need to build the compiler: `npm run fetch:wasm`
+downloads the copy GitHub Pages built from `.copperscript-version`. It refuses
+files built from another commit, a modified source tree, or bytes that differ from
+the manifest's SHA-256 values, and replaces `copper_review/web/wasm/` only after
+everything has been verified. Set `COPPER_REVIEW_WASM_URL` to fetch from another
+deployment.
+
+To build it yourself, use an explicit CopperScript checkout containing `copper-web::review_source`,
 `review_project_source`, and their `review` / `review_project` WASM exports. Keep board dependency/compiler pins unchanged.
 
 ```console

@@ -71,7 +71,7 @@ CopperScript export commands produce the input; no compiler changes are needed.
 To serve a CopperScript project folder and compile it in the browser:
 
 ```powershell
-npm run build:wasm   # once: the browser compiler
+npm run fetch:wasm   # once: download the published browser compiler
 uv run copper-review --project ../BysseControl-32 --port 8769
 ```
 
