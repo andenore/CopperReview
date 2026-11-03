@@ -1,4 +1,4 @@
-import {compileGithubProject} from './project-compiler.js';
+import {compileGithubProject,compileLocalProject,localBoardSources} from './project-compiler.js';
 import {discoverProject,downloadDesign,setGithubToken,hasGithubToken,checkGithubToken} from './projects.js';
 import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
@@ -33,7 +33,7 @@ function showCompilerResult(data){
   if(data.input.project){const project=document.createElement('p');project.textContent=`Project: ${data.input.project.files?.length||0} source files · ${data.input.project.modules?.length||0} dependency repositories · ${data.input.project.scope}`;content.append(project);}
   const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Native compiler pin/net queries';pre.textContent=JSON.stringify({components:analysis.components,nets:analysis.nets,pins:analysis.pins},null,2);details.append(summary,pre);content.append(details);
 }
-function showProjectOrigin(origin){const label=$('project-origin');label.hidden=!origin;label.textContent=origin?origin.provider==='github'?`${String(origin.repository||'').replace('https://github.com/','')} @ ${String(origin.commit||'').slice(0,12)} · ${origin.path}`:origin.url:'';label.title=origin?.url||'';}
+function showProjectOrigin(origin){const label=$('project-origin');label.hidden=!origin;label.textContent=origin?origin.provider==='github'?`${String(origin.repository||'').replace('https://github.com/','')} @ ${String(origin.commit||'').slice(0,12)} · ${origin.path}`:origin.provider==='local'?`${origin.folder}/${origin.path} · local folder`:origin.url:'';label.title=origin?.url||'';}
 function loadDocument(data){if(data?.schema==='copper-review-electrical/v1'){electrical.load(data);electricalOrigin=data.input.origin||null;showProjectOrigin(electricalOrigin);}else {loadScene(data);electrical.show(false);}showCompilerResult(data);}
 function beginOpen(){if(remoteLoad){remoteLoad.abort();remoteLoad=null;projectBusy(false);}const revision=++documentRevision;cancelCompiler();$('compiler-cancel').hidden=true;return revision;}
 async function openDesignFile(file,electricalOnly=false,{origin=null,prepared=null,revision=beginOpen()}={}){
@@ -103,6 +103,30 @@ $('github-token-forget').onclick=()=>{cancelProject();forgetToken();showTokenSta
 $('project-open').onclick=()=>{const file=projectFiles[Number($('project-files').value)];if(file)projectAction((revision,controller)=>openRemoteFile(file,revision,controller));};
 $('open-electrical').onclick=()=>$('electrical-file').click();
 $('electrical-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file,true);});
+// A local project folder: only CopperScript sources and manifests are read; nothing is uploaded.
+let folderFiles=null,folderName='';
+$('open-folder').onclick=()=>$('folder-files').click();
+$('folder-files').onchange=guarded(async e=>{
+  const picked=[...e.target.files];e.target.value='';if(!picked.length)return;
+  folderName=picked[0].webkitRelativePath.split('/')[0]||'folder';folderFiles=new Map();
+  for(const file of picked){const path=file.webkitRelativePath?file.webkitRelativePath.split('/').slice(1).join('/'):file.name;if(/(?:^|\/)(?:\.git|\.copper-cache|node_modules|target)\//.test(path))continue;if(path.endsWith('.copper')||/(?:^|\/)copper\.(?:mod|lock)$/.test(path))folderFiles.set(path,file);}
+  const boards=await localBoardSources(folderFiles);
+  if(!boards.length)throw Error(`No board source in ${folderName}. Choose the folder that holds board.copper and copper.mod.`);
+  if(boards.length===1){await openLocalBoard(boards[0]);return;}
+  const list=$('folder-boards');list.replaceChildren();for(const path of boards){const option=document.createElement('option');option.value=option.textContent=path;list.append(option);}list.selectedIndex=0;$('folder-dialog').showModal();list.focus();
+});
+async function openLocalBoard(path){
+  const revision=beginOpen(),file=folderFiles.get(path),bytes=await file.arrayBuffer();
+  $('compiler-cancel').hidden=false;message(`Compiling ${folderName}/${path} with CopperScript WASM…`);
+  let prepared;
+  try{prepared=await compileLocalProject(folderFiles,path,new Uint8Array(bytes),{onProgress:text=>{if(revision===documentRevision)message(text);}});}
+  catch(error){if(revision!==documentRevision)return;$('compiler-cancel').hidden=true;throw Error(`${error.message}${state.scene||electrical.hasModel()?' Previous design remains open.':''}`);}
+  if(revision!==documentRevision)return;
+  await openDesignFile(new File([bytes],path.split('/').pop()),false,{origin:{provider:'local',folder:folderName,path},prepared,revision});
+}
+$('folder-open').onclick=guarded(async()=>{const path=$('folder-boards').value;$('folder-dialog').close();if(path)await openLocalBoard(path);});
+$('folder-boards').ondblclick=()=>$('folder-open').click();
+$('folder-close').onclick=()=>$('folder-dialog').close();
 $('open-source').onclick=()=>$('source-file').click();
 $('source-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file);});
 $('compiler-cancel').onclick=()=>{beginOpen();$('compiler-cancel').hidden=true;message('Compilation cancelled. Previous design remains open.');};

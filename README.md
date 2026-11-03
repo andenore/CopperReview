@@ -14,9 +14,14 @@ See [WASM build, static hosting and current boundaries](docs/wasm-hosting.md).
 For schematic, power hierarchy and bus/interface review before layout, open the
 JSON produced by `copper compile` with **Open electrical IR**, or run
 `python -m copper_review --electrical-ir electrical.ir.json`. It opens on a generated
-**Schematic**; all four electrical views share one side panel (selection, details, source, notes). On the
+**Schematic**; all three electrical views share one side panel (selection, details, source, notes). On the
 Schematic, double-click or press N to note the selection; notes show as numbered markers. See the
 [electrical workflow and input/feedback contracts](docs/electrical-review.md).
+**Open folder** compiles a local project folder (the one holding `board.copper` and
+`copper.mod`) in the browser with the same compiler: its sources never leave the
+computer, and only dependencies pinned in `copper.lock` are downloaded from GitHub
+and checked against the lock. A folder with several boards asks which to compile.
+Re-pick the folder after editing to recompile.
 **Compile .copper** and **Try example circuit** use the actual WASM compiler for
 self-contained source. **Open URL** compiles GitHub source projects with
 local imports and pinned library dependencies through the same Rust compiler.

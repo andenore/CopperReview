@@ -4,7 +4,7 @@
 <body>
 <header><div class="brand"><img class="logo" src="./copper-logo.svg" width="42" height="42" alt="Cu"><div><strong>CopperReview</strong><small>Inspect. Annotate. Improve.</small></div></div>
 <div class="board-heading"><strong id="board-name">Open a board to begin</strong><span id="project-origin" hidden></span><span id="board-meta">Local PCB inspection · no KiCad required</span></div>
-<div class="header-actions"><button id="open-board">Open board</button><button id="open-url">Open URL</button><button id="open-source">Compile .copper</button><button id="compiler-cancel" hidden>Cancel compilation</button><button id="open-electrical">Open electrical IR</button><button id="show-electrical" hidden>Electrical review</button><button id="load-review">Load review</button><button id="load-issues" title="CopperScript issue list: copper issues RUN --json">Load issues</button><button id="export-scene" title="Portable board geometry for sharing">Save scene</button><button id="export-review" class="primary">Export review JSON</button></div></header>
+<div class="header-actions"><button id="open-board">Open board</button><button id="open-url">Open URL</button><button id="open-folder" title="Compile a local CopperScript project folder in this browser">Open folder</button><button id="open-source">Compile .copper</button><button id="compiler-cancel" hidden>Cancel compilation</button><button id="open-electrical">Open electrical IR</button><button id="show-electrical" hidden>Electrical review</button><button id="load-review">Load review</button><button id="load-issues" title="CopperScript issue list: copper issues RUN --json">Load issues</button><button id="export-scene" title="Portable board geometry for sharing">Save scene</button><button id="export-review" class="primary">Export review JSON</button></div></header>
 <main id="pcb-review">
 <aside class="explorer"><div class="section-label">BOARD EXPLORER</div>
 <label class="field">Review stage<select id="stage"><option value="unknown">Unknown / unverified</option><option value="placed">Placed</option><option value="partially_routed">Partially routed</option><option value="fully_routed">Fully routed (declared)</option></select></label>
@@ -56,8 +56,14 @@
   <p id="project-status" role="status" aria-live="polite"></p>
   <div id="project-choices" hidden><p id="project-revision" class="quiet"></p><label class="field">Design file<select id="project-files" size="8" aria-label="Project design files"></select></label><button id="project-open" type="button" class="primary">Open selected design</button></div>
 </dialog>
+<dialog id="folder-dialog" aria-labelledby="folder-dialog-title">
+  <div class="project-dialog-heading"><h2 id="folder-dialog-title">Open local project</h2><button id="folder-close" type="button" aria-label="Close folder opener">Close</button></div>
+  <p class="quiet">The folder's source stays on this computer and compiles in your browser. Library dependencies pinned in copper.lock are downloaded from GitHub and checked against the lock.</p>
+  <label class="field">Board source<select id="folder-boards" size="8" aria-label="Board source files in the folder"></select></label>
+  <button id="folder-open" type="button" class="primary">Compile selected board</button>
+</dialog>
 <input id="board-file" type="file" accept=".kicad_pcb,.json,.copper" hidden><input id="review-file" type="file" accept=".json" hidden><input id="issues-file" type="file" accept=".json" hidden>
-<input id="source-file" type="file" accept=".copper" hidden>
+<input id="source-file" type="file" accept=".copper" hidden><input id="folder-files" type="file" webkitdirectory multiple hidden>
 <input id="electrical-file" type="file" accept=".json" hidden><input id="electrical-review-file" type="file" accept=".json" hidden>
 <script type="module" src="./app.js"></script>
 </body></html>

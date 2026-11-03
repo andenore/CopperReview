@@ -75,6 +75,20 @@ Local Python serving still supports all existing PCB workflows. Build the WASM
 assets before using its source compiler button. Packaged distributions include
 `web/wasm/*` when those assets have been built.
 
+## Open a local folder
+
+**Open folder** picks a project folder on this computer and compiles it with the
+same browser compiler and project transport as GitHub projects. Only `.copper`
+sources and `copper.mod` / `copper.lock` are read (`.git`, `.copper-cache`,
+`node_modules` and `target` are skipped); nothing from the folder is uploaded. The
+nearest `copper.mod` above the chosen board marks the project root. Dependencies
+pinned in `copper.lock` are downloaded from their GitHub commit and must match the
+lock's sizes and SHA-256 checksums; a private library needs a token under **Open
+URL → Private repository access**. When the folder holds several `.copper` files
+declaring a `board`, a chooser lists them. The browser reads a snapshot, so pick the
+folder again after editing to recompile. The review records the folder name, entry
+path, manifest and lock hashes and resolved dependency commits.
+
 ## Open from URL
 
 Use **Open URL** in the header or empty state. It accepts a GitHub repository,
