@@ -1,9 +1,0 @@
-{
-  "schema": "copper-review-occt-build/v1",
-  "package": "occt-import-js",
-  "version": "0.0.23",
-  "integrity": "sha512-RFfYQXYFX5C1mB1Aywm0ShcUKzXOr/VzTnlzhBSDJOR6YCAPt1HYCzeXWg1vwwjn/cUxwqRNhhtf1dlewoZYCQ==",
-  "license": "LGPL-2.1 (see license.*.txt)",
-  "js_sha256": "3fb44ce11d00611f9b3f3c5775d520ebab48930c1f08279b7b1316f05f0d3379",
-  "wasm_sha256": "33391fc9d94ea5c869a6718488bf0a9a464222bac9bdc764dfe1690cef281952"
-}
