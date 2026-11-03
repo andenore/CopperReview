@@ -27,17 +27,19 @@ test('rejects non-VRML and out-of-range indices', () => {
   assert.throws(()=>parseVrml('#VRML V2.0 utf8\nShape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 ] } coordIndex [ ] } }'));
 });
 
-test('only .3dshapes WRL files beside the board are fetchable', () => {
+test('only WRL and STEP files in a .3dshapes folder beside the board are fetchable', () => {
   assert.equal(resolveModelPath('${KIPRJMOD}/CopperScript.3dshapes/a.wrl'),'CopperScript.3dshapes/a.wrl');
   assert.equal(resolveModelPath('X.3dshapes/a.WRL'),'X.3dshapes/a.WRL');
-  for(const bad of ['${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R.step','${KIPRJMOD}/a.3dshapes/b.step','/etc/x.3dshapes/a.wrl','a/b/c.wrl','X.3dshapes/../a.wrl','X.3dshapes\a.wrl',null,undefined])
+  assert.equal(resolveModelPath('${KIPRJMOD}/CopperScript.3dshapes/0af1_VSSOP-8.step'),'CopperScript.3dshapes/0af1_VSSOP-8.step');
+  assert.equal(resolveModelPath('X.3dshapes/a.STP'),'X.3dshapes/a.STP');
+  for(const bad of ['${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R.step','${KIPRJMOD}/a.3dshapes/b.txt','/etc/x.3dshapes/a.wrl','a/b/c.wrl','X.3dshapes/../a.wrl','X.3dshapes\\a.wrl',null,undefined])
     assert.equal(resolveModelPath(bad),null,String(bad));
 });
 
 test('a source STEP model falls back to the generated body, flagged approximate', () => {
   const step={reference:'U1',position_mm:[0,0],side:'front',body_model:'${KIPRJMOD}/CopperScript.3dshapes/u.wrl',
     models:[{path:'${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC.step',offset_mm:[0,0,0],scale:[1,1,1],rotate_deg:[0,0,0]}]};
-  assert.deepEqual(pickModel(step),{path:'CopperScript.3dshapes/u.wrl',model:{offset_mm:[0,0,0],scale:[1,1,1],rotate_deg:[0,0,0]},approximate:true});
+  assert.deepEqual(pickModel(step),{path:'CopperScript.3dshapes/u.wrl',model:{offset_mm:[0,0,0],scale:[1,1,1],rotate_deg:[0,0,0]},approximate:true,kind:'wrl'});
   assert.equal(pickModel({reference:'X',models:[]}),null);
   assert.equal(pickModel(chip).approximate,true);
   assert.equal(pickModel({...chip,body_model:undefined}).approximate,false);

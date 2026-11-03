@@ -1,7 +1,8 @@
 /* 3D bodies: VRML parsing, model choice and placement. Pure, so Node tests it.
    World frame: millimetres, x right, y up the page (board y negated), z up from the top copper face.
    Board slab is thickness below z=0; back-side parts hang below it. */
-export const WRL_UNIT_MM = 2.54; // KiCad reads one VRML unit as 0.1 inch.
+export const WRL_UNIT_MM = 2.54; // KiCad reads one VRML unit as 0.1 inch. STEP bodies are already millimetres.
+export const MAX_TRIANGLES = 3e6;
 export const DEFAULT_THICKNESS_MM = 1.6;
 const SIZE_LIMIT = 20e6;
 
@@ -31,27 +32,75 @@ export function parseVrml(text) {
     }
     result.push({name:part.name,color:part.color,points:Float32Array.from(part.points),triangles:Uint32Array.from(triangles)});
   }
-  return {parts:result,unsupported};
+  return {parts:result,unsupported,unit:WRL_UNIT_MM};
 }
 
-/** `${KIPRJMOD}/Dir.3dshapes/file.wrl` (or already relative) to `Dir.3dshapes/file.wrl`; null if the viewer cannot fetch it. */
+/** A STEP file read by occt-import-js (see step-worker.js) as a body in millimetres. Faces with their own
+    colour become separate parts; the rest take the mesh colour. */
+export function occtToBody(result) {
+  const parts=[];let triangles=0;
+  for(const mesh of result?.meshes||[]){
+    const {position:points,index}=mesh,count=points.length/3;
+    if(points.length%3||index.length%3)throw new Error('STEP mesh is not made of triangles');
+    for(let i=0;i<index.length;i++)if(!(index[i]<count))throw new Error('STEP mesh index out of range');
+    const base=Array.isArray(mesh.color)&&mesh.color.length===3?mesh.color:[.72,.72,.74];
+    const faces=(mesh.faces||[]).filter(f=>Number.isInteger(f.first)&&Number.isInteger(f.last)&&f.first>=0&&f.last*3+2<index.length);
+    triangles+=index.length/3;
+    if(triangles>MAX_TRIANGLES)throw new Error('STEP model is too detailed to draw');
+    if(faces.some(f=>f.color)){
+      const groups=new Map();
+      for(const f of faces){
+        const color=f.color||base,key=color.join(',');
+        if(!groups.has(key))groups.set(key,{color,ranges:[]});
+        groups.get(key).ranges.push([f.first,f.last]);
+      }
+      for(const group of groups.values()){
+        let n=0;for(const [a,b] of group.ranges)n+=Math.max(0,b-a+1);
+        const picked=new Uint32Array(n*3);let o=0;
+        for(const [a,b] of group.ranges)for(let t=a;t<=b;t++){picked[o++]=index[t*3];picked[o++]=index[t*3+1];picked[o++]=index[t*3+2];}
+        parts.push({name:mesh.name||'',color:group.color,points,triangles:picked});
+      }
+    }else parts.push({name:mesh.name||'',color:base,points,triangles:index});
+  }
+  return {parts,unsupported:false,unit:1};
+}
+
+/** `wrl` or `step` for a model path, else null. */
+export function modelKind(path) {
+  const extension=String(path).toLowerCase().split('.').pop();
+  return extension==='wrl'?'wrl':extension==='step'||extension==='stp'?'step':null;
+}
+
+/** `${KIPRJMOD}/Dir.3dshapes/file.wrl|step` (or already relative) to `Dir.3dshapes/file.ext`; null if the viewer cannot fetch it. */
 export function resolveModelPath(path) {
   if(typeof path!=='string')return null;
   const relative=path.startsWith('${KIPRJMOD}/')?path.slice('${KIPRJMOD}/'.length):path;
   const parts=relative.split('/');
-  if(parts.length!==2||!parts[0].endsWith('.3dshapes')||!parts[1].toLowerCase().endsWith('.wrl')||parts.includes('..')||relative.includes('\\'))return null;
+  if(parts.length!==2||!parts[0].endsWith('.3dshapes')||!modelKind(parts[1])||parts.includes('..')||relative.includes('\\'))return null;
   return relative;
 }
 
-/** The model to draw for a component: its first fetchable WRL, else its generated body. */
-export function pickModel(component) {
-  const body=resolveModelPath(component.body_model);
+const IDENTITY_MODEL={offset_mm:[0,0,0],scale:[1,1,1],rotate_deg:[0,0,0]};
+
+/** Where a component's body may come from, best first: its own models in file order, then the generated body. */
+export function candidates(component) {
+  const body=resolveModelPath(component.body_model),found=[];
   for(const model of component.models||[]){
     const path=resolveModelPath(model.path);
-    if(path)return {path,model,approximate:path===body};
+    if(path&&!found.some(c=>c.path===path))found.push({path,model,approximate:path===body,kind:modelKind(path)});
   }
-  if(body)return {path:body,model:{offset_mm:[0,0,0],scale:[1,1,1],rotate_deg:[0,0,0]},approximate:true};
-  return null;
+  if(body&&!found.some(c=>c.path===body))found.push({path:body,model:IDENTITY_MODEL,approximate:true,kind:modelKind(body)});
+  return found;
+}
+
+/** The first candidate: the model to draw when everything can be fetched. */
+export function pickModel(component) {
+  return candidates(component)[0]||null;
+}
+
+/** The first candidate whose body is available, or null. */
+export function chosen(component, bodies) {
+  return candidates(component).find(c=>bodies.has(c.path))||null;
 }
 
 const mul3=(a,b)=>{const r=new Array(9).fill(0);for(let i=0;i<3;i++)for(let j=0;j<3;j++)for(let k=0;k<3;k++)r[i*3+j]+=a[i*3+k]*b[k*3+j];return r;};
@@ -99,13 +148,13 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
   for(let i=0;i<4;i++){const j=(i+1)%4;quad(bottom[i],bottom[j],top[j],top[i],[.07,.22,.15]);}
   let drawn=0,approximate=0;
   for(const component of scene.components){
-    const choice=pickModel(component),served=choice&&bodies.get(choice.path),key=bodyInputKey(component);
+    const choice=chosen(component,bodies),served=choice&&bodies.get(choice.path),key=bodyInputKey(component);
     const generated=!served&&key&&bodies.get('input:'+key);
     const body=served||generated;
     if(!body)continue;
     // A file model follows KiCad's conventions. A body generated from the footprint's own frame is already
     // in millimetres and, for back parts, already mirrored like the file's pads.
-    const place=served?placement(component,choice.model,thickness):placement(component,{},thickness,{unit:1,mirror:false}),start=positions.length/3;
+    const place=served?placement(component,choice.model,thickness,{unit:served.unit??WRL_UNIT_MM}):placement(component,{},thickness,{unit:1,mirror:false}),start=positions.length/3;
     for(const part of body.parts){
       const p=i=>place([part.points[i*3],part.points[i*3+1],part.points[i*3+2]]);
       for(let t=0;t<part.triangles.length;t+=3)triangle(p(part.triangles[t]),p(part.triangles[t+1]),p(part.triangles[t+2]),part.color);
@@ -121,15 +170,15 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
 
 /** Model paths to fetch for a scene, once each. */
 export function modelPaths(scene) {
-  return [...new Set(scene.components.map(c=>pickModel(c)?.path).filter(Boolean))].sort();
+  return [...new Set(scene.components.flatMap(c=>candidates(c).map(x=>x.path)))].sort();
 }
 
-/** Bodies for a scene: served WRL files first, then CopperScript-generated ones for every component without one.
+/** Bodies for a scene: each component's own WRL or STEP model first, then CopperScript-generated ones for every component without one.
     `fetchBody(path)` gives a parsed body or null; `generate(requests)` gives `{wrl}|{error}` per request. */
 export async function loadBodies(scene, {fetchBody,generate}) {
   const bodies=new Map();
   await Promise.all(modelPaths(scene).map(async path=>{try{const body=await fetchBody(path);if(body)bodies.set(path,body);}catch{}}));
-  const needed=[...new Set(scene.components.filter(c=>{const choice=pickModel(c);return !(choice&&bodies.has(choice.path));}).map(bodyInputKey).filter(Boolean))];
+  const needed=[...new Set(scene.components.filter(c=>!chosen(c,bodies)).map(bodyInputKey).filter(Boolean))];
   if(needed.length&&generate){
     const results=await generate(needed);
     results.forEach((result,i)=>{if(result?.wrl){try{bodies.set('input:'+needed[i],parseVrml(result.wrl));}catch{}}});
