@@ -2,6 +2,7 @@ import json
 import hashlib
 import threading
 import unittest
+from pathlib import Path
 from http.server import ThreadingHTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -32,6 +33,16 @@ class ServerTests(unittest.TestCase):
             with self.request(path) as response:
                 self.assertEqual(response.headers['Content-Type'], 'text/javascript; charset=utf-8')
                 self.assertIn(symbol,response.read())
+        # Every module the page imports is served (a missing one leaves every button dead).
+        web = Path(__file__).resolve().parents[1] / 'copper_review' / 'web'
+        for script in sorted(web.glob('*.js')):
+            with self.request('/' + script.name) as response:
+                self.assertEqual(response.headers['Content-Type'], 'text/javascript; charset=utf-8')
+                self.assertEqual(response.read(), script.read_bytes())
+        for blocked in ['/web/app.js', '/wasm/../app.js', '/%2e%2e/pyproject.toml', '/.hidden.js', '/demo.json']:
+            with self.assertRaises(HTTPError) as ctx:
+                self.request(blocked)
+            self.assertEqual(ctx.exception.code, 404, blocked)
         with self.request('/copper-logo.svg') as response:
             self.assertEqual(response.headers['Content-Type'], 'image/svg+xml')
             self.assertIn(b'Copper Cu mark', response.read())

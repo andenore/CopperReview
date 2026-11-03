@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -15,6 +16,27 @@ from .electrical import import_electrical
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 50 * 1024 * 1024
+# Every web asset of these types is served, so a new module cannot be left out.
+STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+                ".svg": "image/svg+xml", ".copper": "text/plain; charset=utf-8",
+                ".wasm": "application/wasm", ".json": "application/json"}
+
+
+def static_asset(path):
+    """Map a request path to (file, type) under web/ or web/wasm/, or None."""
+    if path == "/":
+        return "index.html", "text/html; charset=utf-8"
+    name = path[1:]
+    parts = name.split("/")
+    if len(parts) > 2 or (len(parts) == 2 and parts[0] != "wasm"):
+        return None
+    if not all(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", part) for part in parts):
+        return None
+    suffix = Path(name).suffix
+    if suffix == ".json" and parts[0] != "wasm":
+        return None
+    mime = STATIC_TYPES.get(suffix)
+    return (name, mime) if mime else None
 
 
 def source_identity(path):
@@ -61,27 +83,11 @@ def make_handler(initial_scene, token):
             if path == "/api/scene":
                 self.send(200, type(self).scene)
                 return
-            files = {"/": ("index.html", "text/html; charset=utf-8"),
-                     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-                     "/compiler.js": ("compiler.js", "text/javascript; charset=utf-8"),
-                     "/documents.js": ("documents.js", "text/javascript; charset=utf-8"),
-                     "/projects.js": ("projects.js", "text/javascript; charset=utf-8"),
-                     "/project-compiler.js": ("project-compiler.js", "text/javascript; charset=utf-8"),
-                     "/compiler-worker.js": ("compiler-worker.js", "text/javascript; charset=utf-8"),
-                     "/example.copper": ("example.copper", "text/plain; charset=utf-8"),
-                     "/wasm/copper_web.js": ("wasm/copper_web.js", "text/javascript; charset=utf-8"),
-                     "/wasm/copper_web_bg.wasm": ("wasm/copper_web_bg.wasm", "application/wasm"),
-                     "/wasm/manifest.json": ("wasm/manifest.json", "application/json"),
-                     "/core.js": ("core.js", "text/javascript; charset=utf-8"),
-                     "/style.css": ("style.css", "text/css; charset=utf-8"),
-                     "/topology.js": ("topology.js", "text/javascript; charset=utf-8"),
-                     "/electrical.js": ("electrical.js", "text/javascript; charset=utf-8"),
-                     "/electrical-model.js": ("electrical-model.js", "text/javascript; charset=utf-8"),
-                     "/copper-logo.svg": ("copper-logo.svg", "image/svg+xml")}
-            if path not in files:
+            asset = static_asset(path)
+            if not asset or not ((WEB / asset[0]).is_file() or asset[0].startswith("wasm/")):
                 self.send(404, {"error": "Not found"})
                 return
-            name, mime = files[path]
+            name, mime = asset
             if not (WEB / name).is_file():
                 self.send(404, {"error": "Asset unavailable; build WASM assets before compiling source"})
                 return
