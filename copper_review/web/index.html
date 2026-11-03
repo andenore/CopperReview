@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CopperReview · PCB feedback</title><link rel="icon" href="./copper-logo.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"></head>
+<head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CopperReview · PCB feedback</title><link rel="icon" href="./copper-logo.svg" type="image/svg+xml"><script src="./theme.js"></script><link rel="stylesheet" href="./style.css"></head>
 <body>
 <header class="topbar"><div class="brand"><img class="logo" src="./copper-logo.svg" width="26" height="26" alt=""><strong>CopperReview</strong></div>
 <div class="board-heading"><strong id="board-name">Open a design to begin</strong><span id="project-origin" hidden></span><span id="board-meta"></span></div>
@@ -22,7 +22,7 @@
 <div class="menu"><button id="more-menu" aria-haspopup="menu" aria-expanded="false" aria-label="More">⋯</button>
 <div id="more-list" class="menu-list" role="menu" hidden>
 <button id="show-compiler-result" role="menuitem" hidden>Compiler check</button>
-<button id="show-github-access" role="menuitem">Private GitHub access…</button>
+<button id="theme-toggle" role="menuitemcheckbox" aria-checked="false">Dark mode</button><button id="show-github-access" role="menuitem">Private GitHub access…</button>
 <button id="show-about" role="menuitem">About and limits</button></div></div>
 </div></header>
 <div id="workspace" class="workspace">

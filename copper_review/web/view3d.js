@@ -22,7 +22,14 @@ export function cameraEye({target,distance,yaw,pitch}) {
   return [target[0]+distance*Math.cos(pitch)*Math.sin(yaw),target[1]-distance*Math.cos(pitch)*Math.cos(yaw),target[2]+distance*Math.sin(pitch)];
 }
 
+/** The page's --board-bg colour as GL components, so the 3D view follows the light or dark theme. */
+function backgroundOf(element) {
+  const hex=getComputedStyle(element).getPropertyValue('--board-bg').trim().match(/^#([0-9a-f]{6})/i)?.[1];
+  return hex?[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255):[.063,.086,.098];
+}
+
 export function createView3d(canvas) {
+  const background=()=>backgroundOf(canvas);
   const gl=canvas.getContext('webgl',{antialias:true});
   if(!gl)return null;
   const program=gl.createProgram();
@@ -44,7 +51,7 @@ export function createView3d(canvas) {
     frame=0;
     const width=Math.max(1,Math.floor(canvas.clientWidth*devicePixelRatio)),height=Math.max(1,Math.floor(canvas.clientHeight*devicePixelRatio));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
-    gl.viewport(0,0,width,height);gl.clearColor(.063,.086,.098,1);gl.enable(gl.DEPTH_TEST);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.viewport(0,0,width,height);gl.clearColor(...background(),1);gl.enable(gl.DEPTH_TEST);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     if(!count)return;
     gl.uniformMatrix4fv(viewProjection,false,view());gl.drawArrays(gl.TRIANGLES,0,count);
   }

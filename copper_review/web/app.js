@@ -218,8 +218,25 @@ $('folder-close').onclick=()=>$('folder-dialog').close();
 $('compiler-cancel').onclick=()=>{beginOpen();$('compiler-cancel').hidden=true;message('Compilation cancelled. Previous design remains open.');};
 $('empty-example').onclick=()=>$('compiler-example').click();
 $('compiler-example').onclick=guarded(async()=>{const response=await fetch(new URL('./example.copper',import.meta.url));if(!response.ok)throw Error('Example is unavailable.');await openDesignFile(new File([await response.arrayBuffer()],'example.copper'));});
-const palette=['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'];
-const copperColor = layer => palette[Math.max(0,state.scene.board.layers.indexOf(layer))%palette.length];
+// Board colours per theme. The canvas cannot read the stylesheet, so they sit here beside its tokens.
+const BOARD_COLORS={
+  dark:{layers:['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'],board:'#0d171b',padText:'#2a2721',focus:'#fff0b6',label:'#c1d0d5',
+    cited:'#ffd27a',issue:'#ff7a7a',grid:'#26353d',edge:'#9abfba',keepout:'#d486ac',graphic:'#779099',courtyard:'#8c829c',fab:'#a7b8bd',padless:'#27363b',
+    outline:'#ffe9a6',via:'#bba5d7',guideFocus:'#c6fff0',guide:'#6e9eab',regionDone:'#526662',region:'#c19562',selectFill:'#82d5c019',selectLine:'#84d4c0'},
+  light:{layers:['#c4502f','#2f6fb8','#8350bd','#23885e','#9c7c12','#178892'],board:'#eef1ec',padText:'#ffffff',focus:'#e07b00',label:'#2c393e',
+    cited:'#b07d00',issue:'#cc3a3a',grid:'#d9dfdb',edge:'#3f5e59',keepout:'#ad3f78',graphic:'#7c8f95',courtyard:'#8577a3',fab:'#62757b',padless:'#c3ccd0',
+    outline:'#c46d00',via:'#6f55a0',guideFocus:'#0f7c66',guide:'#7fa3ac',regionDone:'#9aaba7',region:'#b06b2c',selectFill:'#16806a1f',selectLine:'#16806a'}};
+const darkTheme=()=>document.documentElement.dataset.theme==='dark';
+let colors=BOARD_COLORS[darkTheme()?'dark':'light'];
+function setTheme(dark){
+  document.documentElement.dataset.theme=dark?'dark':'light';colors=BOARD_COLORS[dark?'dark':'light'];
+  $('theme-toggle').setAttribute('aria-checked',String(dark));
+  try{localStorage.setItem('copper-review:theme',dark?'dark':'light');}catch{}
+  requestDraw();view3d?.draw();
+}
+$('theme-toggle').setAttribute('aria-checked',String(darkTheme()));
+$('theme-toggle').onclick=()=>setTheme(!darkTheme());
+const copperColor = layer => colors.layers[Math.max(0,state.scene.board.layers.indexOf(layer))%colors.layers.length];
 const visible = layers => layers.some(l=>state.layers.includes(l));
 let messageTimer,frame;
 function message(text,error=false) {
@@ -300,7 +317,7 @@ function drawPadLabel(component,pad,selected) {
   const [x,y]=pad.position_mm,small=Math.min(...pad.size_mm)*state.zoom;
   const hovered=pad.id===state.hoverPad,expanded=hovered || selected || isNetFocused(pad.net);
   ctx.save();ctx.globalAlpha=opacity(pad.net,selected && !state.hoverNet);ctx.textBaseline='middle';ctx.setLineDash([]);
-  if(small>=14){ctx.font=`${Math.min(11,small*.45)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle='#2a2721';ctx.textAlign='center';ctx.fillText(pad.number,x,y);}
+  if(small>=14){ctx.font=`${Math.min(11,small*.45)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle=colors.padText;ctx.textAlign='center';ctx.fillText(pad.number,x,y);}
   // Names stay upright and sit outside the pad. Small pads reveal them on hover
   // or component/net focus; overview labels wait until there is readable space.
   if(!(pad.pin_name || pad.net) || (!expanded && (small<8 || Math.max(...pad.size_mm)*state.zoom<24)) || (expanded && !hovered && small<5)){ctx.restore();return;}
@@ -311,8 +328,8 @@ function drawPadLabel(component,pad,selected) {
   ctx.font=`${10/state.zoom}px ui-monospace,Consolas,monospace`;
   if(Math.abs(dx)>=Math.abs(dy)){ctx.textAlign=dx<0?'right':'left';tx=dx<0?Math.min(...xs)-gap:Math.max(...xs)+gap;}
   else {ctx.textAlign='center';ty=dy<0?Math.min(...ys)-gap-5/state.zoom:Math.max(...ys)+gap+5/state.zoom;}
-  const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle='#0d171b';ctx.strokeText(label,tx,ty);
-  ctx.fillStyle=expanded?'#fff0b6':'#c1d0d5';ctx.fillText(label,tx,ty);ctx.restore();
+  const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle=colors.board;ctx.strokeText(label,tx,ty);
+  ctx.fillStyle=expanded?colors.focus:colors.label;ctx.fillText(label,tx,ty);ctx.restore();
 }
 // Reference labels never overlap: selected parts first, then larger bodies; the rest
 // wait until zooming in gives them room (the status bar counts them).
@@ -327,7 +344,7 @@ function drawReferenceLabels(items) {
     const box=[sx-w/2-2,sy-13,sx+w/2+2,sy+1];
     if(box[2]<0 || box[0]>state.width || box[3]<0 || box[1]>state.height)continue;
     if(!selected && placed.some(b=>boxesOverlap(b,box))){hidden++;continue;}
-    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?'#fff0b6':'#c1d0d5';ctx.fillText(c.reference,x,y);
+    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?colors.focus:colors.label;ctx.fillText(c.reference,x,y);
   }
   state.hiddenLabels=hidden;canvas.dataset.hiddenLabels=String(hidden);canvas.dataset.shownLabels=String(placed.length);
 }
@@ -336,7 +353,7 @@ function drawIssues() {
   ctx.setLineDash([6/state.zoom,3/state.zoom]);ctx.lineWidth=1.4/state.zoom;ctx.font=`${11/state.zoom}px ui-monospace,Consolas,monospace`;
   ctx.textAlign='left';ctx.textBaseline='bottom';
   for(const issue of state.issues.issues){if(!issue.window_mm)continue;const b=issue.window_mm,cited=citedIssueIds().includes(issue.id);
-    ctx.globalAlpha=cited?1:.75;ctx.strokeStyle=cited?'#ffd27a':'#ff7a7a';ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);
+    ctx.globalAlpha=cited?1:.75;ctx.strokeStyle=cited?colors.cited:colors.issue;ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);
     ctx.fillStyle=ctx.strokeStyle;ctx.fillText(issue.id,b[0],b[1]-2/state.zoom);}
   ctx.setLineDash([]);ctx.globalAlpha=1;
 }
@@ -346,17 +363,17 @@ function draw() {
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.globalAlpha=1;ctx.clearRect(0,0,state.width,state.height);
   // Screen-space grid uses engineering increments, avoiding dense dots at low zoom.
   const spacing=[.1,.25,.5,1,2,5,10,20,50,100,1000].find(n=>n*state.zoom>=20) || 1000;
-  const step=spacing*state.zoom;ctx.fillStyle='#26353d';
+  const step=spacing*state.zoom;ctx.fillStyle=colors.grid;
   if(step>0)for(let x=((state.offset[0]%step)+step)%step;x<state.width;x+=step)
     for(let y=((state.offset[1]%step)+step)%step;y<state.height;y+=step)ctx.fillRect(x,y,1,1);
   if(!state.scene)return;
   const scene=state.scene,padLabels=[],referenceLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
   // Edge geometry (including inner cutouts) remains visible at all layer settings.
-  for(const g of scene.drawings.filter(g=>g.layer==='Edge.Cuts')){ctx.globalAlpha=1;graphic(g,'#9abfba');}
+  for(const g of scene.drawings.filter(g=>g.layer==='Edge.Cuts')){ctx.globalAlpha=1;graphic(g,colors.edge);}
   if($('show-zones').checked)for(const z of scene.zones) {
     if(!visible(z.layers) || !renderNet(z.net))continue;
     path(z.points_mm,true);ctx.lineWidth=1/state.zoom;
-    ctx.strokeStyle=z.kind==='keepout'?'#d486ac':isNetFocused(z.net)?'#fff0b6':copperColor(z.layers.find(l=>state.layers.includes(l)));
+    ctx.strokeStyle=z.kind==='keepout'?colors.keepout:isNetFocused(z.net)?colors.focus:copperColor(z.layers.find(l=>state.layers.includes(l)));
     ctx.fillStyle=ctx.strokeStyle;
     const actual=['fill','copper'].includes(z.kind);
     ctx.globalAlpha=opacity(z.net)*(actual?(isNetFocused(z.net)?.24:.095):.55);
@@ -369,21 +386,21 @@ function draw() {
   ctx.setLineDash([]);
   for(const t of state.trackCopper) {
     if(!state.layers.includes(t.layer) || !renderNet(t.net))continue;
-    ctx.globalAlpha=opacity(t.net);ctx.fillStyle=isNetFocused(t.net)?'#fff0b6':copperColor(t.layer);
+    ctx.globalAlpha=opacity(t.net);ctx.fillStyle=isNetFocused(t.net)?colors.focus:copperColor(t.layer);
     ctx.fill(t.path,'nonzero');
   }
   ctx.lineCap='round';ctx.lineJoin='round';
   for(const g of scene.drawings.filter(g=>g.layer!=='Edge.Cuts')) {
     const copper=g.layer.endsWith('.Cu');
     if(copper?!state.layers.includes(g.layer):g.layer.startsWith('B.')?!state.layers.includes('B.Cu'):g.layer.startsWith('F.')?!state.layers.includes('F.Cu'):false)continue;
-    ctx.globalAlpha=copper?.6:.35;graphic(g,copper?copperColor(g.layer):'#779099');
+    ctx.globalAlpha=copper?.6:.35;graphic(g,copper?copperColor(g.layer):colors.graphic);
   }
   for(const c of scene.components) {
     const selected=state.selection.components.includes(c.reference);
     const cVisible=state.layers.includes(c.side==='back'?'B.Cu':'F.Cu');
     if(cVisible)for(const g of c.graphics) {
       ctx.globalAlpha=selected?1:.4;
-      graphic(g,selected?'#fff0b6':g.layer.endsWith('CrtYd')?'#8c829c':'#a7b8bd');
+      graphic(g,selected?colors.focus:g.layer.endsWith('CrtYd')?colors.courtyard:colors.fab);
     }
     for(const p of c.pads) {
       if(!p.layers.length && !cVisible)continue;
@@ -391,36 +408,36 @@ function draw() {
       ctx.save();ctx.translate(...p.position_mm);ctx.rotate(-p.rotation_deg*Math.PI/180);
       const padSelected=selected && !state.hoverNet;
       ctx.globalAlpha=opacity(p.net,padSelected);padPath(p);
-      ctx.fillStyle=padSelected || isNetFocused(p.net)?'#fff0b6':p.layers.length?copperColor(p.layers.find(l=>state.layers.includes(l))):'#27363b';
+      ctx.fillStyle=padSelected || isNetFocused(p.net)?colors.focus:p.layers.length?copperColor(p.layers.find(l=>state.layers.includes(l))):colors.padless;
       ctx.fill();
-      if(p.drill_mm.length){ctx.beginPath();ctx.ellipse(0,0,p.drill_mm[0]/2,p.drill_mm[1]/2,0,0,Math.PI*2);ctx.fillStyle='#0d171b';ctx.fill();}
+      if(p.drill_mm.length){ctx.beginPath();ctx.ellipse(0,0,p.drill_mm[0]/2,p.drill_mm[1]/2,0,0,Math.PI*2);ctx.fillStyle=colors.board;ctx.fill();}
       ctx.restore();
       padLabels.push([c,p,selected]);
     }
-    if(selected){ctx.globalAlpha=1;ctx.strokeStyle='#ffe9a6';ctx.lineWidth=1.6/state.zoom;ctx.setLineDash([5/state.zoom,3/state.zoom]);
+    if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=1.6/state.zoom;ctx.setLineDash([5/state.zoom,3/state.zoom]);
       const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
     if($('show-labels').checked && cVisible)referenceLabels.push([c,selected]);
   }
   drawReferenceLabels(referenceLabels);
   for(const v of scene.vias) {
     if(!visible(v.layers) || !renderNet(v.net))continue;
-    ctx.globalAlpha=opacity(v.net);ctx.fillStyle=isNetFocused(v.net)?'#fff0b6':'#bba5d7';
+    ctx.globalAlpha=opacity(v.net);ctx.fillStyle=isNetFocused(v.net)?colors.focus:colors.via;
     ctx.beginPath();ctx.arc(...v.position_mm,v.size_mm/2,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#0d171b';ctx.beginPath();ctx.arc(...v.position_mm,v.drill_mm/2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=colors.board;ctx.beginPath();ctx.arc(...v.position_mm,v.drill_mm/2,0,Math.PI*2);ctx.fill();
   }
   if($('show-guides').checked){
     ctx.lineWidth=.8/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);
     for(const n of scene.nets){if(!renderNet(n.name))continue;const pads=n.pads.filter(p=>visible(p.layers));if(pads.length<2)continue;
-      ctx.globalAlpha=isNetFocused(n.name)?.9:.25;ctx.strokeStyle=isNetFocused(n.name)?'#c6fff0':'#6e9eab';
+      ctx.globalAlpha=isNetFocused(n.name)?.9:.25;ctx.strokeStyle=isNetFocused(n.name)?colors.guideFocus:colors.guide;
       // Logical membership guides only: a stable chain, deliberately no open-net count.
       for(let i=1;i<pads.length;i++){path([pads[i-1].position_mm,pads[i].position_mm]);ctx.stroke();}
     }ctx.setLineDash([]);
   }
   for(const args of padLabels)drawPadLabel(...args);
   ctx.globalAlpha=1;drawIssues();
-  for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?'#526662':'#c19562';ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
+  for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?colors.regionDone:colors.region;ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
-  if(state.selection.region){const b=state.selection.region;ctx.fillStyle='#82d5c019';ctx.strokeStyle='#84d4c0';ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
+  if(state.selection.region){const b=state.selection.region;ctx.fillStyle=colors.selectFill;ctx.strokeStyle=colors.selectLine;ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
 function hit(point,forHover=false) {

@@ -35,7 +35,8 @@ HTTPS design files; private repositories need a fine-grained token with Contents
 Read-only (⋯ → **Private GitHub access**), kept in the tab and sent only to
 `api.github.com`. See [URL loading and provenance](docs/wasm-hosting.md#open-from-url).
 **Export** writes the layout review, the electrical review or the board scene; ⋯
-holds the compiler check and the review limits.
+holds the compiler check, the review limits and **Dark mode** (the page is light by
+default; the choice is remembered in this browser).
 
 This is a **separate Git project**. Its static browser build reuses CopperScript's
 Rust compiler, ERC and queries through a bundled WebAssembly worker. No native
