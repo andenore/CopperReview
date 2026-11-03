@@ -159,6 +159,47 @@
           "filled": false
         }
       ],
+      "body_input": {
+        "name": "Demo:Controller",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -3.2,
+            "y_mm": -2.0,
+            "w_mm": 1.4,
+            "h_mm": 0.7,
+            "rotation_deg": 0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": -3.2,
+            "y_mm": 0.0,
+            "w_mm": 1.4,
+            "h_mm": 0.7,
+            "rotation_deg": 0,
+            "kind": "smd"
+          },
+          {
+            "number": "3",
+            "x_mm": 3.2,
+            "y_mm": -1.0,
+            "w_mm": 1.4,
+            "h_mm": 0.7,
+            "rotation_deg": 0,
+            "kind": "smd"
+          },
+          {
+            "number": "4",
+            "x_mm": 3.2,
+            "y_mm": 1.0,
+            "w_mm": 1.4,
+            "h_mm": 0.7,
+            "rotation_deg": 0,
+            "kind": "smd"
+          }
+        ]
+      },
       "bounds_mm": [
         16.1,
         14.0,
@@ -298,6 +339,47 @@
           "filled": false
         }
       ],
+      "body_input": {
+        "name": "Demo:Sensor",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -2.0,
+            "y_mm": -1.0,
+            "w_mm": 1.2,
+            "h_mm": 0.8,
+            "rotation_deg": 0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": -2.0,
+            "y_mm": 1.0,
+            "w_mm": 1.2,
+            "h_mm": 0.8,
+            "rotation_deg": 0,
+            "kind": "smd"
+          },
+          {
+            "number": "3",
+            "x_mm": 2.0,
+            "y_mm": -1.0,
+            "w_mm": 1.2,
+            "h_mm": 0.8,
+            "rotation_deg": 0,
+            "kind": "smd"
+          },
+          {
+            "number": "4",
+            "x_mm": 2.0,
+            "y_mm": 1.0,
+            "w_mm": 1.2,
+            "h_mm": 0.8,
+            "rotation_deg": 0,
+            "kind": "smd"
+          }
+        ]
+      },
       "bounds_mm": [
         33.4,
         15.0,
@@ -393,6 +475,29 @@
           "filled": false
         }
       ],
+      "body_input": {
+        "name": "Demo:Capacitor",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 0.9,
+            "h_mm": 0.8,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 0.9,
+            "h_mm": 0.8,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
       "bounds_mm": [
         12.5,
         11.55,
@@ -496,6 +601,37 @@
           "filled": false
         }
       ],
+      "body_input": {
+        "name": "Demo:Connector",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": 0.0,
+            "y_mm": -1.27,
+            "w_mm": 2.0,
+            "h_mm": 2.0,
+            "rotation_deg": 0,
+            "kind": "thru_hole",
+            "drill_mm": [
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "number": "2",
+            "x_mm": 0.0,
+            "y_mm": 1.27,
+            "w_mm": 2.0,
+            "h_mm": 2.0,
+            "rotation_deg": 0,
+            "kind": "thru_hole",
+            "drill_mm": [
+              1.0,
+              1.0
+            ]
+          }
+        ]
+      },
       "bounds_mm": [
         5.0,
         21.0,

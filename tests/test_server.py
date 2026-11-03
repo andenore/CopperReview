@@ -24,6 +24,14 @@ class ServerTests(unittest.TestCase):
         data=json.dumps(body).encode() if body is not None else None
         return urlopen(Request(self.url+path,data=data,headers=headers))
 
+    def test_step_reader_assets_are_served_only_from_their_own_folder(self):
+        from copper_review.__main__ import static_asset
+        self.assertEqual(static_asset('/occt/occt-import-js.wasm'), ('occt/occt-import-js.wasm', 'application/wasm'))
+        self.assertEqual(static_asset('/occt/license.occt.txt')[1], 'text/plain; charset=utf-8')
+        self.assertEqual(static_asset('/occt/manifest.json')[1], 'application/json')
+        for blocked in ['/license.txt', '/manifest.json', '/occt/../app.js', '/other/x.js', '/occt/sub/x.js']:
+            self.assertIsNone(static_asset(blocked), blocked)
+
     def test_static_and_token_access(self):
         with self.request('/') as response:
             self.assertIn(b'CopperReview',response.read())
@@ -137,3 +145,25 @@ class ProjectServerTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as ctx:
             self.get("/api/project", Host="192.168.1.90:8791", Origin="https://example.com")
         self.assertEqual(ctx.exception.code, 403)
+
+
+class BoardAssetTests(unittest.TestCase):
+    def test_only_wrl_and_step_models_in_a_3dshapes_folder_beside_the_board_are_served(self):
+        import tempfile
+        from copper_review.__main__ import board_asset
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Board.3dshapes").mkdir()
+            (root / "Board.3dshapes" / "a.wrl").write_bytes(b"#VRML V2.0 utf8\n")
+            (root / "Board.3dshapes" / "a.step").write_bytes(b"step")
+            (root / "secret.wrl").write_bytes(b"no")
+            (root / "plain").mkdir()
+            (root / "plain" / "a.wrl").write_bytes(b"no")
+            self.assertEqual(board_asset(root, "Board.3dshapes/a.wrl"), b"#VRML V2.0 utf8\n")
+            for name in ["Board.3dshapes/a.txt", "Board.3dshapes/a.step.bak", "secret.wrl", "plain/a.wrl", "Board.3dshapes/missing.wrl", "../x.3dshapes/a.wrl",
+                         "Board.3dshapes/../secret.wrl", "/Board.3dshapes/a.wrl", "Board.3dshapes\\a.wrl", "", "a/b/c.wrl"]:
+                self.assertIsNone(board_asset(root, name), name)
+            self.assertEqual(board_asset(root, "Board.3dshapes/a.step"), b"step")
+            (root / "Board.3dshapes" / "b.STP").write_bytes(b"stp")
+            self.assertEqual(board_asset(root, "Board.3dshapes/b.STP"), b"stp")
+            self.assertIsNone(board_asset(None, "Board.3dshapes/a.wrl"))

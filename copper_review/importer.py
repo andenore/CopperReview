@@ -72,6 +72,49 @@ def xy(node, name):
     return [number(item[1]), number(item[2])]
 
 
+def xyz(node, name, default):
+    group = first(node, name)
+    item = first(group, "xyz") if group else None
+    if not item or len(item) < 4:
+        return list(default)
+    return [number(item[1]), number(item[2]), number(item[3])]
+
+
+def footprint_models(fp, props):
+    """3D model references as written; files are resolved by the viewer, never read here."""
+    models = [{"path": m[1], "offset_mm": xyz(m, "offset", (0, 0, 0)), "scale": xyz(m, "scale", (1, 1, 1)),
+               "rotate_deg": xyz(m, "rotate", (0, 0, 0))}
+              for m in children(fp, "model") if len(m) > 1 and isinstance(m[1], str)]
+    body = props.get("CopperScriptBody")
+    return models, body if isinstance(body, str) and body else None
+
+
+BODY_LAYERS = {"F.Fab": "fab_mm", "B.Fab": "fab_mm", "F.CrtYd": "courtyard_mm", "B.CrtYd": "courtyard_mm"}
+BODY_PAD_KINDS = {"smd": "smd", "connect": "smd", "thru_hole": "thru_hole", "np_thru_hole": "np_thru_hole"}
+
+
+def body_input(fp, props, angle, pads):
+    """One footprint in its own file frame, for CopperScript's generated 3D body (see 3d-models.md there)."""
+    result = {"name": fp[1], "pads": pads}
+    points = {}
+    for g in fp:
+        if isinstance(g, list) and g and g[0] in {"fp_line", "fp_rect", "fp_poly", "fp_arc", "fp_circle"}:
+            drawn = graphic(g)
+            key = BODY_LAYERS.get(drawn["layer"]) if drawn else None
+            if key:
+                points.setdefault(key, []).extend(drawn["points"])
+    for key, found in points.items():
+        if found:
+            result[key] = [round(v, 6) for v in bounds(found)]
+    try:
+        height = float(props.get("CopperScriptHeightMM", ""))
+        if math.isfinite(height) and height > 0:
+            result["height_mm"] = height
+    except ValueError:
+        pass
+    return result
+
+
 def rotate(point, angle, origin=(0, 0)):
     angle = math.radians(angle)
     c, s = math.cos(angle), math.sin(angle)
@@ -234,6 +277,12 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                      "position_mm": origin, "rotation_deg": angle,
                      "side": "back" if first(fp, "layer", ["layer", "F.Cu"])[1].startswith("B.") else "front",
                      "locked": "locked" in fp or first(fp, "locked", ["locked", "no"])[-1] == "yes", "pads": [], "graphics": []}
+        models, body_model = footprint_models(fp, props)
+        if models:
+            component["models"] = models
+        if body_model:
+            component["body_model"] = body_model
+        local_pads = []
         for pi, pad in enumerate(children(fp, "pad")):
             if len(pad) < 4:
                 raise ValueError(f"Invalid pad on {ref}")
@@ -255,11 +304,16 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                 "rotation_deg": number(pa[3]) if len(pa) > 3 else 0, "shape": pad[3], "kind": pad[2],
                 "layers": pad_layers, "drill_mm": drill[:2],
                 "roundrect_ratio": number(first(pad, "roundrect_rratio", ["ratio", "0.25"])[1])})
+            local_pads.append({"number": pad[1], "x_mm": number(pa[1]), "y_mm": number(pa[2]), "w_mm": size[0], "h_mm": size[1],
+                               "rotation_deg": (number(pa[3]) if len(pa) > 3 else 0) - angle,
+                               "kind": BODY_PAD_KINDS.get(pad[2], "smd"),
+                               **({"drill_mm": drill[:2]} if len(drill) >= 2 and drill[0] > 0 and drill[1] > 0 else {})})
         for g in fp:
             if isinstance(g, list) and g and g[0] in {"fp_line", "fp_rect", "fp_poly", "fp_arc", "fp_circle"}:
                 result = graphic(g, transform)
                 if result:
                     component["graphics"].append(result)
+        component["body_input"] = body_input(fp, props, angle, local_pads)
         points = [p for g in component["graphics"] for p in g["points"]]
         for p in component["pads"]:
             w, h = p["size_mm"]

@@ -164,3 +164,5 @@ body[data-mode=both] #electrical-review .electrical-toolbar label:not(.electrica
 body[data-mode=both] #electrical-review .electrical-toolbar select{font-size:12px;max-width:160px}
 body[data-mode=both] #electrical-review .electrical-toolbar button{padding:5px 9px;font-size:12px}
 dialog:focus,dialog:focus-visible{outline:none}
+canvas[hidden]{display:none}
+#view-3d[aria-pressed="true"]{border-color:#a17550;background:#3d3025;color:var(--copper)}

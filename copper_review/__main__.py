@@ -18,6 +18,8 @@ from .electrical import import_electrical
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 50 * 1024 * 1024
+MAX_MODEL = 32 * 1024 * 1024
+MODEL_TYPES = {".wrl": "model/vrml", ".step": "application/octet-stream", ".stp": "application/octet-stream"}
 # Every web asset of these types is served, so a new module cannot be left out.
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".svg": "image/svg+xml", ".copper": "text/plain; charset=utf-8",
@@ -25,18 +27,20 @@ STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; char
 
 
 def static_asset(path):
-    """Map a request path to (file, type) under web/ or web/wasm/, or None."""
+    """Map a request path to (file, type) under web/, web/wasm/ or web/occt/ (the STEP reader), or None."""
     if path == "/":
         return "index.html", "text/html; charset=utf-8"
     name = path[1:]
     parts = name.split("/")
-    if len(parts) > 2 or (len(parts) == 2 and parts[0] != "wasm"):
+    if len(parts) > 2 or (len(parts) == 2 and parts[0] not in ("wasm", "occt")):
         return None
     if not all(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", part) for part in parts):
         return None
     suffix = Path(name).suffix
-    if suffix == ".json" and parts[0] != "wasm":
+    if suffix == ".json" and parts[0] not in ("wasm", "occt"):
         return None
+    if suffix == ".txt":
+        return (name, "text/plain; charset=utf-8") if parts[0] == "occt" else None
     mime = STATIC_TYPES.get(suffix)
     return (name, mime) if mime else None
 
@@ -111,7 +115,22 @@ def source_identity(path):
     return {"filename": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False):
+def board_asset(root, name):
+    """Bytes of `<dir>.3dshapes/<file>.wrl|step|stp` beside the board, or None; nothing else is served."""
+    parts = name.split("/") if root and name and "\\" not in name else []
+    if len(parts) != 2 or not parts[0].endswith(".3dshapes") or Path(parts[1]).suffix.lower() not in MODEL_TYPES or ".." in parts:
+        return None
+    directory = Path(root) / parts[0]
+    path = directory / parts[1]
+    try:
+        if directory.is_symlink() or path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_MODEL:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None):
     project = Path(project).resolve() if project else None
 
     class Handler(BaseHTTPRequestHandler):
@@ -165,6 +184,14 @@ def make_handler(initial_scene, token, project=None, board=None, public=False):
                 if not public:
                     listing["root"] = str(project)  # For "Open in VS Code" links; not sent to other machines.
                 self.send(200, listing)
+                return
+            if path == "/api/board-asset":
+                model = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+                data = board_asset(board_dir, model)
+                if data is None:
+                    self.send(404, {"error": "Not a 3D model beside the board"})
+                    return
+                self.send(200, data, MODEL_TYPES[Path(model).suffix.lower()])
                 return
             if path == "/api/project/file":
                 name = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
@@ -269,7 +296,9 @@ def main():
         token = secrets.token_urlsafe(32)
         public = args.host not in ("127.0.0.1", "localhost")
         entry = args.entry.replace("\\", "/") if args.entry else None
-        server = ThreadingHTTPServer((args.host, args.port), make_handler(scene, token, args.project, entry, public=public))
+        server = ThreadingHTTPServer((args.host, args.port), make_handler(
+            scene, token, args.project, entry, public=public,
+            board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"
         print(f"CopperReview: {url}", flush=True)

@@ -171,6 +171,40 @@ iteration; it does not edit `.copper` intent, enforce solver constraints or veri
 3D enclosure clearance. Features absent from the PCB export cannot be recovered
 from the drawing alone.
 
+## 3D view
+
+The **3D** button draws a body for every component (drag orbits, shift or
+right-drag pans, wheel zooms). Where each body comes from, in order:
+
+1. `copper-review BOARD.kicad_pcb` serves the `*.3dshapes/*.wrl` files beside the
+   board. A CopperScript export writes one per footprint into
+   `CopperScript.3dshapes/`, the same files KiCad shows.
+2. Otherwise the viewer asks CopperScript's WASM build (`generate_body`) to
+   generate the body from the footprint geometry the scene carries
+   (`body_input`: pads, fabrication and courtyard outline, height). This works
+   in the hosted viewer and for boards opened from a file or exported scene.
+
+Bodies from step 2 are approximate and counted as such in the status line. The
+viewer never rebuilds bodies itself; the compiler's generator is the only one.
+
+KiCad's own models (a CopperScript export copies them into `CopperScript.3dshapes/`
+as STEP) are drawn with [occt-import-js](https://github.com/kovacsv/occt-import-js),
+OpenCascade compiled to WASM. It is licensed LGPL-2.1, is about 8 MB, and is
+fetched at build time with `npm run build:occt` (pinned by npm's integrity hash,
+never committed, loaded only when a STEP model is shown; the licence files are
+kept beside it in `copper_review/web/occt/`). Without it the generated body
+stands in and the status line says why.
+
+Limits: only VRML and STEP files from `.3dshapes` folders next to the board are
+read, so STEP models need `copper-review BOARD.kicad_pcb` (the hosted viewer has no
+board folder and shows the generated body); the board is its
+bounding rectangle at an assumed 1.6 mm; back-side parts and non-zero model
+rotation or offset are placed best-effort and have not been compared with KiCad.
+Scenes exported before `body_input` existed, and boards compiled from `.copper`
+source in the browser, carry no footprint geometry and show no 3D bodies. The
+pinned WASM build must include `generate_body`; an older one reports that it
+cannot generate bodies.
+
 ## Viewing and storage
 
 - Wheel: zoom under the pointer. Right/middle-drag: pan. **Fit board**: overview.
@@ -212,7 +246,8 @@ connectors used to store hole contours are not physical edges or tracks.
 There is no DRC or connectivity solver. Logical net guides display membership,
 including already connected pads; they are not a verified ratsnest or open-net
 count. Fully routed is a reviewer declaration. Copper fills are not recomputed.
-Non-copper text labels/dimensions and 3D models are omitted; custom/trapezoidal
+Non-copper text labels/dimensions are omitted, and 3D models are only drawn in the 3D view (see
+[3D view](#3d-view)); custom/trapezoidal
 pads use bounding rectangles with visible import warnings. Legacy arc syntax
 is rejected; Bezier graphics are reported as unsupported. The importer targets
 modern CopperScript exports, not every possible KiCad construct. Electrical-only

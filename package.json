@@ -3,10 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/core.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js tests/projects.test.js tests/project-compiler.test.js tests/schematic.test.js tests/source-links.test.js",
+    "test": "node --test tests/core.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js tests/projects.test.js tests/project-compiler.test.js tests/schematic.test.js tests/source-links.test.js tests/model3d.test.js tests/model3d-step.test.js",
     "fetch:wasm": "node scripts/fetch-wasm.mjs",
     "build:wasm": "node scripts/build-wasm.mjs",
     "build:static": "node scripts/build-static.mjs",
-    "test:wasm": "node scripts/check-wasm.mjs"
+    "test:wasm": "node scripts/check-wasm.mjs",
+    "test:body": "node tests/body-wasm.mjs",
+    "build:occt": "node scripts/build-occt.mjs"
   }
 }
