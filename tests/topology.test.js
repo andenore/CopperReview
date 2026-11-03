@@ -66,3 +66,24 @@ test('cyclic power dependencies keep all connections and avoid device interiors'
  const nodes=[{id:'A',device:true},{id:'B',device:true},{id:'R1',device:false},{id:'R2',device:false}];const edges=[['A','R1','one'],['R1','B','one'],['B','R2','two'],['R2','A','two']].map(([from,to,entity])=>({from,to,entity,kind:'net',pins:[]}));
  const layout=layoutGraph({type:'power',nodes,edges}),routed=routePowerGraph(layout);assert.equal(routed.routes.length,4);assert.equal(pathQuality(layout,routed.routes).boxHits,0);assert.equal(pathQuality(layout,routed.routes).overlaps,0);
 });
+test('fuses and inductors pass power on, and identical loads on one rail share a box',()=>{
+ const pin=(name,domains=['power'],directions=['passive'])=>({name,profile:{domains,directions},bonds:[]});
+ const two=(name,a='P1',b='P2')=>({name,category:'component.generic',pins:[pin(a),pin(b)]});
+ const v=x=>({value:String(x),unit:'V',base_value:String(x)});
+ const ir={schema:'copperscript-ir/v0.1',kind:'board',name:'chain',
+  parts:[two('jack'),two('fuse'),two('ind'),{name:'buck',category:'power.regulator',pins:[pin('VIN',['power'],['input']),pin('SW',['power'],['output']),pin('VOS',['power'],['input']),pin('GND',['ground'],['passive'])]},{name:'sol',category:'connector.wire_to_board',pins:[pin('P1',['analog','ground','power']),pin('P2',['analog','ground','power'])]}],
+  components:[{ref:'J_IN',part:'jack'},{ref:'F_MAIN',part:'fuse',value:'10A'},{ref:'F_BANK',part:'fuse',value:'10A'},{ref:'U',part:'buck'},{ref:'L',part:'ind'},...[1,2,3].map(i=>({ref:`J_SOL${i}`,part:'sol'}))],
+  nets:[{name:'VIN',endpoints:['J_IN.P1','F_MAIN.P1']},{name:'V24',endpoints:['F_MAIN.P2','F_BANK.P1','U.VIN']},{name:'BANK',endpoints:['F_BANK.P2','J_SOL1.P1','J_SOL2.P1','J_SOL3.P1']},{name:'SW',endpoints:['U.SW','L.P1']},{name:'V5',endpoints:['L.P2','U.VOS']},{name:'GND',endpoints:['J_IN.P2','U.GND','J_SOL1.P2','J_SOL2.P2','J_SOL3.P2']}],
+  supplies:[{name:'VIN',net:'VIN',voltage:v(24),externally_driven:true},{name:'V24',net:'V24',voltage:v(24)},{name:'BANK',net:'BANK',voltage:v(24)},{name:'V5',net:'V5',voltage:v(5)},{name:'GND',net:'GND',voltage:v(0)}]};
+ const m=electricalModel(ir),rail=n=>m.rails.find(r=>r.net===n);
+ // A declared 24 V supply stays a rail although its connector pins also claim the ground domain.
+ assert(rail('BANK'));
+ assert.deepEqual([rail('V24').through,rail('V24').inputs],[['F_MAIN'],['VIN']]);
+ assert.deepEqual([rail('BANK').through,rail('V5').through,rail('V5').inputs],[['F_BANK'],['L'],['SW']]);
+ const g=powerGraph(m),L=layoutGraph(g),at=new Map(L.nodes.map(n=>[n.id,n.x]));
+ assert(g.edges.some(e=>e.from==='device:J_IN'&&e.to==='rail:VIN'));
+ const bank=g.nodes.filter(n=>n.members);assert.deepEqual(bank.map(n=>[n.members,n.subtitle]),[[['J_SOL1','J_SOL2','J_SOL3'],'3 × sol']]);
+ // The drawing tree runs forward; the regulator's sense pin on V5 is the only link drawn backwards.
+ assert.deepEqual(L.edges.filter(e=>at.get(e.from)>=at.get(e.to)).map(e=>`${e.from}>${e.to}`),['rail:V5>device:U']);
+ assert.equal(routeGraph(L).routes.length,L.edges.length);
+});

@@ -76,6 +76,13 @@ are independent; the application does not assert that a PCB matches an IR.
   imply connectivity. Select boxes or supply lines to inspect
   their pins and intent. Loads are grouped around a drawing tree of their main
   supply inputs; backup and additional supply edges remain explicitly connected.
+  A passive two-terminal part between two supply rails (fuse, inductor, ferrite,
+  shunt header, diode) passes power on: it feeds the downstream rail and loads the
+  upstream one. Diodes run anode to cathode; other parts run from the rail that
+  already has a resolved source, on-board sources before external ones. The tree
+  runs left to right by rail depth, so a regulator's sense pin on its own output
+  rail stays a single back link. Three or more identical parts that load only one
+  rail (a bank of output connectors) share one box listing every member.
   Wires avoid device boxes, and shared rail branches use a common trunk. Distinct
   rails never share a line segment; a gap distinguishes any remaining crossover
   from a junction dot. Drawing paths are cached so selection does not rearrange

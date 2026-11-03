@@ -9,10 +9,20 @@ export function busProtocol(type=''){
   return {key:'other',label:type||'Unspecified'};
 }
 export function powerGraph(model,{showPassives=false}={}){
-  const nodes=new Map(),edges=[];
-  for(const {rail,sources,receivers,passives}of powerTopology(model,{showPassives})){
-    const hub={id:`rail:${rail.net}`,kind:'net',entity:rail.net,label:rail.net,subtitle:distinct(rail.supplies.map(s=>quantity(s.voltage))).join(' / ')||'Voltage unspecified',passives:showPassives?0:passives.length};nodes.set(hub.id,hub);
-    for(const [refs,source]of [[sources,true],[receivers,false]])for(const ref of refs){const d=device(model,ref);nodes.set(d.id,d);edges.push({from:source?d.id:hub.id,to:source?hub.id:d.id,kind:'net',entity:rail.net,pins:model.nets.get(rail.net).pins.filter(p=>p.component===ref).map(p=>p.id)});}
+  const nodes=new Map(),edges=[],topology=powerTopology(model,{showPassives});
+  // Three or more identical loads that hang only off one rail (a bank of output connectors) share one box.
+  const sourcing=new Set(topology.flatMap(t=>t.sources)),fed=new Map();for(const t of topology)for(const r of t.receivers)fed.set(r,(fed.get(r)||0)+1);
+  for(const {rail,sources,receivers,passives,depth}of topology){
+    const hub={id:`rail:${rail.net}`,kind:'net',entity:rail.net,depth,label:rail.net,subtitle:distinct(rail.supplies.map(s=>quantity(s.voltage))).join(' / ')||'Voltage unspecified',passives:showPassives?0:passives.length};nodes.set(hub.id,hub);
+    const pinsOf=refs=>model.nets.get(rail.net).pins.filter(p=>refs.includes(p.component)).map(p=>p.id),byPart=new Map();
+    for(const ref of receivers)if(!sourcing.has(ref)&&fed.get(ref)===1){const part=model.components.get(ref).part;if(!byPart.has(part))byPart.set(part,[]);byPart.get(part).push(ref);}
+    const banks=[...byPart.values()].filter(refs=>refs.length>=3),banked=new Set(banks.flat());
+    for(const [refs,source]of [[sources,true],[receivers.filter(r=>!banked.has(r)),false]])for(const ref of refs){const d=device(model,ref);nodes.set(d.id,d);edges.push({from:source?d.id:hub.id,to:source?hub.id:d.id,kind:'net',entity:rail.net,pins:pinsOf([ref])});}
+    for(const refs of banks){
+      refs.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+      const d={...device(model,refs[0]),id:`devices:${rail.net}:${refs[0]}`,label:`${refs[0]} … ${refs.at(-1).split('/').pop()}`,subtitle:`${refs.length} × ${model.components.get(refs[0]).part.split('.').pop()}`,members:refs};
+      nodes.set(d.id,d);edges.push({from:hub.id,to:d.id,kind:'net',entity:rail.net,pins:pinsOf(refs)});
+    }
   }
   return {nodes:[...nodes.values()],edges,type:'power'};
 }
@@ -74,15 +84,24 @@ function layoutBusGraph(graph){
 }
 function layoutPowerGraph(graph){
   const hints=new Map(layoutGraph({nodes:graph.nodes,edges:graph.edges}).nodes.map(n=>[n.id,n.x])),parent=new Map(),children=new Map(graph.nodes.map(n=>[n.id,[]])),byId=new Map(graph.nodes.map(n=>[n.id,n]));
+  // Rank by rail depth so the drawing tree runs forward: a device sits just before the first rail it
+  // sources, or just after (and hangs off) the deepest rail it takes. A regulator's sense pin on its own output
+  // rail (VOS, FB) then stays a back link instead of becoming the tree's root.
+  const rank=new Map(graph.nodes.filter(n=>!n.device).map(n=>[n.id,2*(n.depth||0)+1]));
+  for(const n of graph.nodes)if(n.device){const out=graph.edges.filter(e=>e.from===n.id).map(e=>rank.get(e.to)),inn=graph.edges.filter(e=>e.to===n.id).map(e=>rank.get(e.from));rank.set(n.id,out.length?Math.min(...out)-1:Math.max(0,...inn)+1);}
+  const forward=e=>rank.get(e.from)<rank.get(e.to);
   // Choose a drawing tree only. Every other electrical connection is retained.
-  const score=e=>{const names=e.pins.map(p=>p.slice(p.lastIndexOf('.')+1));const backup=names.length&&names.every(n=>/BCKP|VBKP|BACKUP/i.test(n));const input=names.some(n=>/^IN(?:_\d+)?$|^VIN/.test(n))?4000:names.some(n=>/^VBAT/.test(n))?3000:names.some(n=>/^VDD|^VCC/.test(n))?2000:1000;return (backup?-10000:input)+(hints.get(e.from)||0);};
-  for(const n of [...graph.nodes].sort((a,b)=>hints.get(a.id)-hints.get(b.id)||a.id.localeCompare(b.id))){
+  const score=e=>{const names=e.pins.map(p=>p.slice(p.lastIndexOf('.')+1));const backup=names.length&&names.every(n=>/BCKP|VBKP|BACKUP/i.test(n));const input=names.some(n=>/^IN(?:_\d+)?$|^VIN/.test(n))?4000:names.some(n=>/^VBAT/.test(n))?3000:names.some(n=>/^VDD|^VCC/.test(n))?2000:1000;return (forward(e)?1e9:0)+(backup?0:1e8)+rank.get(e.from)*1e5+input+(hints.get(e.from)||0)/10;};
+  for(const n of [...graph.nodes].sort((a,b)=>rank.get(a.id)-rank.get(b.id)||hints.get(a.id)-hints.get(b.id)||a.id.localeCompare(b.id))){
     const candidates=graph.edges.filter(e=>e.to===n.id).sort((a,b)=>score(b)-score(a)||a.from.localeCompare(b.from));
     for(const e of candidates){let ancestor=e.from,cycle=false;while(ancestor){if(ancestor===n.id){cycle=true;break;}ancestor=parent.get(ancestor);}if(!cycle){parent.set(n.id,e.from);children.get(e.from).push(n.id);break;}}
   }
+  // A device fed by many rails grows so its ports stay a routing channel apart.
+  const degree=new Map();for(const e of graph.edges)for(const id of [e.from,e.to])degree.set(id,(degree.get(id)||0)+1);
+  const boxHeight=id=>byId.get(id).device?Math.max(72,(degree.get(id)+1)*18):82;
   const heights=new Map(),positions=new Map();
-  function height(id){if(heights.has(id))return heights.get(id);const kids=children.get(id);kids.sort((a,b)=>a.localeCompare(b));const h=Math.max(byId.get(id).device?72:82,kids.reduce((s,k)=>s+height(k),0)+Math.max(0,kids.length-1)*18);heights.set(id,h);return h;}
-  function place(id,x,top){const n=byId.get(id),h=n.device?72:82,p={...n,x,y:top+(height(id)-h)/2,width:n.device?178:120,height:h};positions.set(id,p);let y=top;for(const child of children.get(id)){place(child,x+p.width+(n.device?30:42),y);y+=height(child)+18;}}
+  function height(id){if(heights.has(id))return heights.get(id);const kids=children.get(id);kids.sort((a,b)=>a.localeCompare(b));const h=Math.max(boxHeight(id),kids.reduce((s,k)=>s+height(k),0)+Math.max(0,kids.length-1)*18);heights.set(id,h);return h;}
+  function place(id,x,top){const n=byId.get(id),h=boxHeight(id),p={...n,x,y:top+(height(id)-h)/2,width:n.device?178:120,height:h};positions.set(id,p);let y=top;for(const child of children.get(id)){place(child,x+p.width+(n.device?30:42)+(byId.get(child).device?10*Math.max(0,degree.get(child)-2):0),y);y+=height(child)+18;}}
   const roots=graph.nodes.filter(n=>!parent.has(n.id)).sort((a,b)=>height(b.id)-height(a.id)||a.id.localeCompare(b.id));let y=30;
   for(const root of roots){place(root.id,24,y);y+=height(root.id)+40;}
   // Put secondary input sources beside their receiving circuit, not below the entire tree.
@@ -104,6 +123,8 @@ export function routeGraph(layout,{crossingPenalty=6000}={}){
   for(const [index,e]of layout.edges.entries()){const a=nodes.get(e.from),b=nodes.get(e.to),sides=a.x===b.x?['right','right']:a.x<b.x?['right','left']:['left','right'];const pair=[{node:a,side:sides[0],other:b,index},{node:b,side:sides[1],other:a,index}];ends.push(pair);for(const end of pair)ports.get(end.node.id)[end.side].push(end);}
   for(const sides of ports.values())for(const list of Object.values(sides)){list.sort((a,b)=>a.other.y-b.other.y||a.other.id.localeCompare(b.other.id));for(const [i,p]of list.entries()){p.y=p.node.y+(p.node.device?(i+1)*p.node.height/(list.length+1):p.node.height/2);p.x=p.node.x+(p.side==='right'?p.node.width:0);p.stub=p.x+(p.side==='right'?12:-12);}}
   const xs=[12,layout.width-12],ys=[12,layout.height-12];for(const n of layout.nodes){xs.push(n.x-12,n.x+n.width+12);ys.push(n.y-12,n.y+n.height+12);}for(const pair of ends)for(const p of pair){xs.push(p.stub);ys.push(p.y);}
+  // Each port on a crowded device side gets its own vertical approach lane.
+  if(layout.type==='power')for(const sides of ports.values())for(const list of Object.values(sides))if(list.length>2&&list[0].node.device)for(let j=1;j<=list.length;j++)xs.push(list[0].stub+(list[0].side==='right'?10:-10)*j);
   if(layout.type==='bus'){
     // Reserve enough parallel channels for the busiest device's fan-out.
     const columns=[...new Set(layout.nodes.map(n=>n.x))].sort((a,b)=>a-b),lanes=Math.max(2,...layout.nodes.map(n=>ports.get(n.id).left.length+ports.get(n.id).right.length));

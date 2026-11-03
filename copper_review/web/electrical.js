@@ -109,7 +109,7 @@ export function createElectricalReview({message,onMode}){
   }
   /** Marker anchors for generated graphs: the entity's box, its label, or for a pin its component. */
   function boxAnchor(svg){
-    const find=(kind,id)=>{const all=[...svg.querySelectorAll(`[data-kind="${kind}"][data-entity="${CSS.escape(id)}"]`)];return all.find(e=>e.dataset.topologyNode)||all.find(e=>e.tagName==='text')||all[0];};
+    const find=(kind,id)=>{const all=[...svg.querySelectorAll(`[data-kind="${kind}"][data-entity="${CSS.escape(id)}"]`)];return all.find(e=>e.dataset.topologyNode)||all.find(e=>e.tagName==='text')||all[0]||(kind==='component'?[...svg.querySelectorAll('[data-members]')].find(e=>e.dataset.members.split(' ').includes(id)):null);};
     return sel=>{const e=find(sel.kind,sel.id)||(sel.kind==='pin'?find('component',model.pins.get(sel.id)?.component):null);if(!e)return null;const b=e.getBBox();return [`${e.dataset.kind}:${e.dataset.entity}`,[b.x+b.width,b.y]];};
   }
   function renderSchematic(canvas){
@@ -204,9 +204,9 @@ export function createElectricalReview({message,onMode}){
     canvas.append(el('p','Parent rails feed power pins on the same source IC. These are inferred dependencies, not verified internal transfer paths.','quiet'));
     const children=new Map(rails.map(r=>[r.net,[]]));for(const r of rails)for(const n of r.inputs)if(children.has(n))children.get(n).push(r);
     const emitted=new Set();
-    function rail(r,path){const card=el('section',undefined,'electrical-rail');card.dataset.rail=r.net;const n=model.nets.get(r.net);card.append(netHeader(n));const state=stateOf(r.net);card.append(el('div',`${powerState?`${powerState}: `:''}${state==='unspecified'?'State unspecified':`Declared ${state}`} · ${r.declaredSources.length?'Declared source':r.sources.length?'Source inferred from power-output pin':'External / source unspecified'}`,'quiet'));
+    function rail(r,path){const card=el('section',undefined,'electrical-rail');card.dataset.rail=r.net;const n=model.nets.get(r.net);card.append(netHeader(n));const state=stateOf(r.net);card.append(el('div',`${powerState?`${powerState}: `:''}${state==='unspecified'?'State unspecified':`Declared ${state}`} · ${r.declaredSources.length?'Declared source':r.through?.length?`Fed through ${r.through.join(', ')}`:r.sources.length?'Source inferred from power-output pin':'External / source unspecified'}`,'quiet'));
       for(const s of r.sources)card.append(entity('pin',s,`Source: ${s}`));
-      const inputRow=el('div',undefined,'electrical-chips');for(const s of r.inputs)inputRow.append(entity('net',s,`Power pin on source IC ← ${s}`));card.append(inputRow);
+      const inputRow=el('div',undefined,'electrical-chips');for(const s of r.inputs)inputRow.append(entity('net',s,`${r.through?.length?'Upstream rail':'Power pin on source IC'} ← ${s}`));card.append(inputRow);
       for(const c of r.controls){const row=el('div',undefined,'electrical-control');row.append(el('span','Control candidate (pin-name inference): '),entity('pin',c.id,c.id),el('span','←'),entity('net',c.net));const controlNet=model.nets.get(c.net),fixed=model.supplyNets.has(c.net)||controlNet.pins.some(p=>p.profile.domains?.includes('ground'));if(!fixed)for(const p of controlNet.pins.filter(p=>p.id!==c.id&&!isPassive(model.components.get(p.component))&&p.profile.directions?.some(d=>['output','bidirectional'].includes(d))))row.append(entity('pin',p.id,p.id));card.append(row);}
       const loads=el('div',undefined,'electrical-loads');const makeLoad=ref=>{const p=n.pins.filter(p=>p.component===ref).map(p=>p.name).join(', ');const row=el('div',undefined,'electrical-load');row.append(entity('component',ref),el('span',p,'quiet'));return row;};group(loads,r.loads,makeLoad,ref=>!showPassives&&isPassive(model.components.get(ref))&&!selected('component',ref),'passive loads');card.append(loads);
       if(path.has(r.net)){card.append(el('p','Cyclic dependency; expand this rail from the root list.','electrical-warning'));return card;}
@@ -267,9 +267,9 @@ export function createElectricalReview({message,onMode}){
     }
     const shortened=(value,max=24)=>value.length>max?'…'+value.slice(-(max-1)):value;
     for(const n of layout.nodes){
-      const g=draw('g',{'data-topology-node':n.id},undefined,boxes);pick(g,n.kind,n.entity);if(n.device)g.dataset.topologyDevice=n.entity;else if(mode==='power')g.dataset.powerRail=n.entity;else{g.dataset.topologyBus=n.id;g.dataset.busProtocol=n.protocol.key;}
-      const title=[n.label,n.subtitle,...(n.aliases||[]),...(n.types||[]),...(n.nets||[]),mode==='power'&&!n.device?`State: ${stateOf(n.entity)}; ${n.passives||0} collapsed passives`:''];draw('title',{},distinct(title).join(' · '),g);
-      draw('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:n.device?5:15,class:`electrical-graph-node ${n.device?'device':'junction'}${selected(n.kind,n.entity)?' selected':''}`},undefined,g);
+      const g=draw('g',{'data-topology-node':n.id},undefined,boxes);pick(g,n.kind,n.entity);if(n.members)g.dataset.members=n.members.join(' ');if(n.device)g.dataset.topologyDevice=n.entity;else if(mode==='power')g.dataset.powerRail=n.entity;else{g.dataset.topologyBus=n.id;g.dataset.busProtocol=n.protocol.key;}
+      const title=[n.label,n.subtitle,...(n.members||[]),...(n.aliases||[]),...(n.types||[]),...(n.nets||[]),mode==='power'&&!n.device?`State: ${stateOf(n.entity)}; ${n.passives||0} collapsed passives`:''];draw('title',{},distinct(title).join(' · '),g);
+      draw('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:n.device?5:15,class:`electrical-graph-node ${n.device?'device':'junction'}${selected(n.kind,n.entity)||n.members?.some(r=>selected('component',r))?' selected':''}`},undefined,g);
       draw('text',{x:n.x+10,y:n.y+20,class:n.device?'':'electrical-net-label'},shortened(n.label,Math.floor((n.width-20)/7)),g);
       draw('text',{x:n.x+10,y:n.y+38,class:'electrical-graph-meta'},shortened(n.subtitle==='Voltage unspecified'?'Unspecified':n.subtitle,Math.floor((n.width-20)/6)),g);
       if(mode==='power'){

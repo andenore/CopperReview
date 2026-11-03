@@ -21,8 +21,9 @@ export function powerTopology(model,{showPassives=false}={}){
   const depth=(r,path=new Set())=>{if(path.has(r.net))return 0;const next=new Set([...path,r.net]);return r.inputs.length?1+Math.max(0,...r.inputs.map(n=>{const p=rails.find(x=>x.net===n);return p?depth(p,next):0;})):0;};
   return rails.map(rail=>{
     const sources=[...new Set(rail.sources.map(id=>model.pins.get(id)?.component).filter(Boolean))];
-    if(!sources.length&&rail.supplies.some(s=>s.externally_driven))for(const ref of rail.loads){const category=model.components.get(ref).partDefinition.category||'';if(category.startsWith('connector.')&&/battery|power/.test(category)||category==='power.source')sources.push(ref);}
-    const receivers=rail.loads.filter(ref=>!sources.includes(ref)),passives=receivers.filter(ref=>isPassive(model.components.get(ref)));
+    // An external rail enters through its connector: a power connector category or a J/P/CN/X designator.
+    if(!sources.length&&rail.supplies.some(s=>s.externally_driven))for(const ref of rail.loads){const category=model.components.get(ref).partDefinition.category||'';if(category.startsWith('connector.')&&/battery|power/.test(category)||category==='power.source'||/^(J|P|CN|X)(\d|_)/.test(ref.split('/').pop()))sources.push(ref);}
+    const receivers=rail.loads.filter(ref=>!sources.includes(ref)),passives=receivers.filter(ref=>isPassive(model.components.get(ref))&&!rail.feeds?.includes(ref));
     return {rail,sources,receivers:receivers.filter(ref=>showPassives||!passives.includes(ref)),passives,depth:depth(rail)};
   }).sort((a,b)=>a.depth-b.depth||a.rail.net.localeCompare(b.rail.net));
 }
@@ -86,15 +87,38 @@ export function electricalModel(ir) {
   for(const n of nets.values())if(n.unresolved.length)warnings.push(`${n.name}: unresolved endpoints: ${unique(n.unresolved).join(', ')}`);
   for(const s of supplies){const n=byKey.get(find(s.key));if(s.source&&!pins.has(s.source))warnings.push(`Unresolved supply source ${s.source}`);n.supplies.push(s);}
   const supplyNets=new Set([...nets.values()].filter(n=>n.supplies.length||n.pins.some(p=>p.profile.domains?.includes('power'))).map(n=>n.name));
-  const ground=n=>n.pins.some(p=>p.profile.domains?.includes('ground'))||n.supplies.some(s=>s.voltage?.base_value==='0');
+  // A declared non-zero supply is never ground, even when generic connector pins claim both domains.
+  const ground=n=>n.supplies.some(s=>s.voltage?.base_value==='0')||!n.supplies.some(s=>Number(s.voltage?.base_value))&&n.pins.some(p=>p.profile.domains?.includes('ground'));
   const rails=[...nets.values()].filter(n=>supplyNets.has(n.name)&&!ground(n)).map(n=>{
     const declared=unique(n.supplies.map(s=>s.source).filter(Boolean));const output=n.pins.filter(p=>p.profile.domains?.includes('power')&&p.profile.directions?.includes('output')).map(p=>p.id);
     const sources=unique([...declared,...output]);
     const producers=unique(sources.map(p=>pins.get(p)?.component).filter(Boolean));
     const inputs=unique(producers.flatMap(r=>components.get(r).pins.filter(p=>p.net&&p.net!==n.name&&p.profile.domains?.includes('power')&&p.profile.directions?.some(d=>['input','bidirectional'].includes(d))).map(p=>p.net)));
     const controls=producers.flatMap(r=>components.get(r).pins.filter(p=>p.net&&/^(EN|ENABLE|CE|OE)(_N|B)?$/i.test(p.name)));
-    return {net:n.name,sources,declaredSources:declared,inputs,controls,loads:unique(n.pins.map(p=>p.component)).filter(r=>!producers.includes(r)),supplies:n.supplies};
+    return {net:n.name,sources,declaredSources:declared,inputs,controls,loads:unique(n.pins.map(p=>p.component)).filter(r=>!producers.includes(r)),supplies:n.supplies,through:[],feeds:[]};
   });
+  // A passive two-terminal part between two supply rails (fuse, inductor, ferrite, shunt, diode) passes
+  // power on: it sources the downstream rail and loads the upstream one. Diodes run anode to
+  // cathode; other parts run from the rail that already has a source, on-board sources first.
+  const railOf=new Map(rails.filter(r=>r.supplies.length||r.sources.length).map(r=>[r.net,r])),links=[];
+  for(const c of components.values()){
+    const ps=c.pins.filter(p=>p.net);
+    if(ps.length!==2||ps[0].net===ps[1].net||!ps.every(p=>railOf.has(p.net)&&(p.profile.directions||[]).every(d=>d==='passive'))||/F$/.test(c.value?.unit||''))continue;
+    const a=ps.find(p=>p.name==='A'),k=ps.find(p=>p.name==='K');links.push({ref:c.ref,pins:ps,fixed:a&&k?[a,k]:null});
+  }
+  // A declared source naming a module port (PWR.VOUT) is not a driver; only resolved pins count.
+  const fed=(r,external)=>r.sources.some(id=>pins.has(id))||external&&r.supplies.some(s=>s.externally_driven);
+  for(const external of [false,true])for(let changed=true;changed;){
+    changed=false;
+    for(const l of links){
+      if(l.done)continue;let order=l.fixed;
+      if(!order){const [p,q]=l.pins,fp=fed(railOf.get(p.net),external),fq=fed(railOf.get(q.net),external);order=fp&&!fq?[p,q]:fq&&!fp?[q,p]:null;}
+      if(!order)continue;
+      const [i,o]=order,up=railOf.get(i.net),down=railOf.get(o.net);
+      down.sources.push(o.id);down.through.push(l.ref);down.inputs=unique([...down.inputs,up.net]);down.loads=down.loads.filter(r=>r!==l.ref);up.feeds.push(l.ref);
+      l.done=changed=true;
+    }
+  }
   const buses=interfaces.map(i=>({...i,signals:Object.fromEntries(Object.entries(i.signalKeys).map(([s,k])=>[s,byKey.get(find(k)).name]))}));
   for(const p of peripherals){const c=components.get(p.component);if(!c)throw Error(`Unknown peripheral component ${p.component}`);
     const signals={};for(const [s,v]of Object.entries(p.signals||{})){const pin=c.pins.find(x=>x.name===(v.pin||v.pad));if(!pin)throw Error(`Unknown peripheral pin ${p.component}.${v.pin||v.pad}`);if(pin.net)signals[s]=pin.net;}
