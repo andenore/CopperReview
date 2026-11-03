@@ -360,6 +360,27 @@ export function layoutSheet(source,sheet,{folded,view}){
     const target=p=>{const ys=(members.get(p.net)||[]).filter(q=>q.component!==s.ref&&pinAt.has(q.id)).map(q=>pinAt.get(q.id).y);return ys.length?mean(ys):Infinity;};
     s[side].sort((a,b)=>target(a)-target(b)||natural(a.number??a.name,b.number??b.name));s[side].forEach((p,i)=>pinAt.set(p.id,{s,side,y:pinY(s,side,i)}));
   }
+  // A two-pin part wired point to point to a pin across its column gap moves level with that pin,
+  // so the wire runs straight, when its column has room between its neighbours. Alignment spreads
+  // out from the larger parts, which do not move: a two-pin part lines up only with one of them or
+  // with a two-pin part already lined up, so a chain of resistors straightens link by link.
+  const facing=(p,q)=>{const a=pinAt.get(p.id),b=pinAt.get(q.id);return a.side!==b.side&&(a.side==='left'?a.s.col-1:a.s.col)===(b.side==='left'?b.s.col-1:b.s.col);};
+  const above=s=>s.top.length?46:s.two?18:0,below=s=>s.bottom.length?46:s.two?20:0;
+  const fixed=new Set([...symbols.values()].filter(s=>!s.two));
+  for(let pass=0,moved=true;moved&&pass<6;pass++){moved=false;for(const layer of layers){
+    const column=layer.map(r=>symbols.get(r)).sort((a,b)=>a.y-b.y);
+    for(const [k,s]of column.entries()){
+      if(fixed.has(s))continue;
+      const partners=[...s.left,...s.right].map(p=>{const q=(members.get(p.net)||[]).filter(q=>q.component!==s.ref&&pinAt.has(q.id));return q.length===1&&facing(p,q[0])?q[0]:null;}).filter(q=>q&&fixed.has(pinAt.get(q.id).s));
+      const to=partners.sort((a,b)=>Number(pinAt.get(a.id).s.two)-Number(pinAt.get(b.id).s.two))[0];if(!to)continue;
+      fixed.add(s);moved=true;
+      const prev=column[k-1],next=column[k+1],y=Math.round(pinAt.get(to.id).y-s.h/2);
+      const low=(prev?prev.y+prev.h+below(prev)+30:24)+above(s),high=next?next.y-above(next)-30-below(s)-s.h:Infinity;
+      if(y<low||y>high||y===s.y)continue;
+      s.y=y;colY[s.col]=Math.max(colY[s.col],y+s.h+below(s)+30);
+      for(const side of ['left','right'])s[side].forEach((p,i)=>pinAt.set(p.id,{s,side,y:pinY(s,side,i)}));
+    }
+  }}
   // A net becomes a wire when every pin on this sheet faces the same column gap.
   const gapOf=p=>{const a=pinAt.get(p.id);return a.side==='left'?a.s.col-1:a.s.col;};
   const wired=new Map(),labelled=[];
@@ -403,7 +424,9 @@ export function layoutSheet(source,sheet,{folded,view}){
     const spread=(groups,y,dir)=>groups.map((g,i)=>{const split=s.two&&groups.length===2,end=s.two&&groups.length===1;
       // A two-pin part takes a single flag on a free lead end, not through its body: the end
       // without a wire, or power on the left and ground on the right when both pins are flags.
-      const gx=split?s.x+(i?s.w-4:4):end&&s.left.length?s.x+s.w-2:end&&(s.right.length||dir<0)?s.x+2:end?s.x+s.w-2:s.x+s.w*(i+1)/(groups.length+1);const badges=[...folded.values()].filter(f=>f.kind==='support'&&f.pin&&model.pins.get(f.pin).component===s.ref&&f.net===g.net);return {net:g.net,pins:g.pins.map(p=>p.id),names:g.pins.map(p=>p.name),x:gx,y,end:y+dir*16,anchor:split?(i?'start':'end'):'middle',badges:badges.map(f=>f.ref)};});
+      // A drawn symbol has no box edge: its flags start on the lead, at the middle of the box.
+      const lead=s.two&&s.kind?s.y+s.h/2:y;
+      const gx=split?s.x+(i?s.w-(s.kind?2:4):(s.kind?2:4)):end&&s.left.length?s.x+s.w-2:end&&(s.right.length||dir<0)?s.x+2:end?s.x+s.w-2:s.x+s.w*(i+1)/(groups.length+1);const badges=[...folded.values()].filter(f=>f.kind==='support'&&f.pin&&model.pins.get(f.pin).component===s.ref&&f.net===g.net);return {net:g.net,pins:g.pins.map(p=>p.id),names:g.pins.map(p=>p.name),x:gx,y:lead,end:y+dir*16,anchor:split?(i?'start':'end'):'middle',badges:badges.map(f=>f.ref)};});
     sym.top=spread(s.top,s.y,-1);sym.bottom=spread(s.bottom,s.y+s.h,1);
     // A diode points at its cathode, on whichever end layout gave that pin: a side, or the end its
     // rail flag sits on; an unconnected cathode takes the end opposite the other pin.
