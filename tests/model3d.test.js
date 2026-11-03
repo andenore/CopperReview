@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {parseVrml,resolveModelPath,pickModel,placement,buildSoup,modelPaths,WRL_UNIT_MM} from '../copper_review/web/model3d.js';
+import {parseVrml,resolveModelPath,pickModel,placement,buildSoup,modelPaths,loadBodies,bodyInputKey,WRL_UNIT_MM} from '../copper_review/web/model3d.js';
 import {cameraEye} from '../copper_review/web/view3d.js';
 
 const wrl=readFileSync(new URL('./fixtures/chip-0805.wrl',import.meta.url),'utf8');
@@ -75,4 +75,51 @@ test('summary counts drawn, approximate and missing components', () => {
 test('the default camera looks north from the bottom of the page', () => {
   const eye=cameraEye({target:[0,0,0],distance:10,yaw:0,pitch:Math.PI/4});
   assert.ok(Math.abs(eye[0])<1e-9&&eye[1]<0&&eye[2]>0);
+});
+
+const input={name:'C_0805',pads:[{number:'1',x_mm:-1,y_mm:0,w_mm:1,h_mm:1.3,kind:'smd'},{number:'2',x_mm:1,y_mm:0,w_mm:1,h_mm:1.3,kind:'smd'}]};
+const bare=(reference,side='front')=>({reference,position_mm:[10,20],rotation_deg:0,side,body_input:input});
+
+test('a body-input request carries the schema and is the same for equal footprints', () => {
+  const key=bodyInputKey(bare('C1'));
+  assert.equal(JSON.parse(key).schema,'copperscript.body-input/v1');
+  assert.equal(key,bodyInputKey(bare('C2')));
+  assert.equal(bodyInputKey({reference:'X'}),null);
+});
+
+test('loadBodies serves what it can and asks CopperScript to generate the rest, once per distinct footprint', async () => {
+  const requests=[];
+  const bodies=await loadBodies(scene([chip,bare('C2'),bare('C3')]),{
+    fetchBody:async path=>path==='CopperScript.3dshapes/chip.wrl'?parseVrml(wrl):null,
+    generate:async asked=>{requests.push(...asked);return asked.map(()=>({wrl}));},
+  });
+  assert.equal(requests.length,1,'C2 and C3 share one request');
+  assert.deepEqual([...bodies.keys()].sort(),['CopperScript.3dshapes/chip.wrl','input:'+bodyInputKey(bare('C2'))]);
+});
+
+test('with nothing served every component is generated, and a failure leaves it without a body', async () => {
+  const ok=await loadBodies(scene([bare('C1')]),{fetchBody:async()=>null,generate:async a=>a.map(()=>({wrl}))});
+  assert.equal(buildSoup(scene([bare('C1')]),ok).summary.drawn,1);
+  const failed=await loadBodies(scene([bare('C1')]),{fetchBody:async()=>{throw new Error('offline');},generate:async a=>a.map(()=>({error:'bad'}))});
+  assert.deepEqual(buildSoup(scene([bare('C1')]),failed).summary,{components:1,drawn:0,approximate:0,missing:1});
+  const unsupported=await loadBodies(scene([bare('C1')]),{fetchBody:async()=>null});
+  assert.equal(unsupported.size,0);
+});
+
+test('a generated body is already millimetres and counts as approximate', async () => {
+  const bodies=await loadBodies(scene([bare('C1')]),{fetchBody:async()=>null,generate:async a=>a.map(()=>({wrl}))});
+  const soup=buildSoup(scene([bare('C1')]),bodies);
+  const chipPositions=soup.positions.slice(36*3);
+  const [x0,x1]=extent(chipPositions,0);
+  assert.ok(Math.abs((x1-x0)-2.0)<1e-5,`length ${x1-x0} (a 2.54 factor would be 5.08)`);
+  assert.equal(soup.summary.approximate,1);
+});
+
+test('a generated back-side body hangs below the board without a second mirror', async () => {
+  const front=(await loadBodies(scene([bare('F')]),{fetchBody:async()=>null,generate:async a=>a.map(()=>({wrl}))}));
+  const back=(await loadBodies(scene([bare('B','back')]),{fetchBody:async()=>null,generate:async a=>a.map(()=>({wrl}))}));
+  const f=buildSoup(scene([bare('F')]),front).positions.slice(36*3),b=buildSoup(scene([bare('B','back')]),back).positions.slice(36*3);
+  const [fx0,fx1]=extent(f,0),[bx0,bx1]=extent(b,0),[bz0,bz1]=extent(b,2);
+  assert.ok(Math.abs(fx0-bx0)<1e-5&&Math.abs(fx1-bx1)<1e-5,'same footprint frame, same x extent');
+  assert.ok(Math.abs(bz1-(-1.6))<1e-6&&bz0<-1.6,`z ${bz0}..${bz1}`);
 });

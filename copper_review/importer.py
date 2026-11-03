@@ -89,6 +89,32 @@ def footprint_models(fp, props):
     return models, body if isinstance(body, str) and body else None
 
 
+BODY_LAYERS = {"F.Fab": "fab_mm", "B.Fab": "fab_mm", "F.CrtYd": "courtyard_mm", "B.CrtYd": "courtyard_mm"}
+BODY_PAD_KINDS = {"smd": "smd", "connect": "smd", "thru_hole": "thru_hole", "np_thru_hole": "np_thru_hole"}
+
+
+def body_input(fp, props, angle, pads):
+    """One footprint in its own file frame, for CopperScript's generated 3D body (see 3d-models.md there)."""
+    result = {"name": fp[1], "pads": pads}
+    points = {}
+    for g in fp:
+        if isinstance(g, list) and g and g[0] in {"fp_line", "fp_rect", "fp_poly", "fp_arc", "fp_circle"}:
+            drawn = graphic(g)
+            key = BODY_LAYERS.get(drawn["layer"]) if drawn else None
+            if key:
+                points.setdefault(key, []).extend(drawn["points"])
+    for key, found in points.items():
+        if found:
+            result[key] = [round(v, 6) for v in bounds(found)]
+    try:
+        height = float(props.get("CopperScriptHeightMM", ""))
+        if math.isfinite(height) and height > 0:
+            result["height_mm"] = height
+    except ValueError:
+        pass
+    return result
+
+
 def rotate(point, angle, origin=(0, 0)):
     angle = math.radians(angle)
     c, s = math.cos(angle), math.sin(angle)
@@ -256,6 +282,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
             component["models"] = models
         if body_model:
             component["body_model"] = body_model
+        local_pads = []
         for pi, pad in enumerate(children(fp, "pad")):
             if len(pad) < 4:
                 raise ValueError(f"Invalid pad on {ref}")
@@ -277,11 +304,16 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                 "rotation_deg": number(pa[3]) if len(pa) > 3 else 0, "shape": pad[3], "kind": pad[2],
                 "layers": pad_layers, "drill_mm": drill[:2],
                 "roundrect_ratio": number(first(pad, "roundrect_rratio", ["ratio", "0.25"])[1])})
+            local_pads.append({"number": pad[1], "x_mm": number(pa[1]), "y_mm": number(pa[2]), "w_mm": size[0], "h_mm": size[1],
+                               "rotation_deg": (number(pa[3]) if len(pa) > 3 else 0) - angle,
+                               "kind": BODY_PAD_KINDS.get(pad[2], "smd"),
+                               **({"drill_mm": drill[:2]} if len(drill) >= 2 and drill[0] > 0 and drill[1] > 0 else {})})
         for g in fp:
             if isinstance(g, list) and g and g[0] in {"fp_line", "fp_rect", "fp_poly", "fp_arc", "fp_circle"}:
                 result = graphic(g, transform)
                 if result:
                     component["graphics"].append(result)
+        component["body_input"] = body_input(fp, props, angle, local_pads)
         points = [p for g in component["graphics"] for p in g["points"]]
         for p in component["pads"]:
             w, h = p["size_mm"]

@@ -61,6 +61,27 @@ class ImportTests(unittest.TestCase):
         self.assertNotIn("models", second)
         self.assertNotIn("body_model", second)
 
+    def test_body_input_is_the_footprint_in_its_own_frame(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (footprint "Package_SO:SOIC-8" (layer "F.Cu") (at 10 20 90)
+            (property "Reference" "U1") (property "CopperScriptHeightMM" "1.5")
+            (fp_rect (start -1.95 -2.45) (end 1.95 2.45) (stroke (width 0.1) (type default)) (layer "F.Fab"))
+            (fp_line (start -3 -3) (end 3 -3) (stroke (width 0.1) (type default)) (layer "F.CrtYd"))
+            (fp_line (start -3 3) (end 3 3) (stroke (width 0.1) (type default)) (layer "F.CrtYd"))
+            (fp_line (start -9 -9) (end 9 9) (stroke (width 0.1) (type default)) (layer "F.SilkS"))
+            (pad "1" smd rect (at -2.475 -1.905 90) (size 1.95 0.6) (layers "F.Cu"))
+            (pad "2" thru_hole circle (at 2 2) (size 1.7 1.7) (drill 1) (layers "*.Cu"))))'''
+        body = import_pcb(data, "b.kicad_pcb")["components"][0]["body_input"]
+        self.assertEqual(body["name"], "Package_SO:SOIC-8")
+        self.assertEqual(body["fab_mm"], [-1.95, -2.45, 1.95, 2.45])
+        self.assertEqual(body["courtyard_mm"], [-3, -3, 3, 3])
+        self.assertEqual(body["height_mm"], 1.5)
+        smd, hole = body["pads"]
+        self.assertEqual((smd["x_mm"], smd["y_mm"], smd["kind"]), (-2.475, -1.905, "smd"))
+        self.assertEqual(smd["rotation_deg"], 0)  # pad angles are absolute; the footprint's 90 is removed
+        self.assertEqual((hole["kind"], hole["drill_mm"]), ("thru_hole", [1, 1]))
+        self.assertNotIn("drill_mm", smd)
+
     def test_through_hole_layers_and_blind_via_span(self):
         data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (2 "In1.Cu" power) (4 "In2.Cu" power) (31 "B.Cu" signal))
           (via blind (at 1 2) (size .6) (drill .3) (layers "F.Cu" "In2.Cu") (net 0)))'''

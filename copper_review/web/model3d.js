@@ -61,15 +61,23 @@ function rotation([rx,ry,rz]) {
   return mul3(Z,mul3(Y,X)); // x first; only the identity is checked against KiCad
 }
 
-/** Maps a model-frame point (VRML units) to the world frame for `component`. */
-export function placement(component, model, thickness=DEFAULT_THICKNESS_MM) {
+export const BODY_INPUT_SCHEMA = 'copperscript.body-input/v1';
+/** The request that makes CopperScript generate this component's body (also the cache key), or null. */
+export function bodyInputKey(component) {
+  const input=component.body_input;
+  return input&&Array.isArray(input.pads)?JSON.stringify({schema:BODY_INPUT_SCHEMA,...input}):null;
+}
+
+/** Maps a model-frame point to the world frame for `component`.
+    `unit` is mm per model unit; `mirror` flips back-side parts' x, as KiCad does for library models. */
+export function placement(component, model, thickness=DEFAULT_THICKNESS_MM, {unit=WRL_UNIT_MM,mirror=true}={}) {
   const scale=model.scale||[1,1,1],offset=model.offset_mm||[0,0,0],R=rotation(model.rotate_deg||[0,0,0]);
   const back=component.side==='back',angle=(component.rotation_deg||0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
   const [px,py]=component.position_mm;
   return point=>{
-    const m=[point[0]*WRL_UNIT_MM*scale[0],point[1]*WRL_UNIT_MM*scale[1],point[2]*WRL_UNIT_MM*scale[2]];
+    const m=[point[0]*unit*scale[0],point[1]*unit*scale[1],point[2]*unit*scale[2]];
     let x=R[0]*m[0]+R[1]*m[1]+R[2]*m[2]+offset[0],y=R[3]*m[0]+R[4]*m[1]+R[5]*m[2]+offset[1],z=R[6]*m[0]+R[7]*m[1]+R[8]*m[2]+offset[2];
-    if(back){x=-x;z=-z-thickness;}
+    if(back){if(mirror)x=-x;z=-z-thickness;}
     return [px+x*c-y*s,-py+x*s+y*c,z];
   };
 }
@@ -91,16 +99,21 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
   for(let i=0;i<4;i++){const j=(i+1)%4;quad(bottom[i],bottom[j],top[j],top[i],[.07,.22,.15]);}
   let drawn=0,approximate=0;
   for(const component of scene.components){
-    const choice=pickModel(component),body=choice&&bodies.get(choice.path);
+    const choice=pickModel(component),served=choice&&bodies.get(choice.path),key=bodyInputKey(component);
+    const generated=!served&&key&&bodies.get('input:'+key);
+    const body=served||generated;
     if(!body)continue;
-    const place=placement(component,choice.model,thickness),start=positions.length/3;
+    // A file model follows KiCad's conventions. A body generated from the footprint's own frame is already
+    // in millimetres and, for back parts, already mirrored like the file's pads.
+    const place=served?placement(component,choice.model,thickness):placement(component,{},thickness,{unit:1,mirror:false}),start=positions.length/3;
     for(const part of body.parts){
       const p=i=>place([part.points[i*3],part.points[i*3+1],part.points[i*3+2]]);
       for(let t=0;t<part.triangles.length;t+=3)triangle(p(part.triangles[t]),p(part.triangles[t+1]),p(part.triangles[t+2]),part.color);
     }
     // A mirrored (back) placement flips the winding; the shader lights both faces, so it only costs a sign.
-    ranges.push({reference:component.reference,start,count:positions.length/3-start,approximate:choice.approximate});
-    drawn++;if(choice.approximate)approximate++;
+    const guess=!served||choice.approximate;
+    ranges.push({reference:component.reference,start,count:positions.length/3-start,approximate:guess});
+    drawn++;if(guess)approximate++;
   }
   return {positions:Float32Array.from(positions),normals:Float32Array.from(normals),colors:Float32Array.from(colors),ranges,
           summary:{components:scene.components.length,drawn,approximate,missing:scene.components.length-drawn}};
@@ -109,4 +122,17 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
 /** Model paths to fetch for a scene, once each. */
 export function modelPaths(scene) {
   return [...new Set(scene.components.map(c=>pickModel(c)?.path).filter(Boolean))].sort();
+}
+
+/** Bodies for a scene: served WRL files first, then CopperScript-generated ones for every component without one.
+    `fetchBody(path)` gives a parsed body or null; `generate(requests)` gives `{wrl}|{error}` per request. */
+export async function loadBodies(scene, {fetchBody,generate}) {
+  const bodies=new Map();
+  await Promise.all(modelPaths(scene).map(async path=>{try{const body=await fetchBody(path);if(body)bodies.set(path,body);}catch{}}));
+  const needed=[...new Set(scene.components.filter(c=>{const choice=pickModel(c);return !(choice&&bodies.has(choice.path));}).map(bodyInputKey).filter(Boolean))];
+  if(needed.length&&generate){
+    const results=await generate(needed);
+    results.forEach((result,i)=>{if(result?.wrl){try{bodies.set('input:'+needed[i],parseVrml(result.wrl));}catch{}}});
+  }
+  return bodies;
 }

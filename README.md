@@ -148,20 +148,28 @@ from the drawing alone.
 
 ## 3D view
 
-`copper-review BOARD.kicad_pcb` serves the `*.3dshapes/*.wrl` files beside the
-board, and the **3D** button draws them placed on the board (drag orbits, shift
-or right-drag pans, wheel zooms). A CopperScript export writes a body for every
-footprint into `CopperScript.3dshapes/` and tags each footprint with a
-`CopperScriptBody` property; the same files are what KiCad shows, so the two
-views agree. Bodies the compiler generated are approximate and are counted as
-such in the status line.
+The **3D** button draws a body for every component (drag orbits, shift or
+right-drag pans, wheel zooms). Where each body comes from, in order:
+
+1. `copper-review BOARD.kicad_pcb` serves the `*.3dshapes/*.wrl` files beside the
+   board. A CopperScript export writes one per footprint into
+   `CopperScript.3dshapes/`, the same files KiCad shows.
+2. Otherwise the viewer asks CopperScript's WASM build (`generate_body`) to
+   generate the body from the footprint geometry the scene carries
+   (`body_input`: pads, fabrication and courtyard outline, height). This works
+   in the hosted viewer and for boards opened from a file or exported scene.
+
+Bodies from step 2 are approximate and counted as such in the status line. The
+viewer never rebuilds bodies itself; the compiler's generator is the only one.
 
 Limits: only VRML files from `.3dshapes` folders next to the board are read
 (STEP models are not rendered; the generated body stands in); the board is its
 bounding rectangle at an assumed 1.6 mm; back-side parts and non-zero model
 rotation or offset are placed best-effort and have not been compared with KiCad.
-A board opened from the file picker, a URL or a compiled `.copper` source has no
-served folder, so the button reports that no bodies were found.
+Scenes exported before `body_input` existed, and boards compiled from `.copper`
+source in the browser, carry no footprint geometry and show no 3D bodies. The
+pinned WASM build must include `generate_body`; an older one reports that it
+cannot generate bodies.
 
 ## Viewing and storage
 

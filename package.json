@@ -6,6 +6,7 @@
     "test": "node --test tests/core.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js tests/projects.test.js tests/project-compiler.test.js tests/schematic.test.js tests/model3d.test.js",
     "build:wasm": "node scripts/build-wasm.mjs",
     "build:static": "node scripts/build-static.mjs",
-    "test:wasm": "node scripts/check-wasm.mjs"
+    "test:wasm": "node scripts/check-wasm.mjs",
+    "test:body": "node tests/body-wasm.mjs"
   }
 }
