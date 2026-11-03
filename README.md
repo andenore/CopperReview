@@ -36,7 +36,21 @@ The board is read-only. Feedback never edits the PCB or solver constraints.
 
 ## Run
 
-From this repository:
+On Ubuntu (or anywhere with `make`, [uv](https://docs.astral.sh/uv/) and Node.js 20+):
+
+```bash
+make setup                                   # check tools, install, fetch the browser compiler
+make serve PROJECT=../BysseControl-32        # compile a project folder; reload to recompile
+make serve PROJECT=../BysseControl-32 HOST=0.0.0.0 OPEN=no   # reachable from other machines
+make serve IR=build/electrical.ir.json       # or a compiled IR; BOARD=… for a PCB
+make test
+```
+
+`PORT` (default 8769), `ENTRY` (board file in a multi-board project) and `STAGE`
+(for `BOARD`) are also accepted; `make help` lists the targets. The compiler is
+fetched on first use and again whenever `.copperscript-version` changes.
+
+Or run the commands directly. From this repository:
 
 ```powershell
 python -m copper_review "../CopperAssetTracker/build/placed.kicad_pcb" --stage placed
