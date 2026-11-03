@@ -92,3 +92,8 @@ body.electrical-maximized #electrical-review{height:100dvh;max-width:none;paddin
 .electrical-notes-go{flex:1;text-align:left;background:transparent;border-color:transparent;font-size:13px;display:flex;flex-direction:column;gap:4px}.electrical-notes-go:hover{border-color:var(--border)}.electrical-notes-go>div:first-child{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.electrical-notes-go .electrical-note-number{margin-top:0}
 .electrical-notes-row.resolved .electrical-notes-go>div:nth-child(2){text-decoration:line-through;color:var(--muted)}.electrical-notes-dialog>p{padding:0 16px}
 .electrical-sch .electrical-sch-tie-ground{fill:var(--muted);font-size:11px}
+/* A sparse drawing sits in the middle of the canvas; auto margins collapse to zero once it
+   outgrows the canvas, so a large drawing still starts top-left and scrolls. */
+#electrical-canvas:has(>svg.electrical-topology){display:flex;flex-direction:column;gap:4px}
+#electrical-canvas>svg.electrical-topology{margin:auto;flex:none}
+#electrical-canvas:has(>.electrical-sheet-bar){padding:0 12px 12px}
