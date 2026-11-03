@@ -161,7 +161,8 @@ class BoardAssetTests(unittest.TestCase):
             (root / "plain" / "a.wrl").write_bytes(b"no")
             self.assertEqual(board_asset(root, "Board.3dshapes/a.wrl"), b"#VRML V2.0 utf8\n")
             for name in ["Board.3dshapes/a.txt", "Board.3dshapes/a.step.bak", "secret.wrl", "plain/a.wrl", "Board.3dshapes/missing.wrl", "../x.3dshapes/a.wrl",
-                         "Board.3dshapes/../secret.wrl", "/Board.3dshapes/a.wrl", "Board.3dshapes\\a.wrl", "", "a/b/c.wrl"]:
+                         "Board.3dshapes/../secret.wrl", "/Board.3dshapes/a.wrl", "Board.3dshapes\\a.wrl", "", "a/b/c.wrl",
+                         "C:Board.3dshapes/a.wrl", "Board.3dshapes/C:a.wrl", ".3dshapes/a.wrl", "Board.3dshapes/a\x00.wrl"]:
                 self.assertIsNone(board_asset(root, name), name)
             self.assertEqual(board_asset(root, "Board.3dshapes/a.step"), b"step")
             (root / "Board.3dshapes" / "b.STP").write_bytes(b"stp")

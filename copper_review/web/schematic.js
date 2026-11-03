@@ -400,13 +400,18 @@ export function layoutSheet(source,sheet,{folded,view}){
   for(const s of symbols.values()){
     const sym={ref:s.ref,title:s.title,subtitle:s.subtitle,part:s.part,two:s.two,kind:s.kind,inline:s.inline,x:s.x,y:s.y,w:s.w,h:s.h,nc:s.nc,pins:[],top:[],bottom:[]};
     for(const side of ['left','right'])for(const p of s[side]){const pt=pinPoint(p);sym.pins.push({id:p.id,name:p.name,number:p.number,net:p.net,raw:p.rawNet||p.net,side,x:pt.x,y:pt.y,end:pt.x+pt.dir*STUB});}
-    // A diode points at its cathode; the side follows wherever layout put that pin.
-    if(['diode','led','tvs'].includes(s.kind)){const c=model.components.get(s.ref),k=c.pins.find(p=>isCathode(c,p));sym.cathode=s.left.includes(k)||!s.right.includes(k)&&s.right.length?'left':'right';}
     const spread=(groups,y,dir)=>groups.map((g,i)=>{const split=s.two&&groups.length===2,end=s.two&&groups.length===1;
       // A two-pin part takes a single flag on a free lead end, not through its body: the end
       // without a wire, or power on the left and ground on the right when both pins are flags.
       const gx=split?s.x+(i?s.w-4:4):end&&s.left.length?s.x+s.w-2:end&&(s.right.length||dir<0)?s.x+2:end?s.x+s.w-2:s.x+s.w*(i+1)/(groups.length+1);const badges=[...folded.values()].filter(f=>f.kind==='support'&&f.pin&&model.pins.get(f.pin).component===s.ref&&f.net===g.net);return {net:g.net,pins:g.pins.map(p=>p.id),names:g.pins.map(p=>p.name),x:gx,y,end:y+dir*16,anchor:split?(i?'start':'end'):'middle',badges:badges.map(f=>f.ref)};});
     sym.top=spread(s.top,s.y,-1);sym.bottom=spread(s.bottom,s.y+s.h,1);
+    // A diode points at its cathode, on whichever end layout gave that pin: a side, or the end its
+    // rail flag sits on; an unconnected cathode takes the end opposite the other pin.
+    if(['diode','led','tvs'].includes(s.kind)){
+      const c=model.components.get(s.ref),k=c.pins.find(p=>isCathode(c,p)),other=c.pins.find(p=>p!==k);
+      const sideOf=p=>{if(s.left.includes(p))return 'left';if(s.right.includes(p))return 'right';const flag=[...sym.top,...sym.bottom].find(f=>f.pins.includes(p?.id));return flag?(flag.x<s.x+s.w/2?'left':'right'):null;};
+      sym.cathode=sideOf(k)||(sideOf(other)==='left'?'right':'left');
+    }
     out.symbols.push(sym);
   }
   for(const w of wired.values()){

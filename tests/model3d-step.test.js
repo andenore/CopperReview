@@ -47,7 +47,7 @@ test('a component prefers its own STEP model and falls back to the generated bod
   const both=await loadBodies(stepScene(),{
     fetchBody:async path=>{fetched.push(path);return path.endsWith('.step')?occtToBody({meshes:[boxMesh()]}):parseVrml(wrl);},
   });
-  assert.deepEqual(fetched.sort(),['CopperScript.3dshapes/J1.wrl','CopperScript.3dshapes/abc_J1.step']);
+  assert.deepEqual(fetched,['CopperScript.3dshapes/abc_J1.step'],'the generated fallback is not fetched once the STEP model loads');
   assert.equal(buildSoup(stepScene(),both).summary.approximate,0,'the real model wins over the generated one');
   const noStep=await loadBodies(stepScene(),{fetchBody:async path=>path.endsWith('.step')?null:parseVrml(wrl)});
   assert.equal(buildSoup(stepScene(),noStep).summary.approximate,1,'the generated body stands in');

@@ -295,7 +295,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   // A part's datasheet, revision and the place in it that the definition cites.
   function partDocument(c){const src=c.partDefinition.source||{};let href=null;try{const u=new URL(src.url);if(['https:','http:'].includes(u.protocol))href=u.href;}catch{}
     if(!src.document&&!href&&!src.location)return null;
-    const box=el('div',undefined,'electrical-doc'),name=src.document||(href?decodeURIComponent(new URL(href).pathname.split('/').pop())||new URL(href).host:'Source document'),link=el(href?'a':'span',name);
+    const box=el('div',undefined,'electrical-doc'),name=src.document||(href?(()=>{const last=new URL(href).pathname.split('/').pop();try{return decodeURIComponent(last);}catch{return last;}})()||new URL(href).host:'Source document'),link=el(href?'a':'span',name);
     if(href){link.href=href;link.target='_blank';link.rel='noopener noreferrer';link.title=href;}
     box.append(el('span','Datasheet','electrical-label'),link);const where=[src.revision,src.location].filter(Boolean).join(' · ');if(where)box.append(el('p',where,'quiet'));return box;}
   // Rows of aligned cells; long values clip and keep the full text as a tooltip.

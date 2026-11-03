@@ -61,7 +61,9 @@ export function createView3d(canvas) {
   }
   const drag={};
   canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);Object.assign(drag,{x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey,active:true});});
-  canvas.addEventListener('pointerup',()=>{drag.active=false;});
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,()=>{drag.active=false;});
+  // The canvas follows its box (window resize, the Both split) without waiting for a drag.
+  new ResizeObserver(()=>{if(!canvas.hidden)request();}).observe(canvas);
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
   canvas.addEventListener('pointermove',e=>{
     if(!drag.active)return;

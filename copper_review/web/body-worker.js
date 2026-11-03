@@ -13,7 +13,7 @@ try{
   if(typeof wasm.generate_body!=='function')throw Error('This CopperScript build cannot generate 3D bodies.');
   self.postMessage({type:'ready'});
   self.onmessage=event=>{
-    try{self.postMessage({type:'bodies',results:event.data.requests.map(request=>JSON.parse(wasm.generate_body(request)))});}
-    catch(error){self.postMessage({type:'fatal',error:`CopperScript stopped: ${error.message}`});}
+    // One footprint CopperScript cannot handle leaves only that component without a body.
+    self.postMessage({type:'bodies',results:event.data.requests.map(request=>{try{return JSON.parse(wasm.generate_body(request));}catch(error){return {error:`CopperScript stopped: ${error.message}`};}})});
   };
 }catch(error){self.postMessage({type:'fatal',error:error.message});}

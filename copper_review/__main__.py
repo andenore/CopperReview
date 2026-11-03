@@ -117,13 +117,18 @@ def source_identity(path):
 
 def board_asset(root, name):
     """Bytes of `<dir>.3dshapes/<file>.wrl|step|stp` beside the board, or None; nothing else is served."""
-    parts = name.split("/") if root and name and "\\" not in name else []
-    if len(parts) != 2 or not parts[0].endswith(".3dshapes") or Path(parts[1]).suffix.lower() not in MODEL_TYPES or ".." in parts:
+    parts = name.split("/") if root and isinstance(name, str) and "\\" not in name else []
+    # Plain file names only: no drive letters, NUL or leading dots, which pathlib could join outside root.
+    if (len(parts) != 2 or not parts[0].endswith(".3dshapes") or Path(parts[1]).suffix.lower() not in MODEL_TYPES
+            or any(not part or part.startswith(".") or any(c in part for c in (":", "\x00")) for part in parts)):
         return None
-    directory = Path(root) / parts[0]
+    root = Path(root).resolve()
+    directory = root / parts[0]
     path = directory / parts[1]
     try:
         if directory.is_symlink() or path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_MODEL:
+            return None
+        if path.resolve().parent != directory.resolve() or directory.resolve().parent != root:
             return None
         return path.read_bytes()
     except OSError:

@@ -125,3 +125,27 @@ test('a generated back-side body hangs below the board without a second mirror',
   assert.ok(Math.abs(fx0-bx0)<1e-5&&Math.abs(fx1-bx1)<1e-5,'same footprint frame, same x extent');
   assert.ok(Math.abs(bz1-(-1.6))<1e-6&&bz0<-1.6,`z ${bz0}..${bz1}`);
 });
+
+test('KiCad library VRML: materials named once and reused after the geometry, texture points skipped', () => {
+  const text=`#VRML V2.0 utf8
+Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 1 0 0, 0 1 0 ] } coordIndex [ 0, 1, 2, -1 ] }
+ appearance Appearance { material DEF PIN-01 Material { diffuseColor 0.8 0.8 0.8 } } }
+Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 1, 1 0 1, 0 1 1 ] } coordIndex [ 0, 1, 2, -1 ]
+ texCoord TextureCoordinate { point [ 0 0, 1 0, 0 1 ] } }
+ appearance Appearance { material DEF IC-BODY Material { diffuseColor 0.1 0.1 0.1 } } }
+Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 2, 1 0 2, 0 1 2 ] } coordIndex [ 0, 1, 2, -1 ] }
+ appearance Appearance { material USE PIN-01 } }`;
+  const {parts}=parseVrml(text);
+  assert.equal(parts.length,3,'the texture coordinates are not a fourth part');
+  assert.deepEqual(parts.map(p=>p.color.map(c=>+c.toFixed(2))),[[.8,.8,.8],[.1,.1,.1],[.8,.8,.8]]);
+});
+
+test('loadBodies reuses a cache across calls: nothing is fetched or generated twice', async () => {
+  const cache=new Map();let fetches=0,generated=0;
+  const options={cache,fetchBody:async()=>{fetches++;return null;},generate:async a=>{generated+=a.length;return a.map(()=>({wrl}));}};
+  const first=await loadBodies(scene([bare('C1')]),options),again=await loadBodies(scene([bare('C1')]),options);
+  assert.equal(buildSoup(scene([bare('C1')]),again).summary.drawn,1);assert.equal(first.size,again.size);
+  assert.equal(generated,1);
+  const failedBatch=new Map();await loadBodies(scene([bare('C1')]),{cache:failedBatch,fetchBody:async()=>null,generate:async()=>[]});
+  assert.equal(failedBatch.size,0,'a batch that failed as a whole is retried next time');
+});

@@ -6,20 +6,25 @@ export const MAX_TRIANGLES = 3e6;
 export const DEFAULT_THICKNESS_MM = 1.6;
 const SIZE_LIMIT = 20e6;
 
-/** Triangles of every IndexedFaceSet in `text` (the flat Shape/Coordinate subset CopperScript writes). */
+/** Triangles of every IndexedFaceSet in `text`: the flat Shape/Coordinate subset CopperScript writes, and
+    KiCad's library files, which name materials once (DEF) and reuse them (USE), often after the geometry. */
 export function parseVrml(text) {
   if(typeof text!=='string' || text.length>SIZE_LIMIT || !text.startsWith('#VRML V2.0'))throw new Error('Not a VRML 2.0 file');
   const unsupported=/\b(Inline|Script|PROTO)\b/.test(text);
-  const parts=[];let color=[.7,.7,.7],name='';
+  const parts=[],materials=new Map();let color=[.7,.7,.7],name='',material=null,shapeStart=0;
+  const paint=c=>{color=c;for(let k=shapeStart;k<parts.length;k++)parts[k].color=[...c];};
   const tokens=text.replace(/#.*$/gm,'').replace(/[{}[\],]/g,m=>` ${m==='['||m===']'?m:m==='{'||m==='}'?m:' '} `).split(/\s+/).filter(Boolean);
   const numbersAfter=(i)=>{ // tokens[i] === '[': numbers up to ']'
     const values=[];for(i++;i<tokens.length && tokens[i]!==']';i++)values.push(Number(tokens[i]));
     if(values.some(v=>!Number.isFinite(v)))throw new Error('Invalid number in VRML');return values;};
   for(let i=0;i<tokens.length;i++){
     const token=tokens[i];
-    if(token==='DEF')name=tokens[i+1]||'';
-    else if(token==='diffuseColor'){const c=tokens.slice(i+1,i+4).map(Number);if(c.length===3&&c.every(Number.isFinite))color=c;}
-    else if(token==='point'&&tokens[i+1]==='['){parts.push({name,color:[...color],points:numbersAfter(i+1),index:[]});}
+    if(token==='Shape')shapeStart=parts.length;
+    else if(token==='DEF'){if(tokens[i+2]==='Material')material=tokens[i+1];else if(tokens[i+2]!=='Appearance')name=tokens[i+1]||'';}
+    else if(token==='USE'&&tokens[i-1]==='material'&&materials.has(tokens[i+1]))paint(materials.get(tokens[i+1]));
+    else if(token==='diffuseColor'){const c=tokens.slice(i+1,i+4).map(Number);if(c.length===3&&c.every(Number.isFinite)){if(material)materials.set(material,c);material=null;paint(c);}}
+    // Only a Coordinate's points are vertices; a TextureCoordinate's are 2D and skipped.
+    else if(token==='point'&&tokens[i+1]==='['&&tokens[i-2]==='Coordinate'){parts.push({name,color:[...color],points:numbersAfter(i+1),index:[]});}
     else if(token==='coordIndex'&&tokens[i+1]==='['&&parts.length){parts[parts.length-1].index=numbersAfter(i+1);}
   }
   const result=[];
@@ -174,14 +179,22 @@ export function modelPaths(scene) {
 }
 
 /** Bodies for a scene: each component's own WRL or STEP model first, then CopperScript-generated ones for every component without one.
-    `fetchBody(path)` gives a parsed body or null; `generate(requests)` gives `{wrl}|{error}` per request. */
-export async function loadBodies(scene, {fetchBody,generate}) {
+    `fetchBody(path)` gives a parsed body or null; `generate(requests)` gives `{wrl}|{error}` per request.
+    A component's candidates are tried in order and later ones are not fetched once one loads. `cache` (a Map
+    kept by the caller for one board) holds what earlier calls fetched or generated, so they are not redone. */
+export async function loadBodies(scene, {fetchBody,generate,cache=new Map()}) {
   const bodies=new Map();
-  await Promise.all(modelPaths(scene).map(async path=>{try{const body=await fetchBody(path);if(body)bodies.set(path,body);}catch{}}));
-  const needed=[...new Set(scene.components.filter(c=>!chosen(c,bodies)).map(bodyInputKey).filter(Boolean))];
+  const get=path=>{if(!cache.has(path))cache.set(path,Promise.resolve().then(()=>fetchBody(path)).catch(()=>null));return cache.get(path);};
+  await Promise.all(scene.components.map(async component=>{
+    for(const {path} of candidates(component)){const body=await get(path);if(body){bodies.set(path,body);break;}}
+  }));
+  const keys=[...new Set(scene.components.filter(c=>!chosen(c,bodies)).map(bodyInputKey).filter(Boolean))];
+  const needed=keys.filter(key=>!cache.has('input:'+key));
   if(needed.length&&generate){
     const results=await generate(needed);
-    results.forEach((result,i)=>{if(result?.wrl){try{bodies.set('input:'+needed[i],parseVrml(result.wrl));}catch{}}});
+    // A batch that failed as a whole (no result) is not remembered, so the next call tries again.
+    needed.forEach((key,i)=>{if(!results[i])return;let body=null;if(results[i]?.wrl){try{body=parseVrml(results[i].wrl);}catch{}}cache.set('input:'+key,Promise.resolve(body));});
   }
+  for(const key of keys){const body=await cache.get('input:'+key);if(body)bodies.set('input:'+key,body);}
   return bodies;
 }

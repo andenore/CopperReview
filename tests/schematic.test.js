@@ -151,3 +151,13 @@ test('two-pin parts get symbols by category, then reference, then pin names',()=
   // Every glyph spans its box so the pin stubs meet its leads.
   for(const kind of ['resistor','capacitor','inductor','ferrite','diode','tvs','led','fuse','crystal','switch']){const d=glyph(kind,10,20,48,16).map(s=>s.d).join('');assert.match(d,/M10 28/,kind);assert.match(d,/H58|L58 28/,kind);}
 });
+test('a diode with both pins on rails points at the end its cathode flag sits on',()=>{
+ const ir=board();ir.parts.push({name:'DZ',category:'protection.tvs',pins:[pin('A',[]),pin('K',[])]});
+ ir.components.push(component('D2','DZ'));ir.nets.find(n=>n.name==='3V3').endpoints.push('D2.K');ir.nets.find(n=>n.name==='GND').endpoints.push('D2.A');
+ const model=electricalModel(ir),s=schematicSheets(model,{showPassives:true}),found=s.sheets.find(x=>x.refs.includes('D2'));
+ // Without rail wiring both pins become flags: 3V3 on one lead end, GND on the other.
+ const sym=layoutSheet(model,{...found,wired:[],railParts:[]},s).symbols.find(x=>x.ref==='D2'),[power]=sym.top,[ground]=sym.bottom;
+ assert.equal(sym.kind,'tvs');assert.deepEqual([power.net,ground.net,sym.pins.length],['3V3','GND',0]);
+ assert.equal(sym.cathode,power.x<sym.x+sym.w/2?'left':'right','the arrow points at the 3V3 flag, not at ground');
+ assert.notEqual(power.x<sym.x+sym.w/2,ground.x<sym.x+sym.w/2,'the two flags take opposite ends');
+});
