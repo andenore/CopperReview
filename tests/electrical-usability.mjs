@@ -18,10 +18,11 @@ for(let i=0;i<30;i++){
 try{
  await page.goto(url);await page.locator('#electrical-file').setInputFiles({name:'usability.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});
  await page.waitForFunction(()=>document.getElementById('electrical-name').textContent==='Usability');
- // Explorer focuses immediately; returning needs one action.
+ // The explorer selects in place; the Selection sheet draws one hop around it and Back returns.
  await page.locator('#electrical-entities [data-entity="LOAD"]').click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),'LOAD');
- assert.equal(await page.locator('.electrical-topology [data-kind="component"][data-entity="R_SIGNAL"]').count(),1);
- await page.locator('#electrical-back').click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),'peripheral:LINK');
+ await page.getByRole('button',{name:'Show selection sheet'}).click();assert.equal(await page.locator('#electrical-sheet').inputValue(),'selection');
+ assert.equal(await page.locator('.electrical-sch [data-kind="component"][data-entity="R_SIGNAL"]').count(),1);
+ await page.locator('#electrical-back').click();assert.notEqual(await page.locator('#electrical-sheet').inputValue(),'selection');assert.equal(await page.locator('#electrical-inspector h3').textContent(),'LOAD');
  // A legible schematic has genuine horizontal scrolling, and Fit can reduce it.
  assert(await page.locator('#electrical-canvas').evaluate(c=>c.scrollWidth>c.clientWidth));
  await page.locator('#electrical-canvas').evaluate(c=>c.scrollLeft=100);assert(await page.locator('#electrical-canvas').evaluate(c=>c.scrollLeft>0));
@@ -41,15 +42,15 @@ try{
  await page.reload();await page.waitForSelector('#electrical-review:not([hidden])');assert(await page.locator('#electrical-show-passives').isChecked());
  await page.locator('#electrical-power-connections').click();
  await page.locator('#electrical-show-passives').uncheck();
- // The focus picker includes interfaces and rails, without an inspector detour.
+ // The Go to picker includes interfaces and rails and selects in place.
  await page.locator('#electrical-focus').selectOption(JSON.stringify({kind:'net',id:'RAIL'}));assert.equal(await page.locator('#electrical-inspector h3').textContent(),'RAIL');
- assert.match(await page.locator('#electrical-canvas').textContent(),/30 supporting passives collapsed/);
+ assert.equal(await page.locator('[data-rail="RAIL"] summary').filter({hasText:'passive loads'}).count(),1);
  await page.locator('#electrical-search').fill('CAP0');await page.locator('#electrical-entities [data-entity="CAP0"]').click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),'CAP0');
  await page.locator('#electrical-search').fill('');await page.locator('[data-electrical-view="bus"]').click();await page.locator('#electrical-bus-connections').click();assert(await page.locator('.electrical-other-signals').isVisible());
- await page.locator('.electrical-bus [data-entity="peripheral:LINK"]').click();assert.equal(await page.locator('[data-electrical-view="focus"]').getAttribute('aria-selected'),'true');
+ await page.locator('.electrical-bus [data-entity="peripheral:LINK"]').click();assert.equal(await page.locator('[data-electrical-view="schematic"]').getAttribute('aria-selected'),'true');assert.equal(await page.locator('#electrical-sheet').inputValue(),'selection');
  if(process.argv[3]){await page.locator('#electrical-file').setInputFiles(process.argv[3]);await page.waitForFunction(()=>document.getElementById('electrical-name').textContent!=='Usability');}
  mkdirSync('test-results',{recursive:true});
- for(const view of ['focus','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();await page.screenshot({path:`test-results/usability-${view}.png`});}
- for(const width of [900,390]){await page.setViewportSize({width,height:800});for(const view of ['focus','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`document overflow ${width}/${view}`);}}
+ for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();await page.screenshot({path:`test-results/usability-${view}.png`});}
+ for(const width of [900,390]){await page.setViewportSize({width,height:800});for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`document overflow ${width}/${view}`);}}
  assert.deepEqual(errors,[]);console.log('PASS: passive disclosure, signal-path preservation, one-click focus/back, direct circuit picker, two-axis scrolling, fit/100%, saved settings and responsive layout');
 }finally{await browser.close();}

@@ -14,7 +14,7 @@ try{
   await page.waitForFunction(()=>document.getElementById('electrical-name').textContent==='Fixture');
   await page.locator('#electrical-canvas [data-entity="DATA"]').first().click();
   const selected=await page.locator('#electrical-inspector h3').textContent();assert.equal(selected,'DATA');
-  for(const view of ['power','bus','focus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),selected);}
+  for(const view of ['power','bus','schematic']){await page.locator(`[data-electrical-view="${view}"]`).click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),selected);}
   await page.locator('[data-electrical-view="power"]').click();await page.locator('#electrical-power-connections').click();await page.locator('#electrical-state').selectOption('OFF');
   assert.match(await page.locator('[data-rail="RAIL"]').textContent(),/Declared off/);
   assert.match(await page.locator('[data-rail="BACKUP"]').textContent(),/State unspecified/);
@@ -42,8 +42,8 @@ try{
   await page.waitForSelector('#pcb-review:not([hidden])');assert.equal(await page.locator('.entity').count(),4);
   await page.locator('#show-electrical').click();assert.equal(await page.locator('#electrical-name').textContent(),'Other revision');
   if(process.argv[3]){await page.locator('#electrical-file').setInputFiles(process.argv[3]);await page.waitForFunction(()=>document.getElementById('electrical-name').textContent!=='Other revision');}
-  for(const view of ['focus','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();await page.screenshot({path:`test-results/electrical-${view}.png`,fullPage:true});}
+  for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();await page.screenshot({path:`test-results/electrical-${view}.png`,fullPage:true});}
   await page.setViewportSize({width:390,height:900});
-  for(const view of ['focus','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow in ${view}`);}
+  for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow in ${view}`);}
   assert.deepEqual(errors,[]);console.log('PASS: three linked views, pins, states, notes/export/import, input identity, XSS, PCB coexistence, mobile layout');
 }finally{await browser.close();}

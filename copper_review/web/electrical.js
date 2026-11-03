@@ -1,5 +1,5 @@
 import {powerGraph,busGraph,layoutGraph,routeGraph} from './topology.js';
-import {electricalModel,focusCircuit,compactCircuit,powerTopology,isPassive,quantity,ELECTRICAL_SCHEMA} from './electrical-model.js';
+import {electricalModel,focusCircuit,powerTopology,isPassive,quantity,ELECTRICAL_SCHEMA} from './electrical-model.js';
 import {schematicSheets,layoutSheet,netRole,compactQuantity} from './schematic.js';
 import {chips} from './chips.js';
 
@@ -15,16 +15,28 @@ const normalNote=n=>({...n,category:NOTE_CATEGORIES.some(([k])=>k===n.category)?
 function download(name,value){const u=URL.createObjectURL(new Blob([json(value)+'\n'],{type:'application/json'}));const a=el('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 export function createElectricalReview({message,onMode}){
   const root=$('electrical-review');
-  let model,input,selection=null,focusSelection=null,view='focus',focusRef=null,powerState='',notes=[],detail='intent',editing=null;
+  let model,input,selection=null,focusSelection=null,view='schematic',focusRef=null,powerState='',notes=[],detail='intent',editing=null;
   let draft=blankDraft(),storageWarning='',fade=true;
-  let showPassives=false,history=[],schematicZoom=1;
+  let showPassives=false,history=[],selectionSel=null;
   let powerConnections=false,powerZoom=1,busConnections=false,busZoom=1;
   let nativeCheck=null,powerDrawing=new Map(),busDrawing=new Map(),schematic=null,sheetId=null,sheetZoom=1,reveal=null;
   const button=(label,action,cls)=>{const b=el('button',label,cls);b.type='button';b.onclick=action;return b;};
   const key=()=>`copper-review:electrical:v1:${input.sha256}`;
   function selected(kind,id){return selection?.kind===kind&&selection.id===id;}
   function choose(kind,id){selection={kind,id};if(kind==='component')focusRef=id;save();render();for(const pane of root.querySelectorAll('.electrical-sidebar>section'))pane.scrollTo(0,0);}
-  function focusEntity(kind,id){if(focusSelection)history.push({focusSelection:{...focusSelection},selection:selection?{...selection}:null,view});focusSelection={kind,id};view='focus';choose(kind,id);$('electrical-canvas').scrollTo(0,0);}
+  /** A temporary Selection sheet: the entity and everything one connection away, across sheets. */
+  function focusEntity(kind,id){
+    const refs=selectionRefs({kind,id});
+    if(!refs.length||refs.length>SELECTION_LIMIT){message(refs.length?`The selection reaches ${refs.length} parts; showing its own sheet instead`:'Nothing to draw for this selection',!refs.length);locate(kind,id);return;}
+    history.push({selection:selection?{...selection}:null,view,sheetId,selectionSel});
+    focusSelection={kind,id};selectionSel={kind,id};view='schematic';sheetId='selection';choose(kind,id);$('electrical-canvas').scrollTo(0,0);
+  }
+  function selectionRefs(sel){
+    // A folded series link is drawn as a wire, so the parts on its far side count as one hop.
+    const s=sheets(),refs=new Set(focusCircuit(model,sel,focusRef).components.map(c=>c.ref));
+    for(const r of [...refs]){const f=s.folded.get(r);if(f?.kind==='series')for(const n of f.nets)for(const p of model.nets.get(n).pins)refs.add(p.component);}
+    return [...refs].filter(r=>s.view.components.has(r)&&!s.folded.has(r));
+  }
   function group(parent,items,makeItem,hidden,label){const folded=items.filter(hidden),shown=items.filter(x=>!hidden(x));for(const x of shown)parent.append(makeItem(x));if(folded.length){const d=el('details',undefined,'electrical-folded');d.append(el('summary',`${folded.length} ${label}`));for(const x of folded)d.append(makeItem(x));parent.append(d);}}
   function entity(kind,id,label=id){const b=button(label,()=>choose(kind,id),'electrical-entity');b.dataset.kind=kind;b.dataset.entity=id;b.setAttribute('aria-pressed',selected(kind,id));return b;}
   function save(){if(!input)return;try{localStorage.setItem(key(),json({view,selection,focusSelection,focusRef,powerState,notes,showPassives}));storageWarning='';}catch{storageWarning='Browser storage unavailable/full. Export notes to keep them.';}}
@@ -35,8 +47,8 @@ export function createElectricalReview({message,onMode}){
     if(envelope?.schema!==ELECTRICAL_SCHEMA||!envelope.input||!/^([a-f0-9]{64})$/.test(envelope.input.sha256))throw Error('Invalid electrical input identity');
     const next=electricalModel(envelope.ir); // Validate completely before replacing the current document.
     nativeCheck=envelope.analysis?.check||null;powerDrawing=new Map();busDrawing=new Map();schematic=null;sheetId=null;sheetZoom=1;
-    model=next;input=envelope.input;selection=null;view='schematic';powerState='';notes=[];focusRef=model.components.keys().next().value||null;editing=null;draft=blankDraft();detail='intent';focusSelection=null;history=[];showPassives=false;schematicZoom=1;powerConnections=false;powerZoom=1;busConnections=false;busZoom=1;
-    try{const raw=localStorage.getItem(key());if(raw){const saved=JSON.parse(raw);if(!saved||!Array.isArray(saved.notes)||saved.notes.some(n=>!n||!validSelection(n.selection)||typeof n.observation!=='string'))throw Error('Invalid local notes');notes=saved.notes.map(normalNote);selection=validSelection(saved.selection)?saved.selection:null;view=['schematic','focus','power','bus'].includes(saved.view)?saved.view:'schematic';powerState=model.powerStates.some(s=>s.name===saved.powerState)?saved.powerState:'';focusRef=model.components.has(saved.focusRef)?saved.focusRef:focusRef;}}
+    model=next;input=envelope.input;selection=null;view='schematic';powerState='';notes=[];focusRef=model.components.keys().next().value||null;editing=null;draft=blankDraft();detail='intent';focusSelection=null;history=[];selectionSel=null;showPassives=false;powerConnections=false;powerZoom=1;busConnections=false;busZoom=1;
+    try{const raw=localStorage.getItem(key());if(raw){const saved=JSON.parse(raw);if(!saved||!Array.isArray(saved.notes)||saved.notes.some(n=>!n||!validSelection(n.selection)||typeof n.observation!=='string'))throw Error('Invalid local notes');notes=saved.notes.map(normalNote);selection=validSelection(saved.selection)?saved.selection:null;view=['power','bus'].includes(saved.view)?saved.view:'schematic';powerState=model.powerStates.some(s=>s.name===saved.powerState)?saved.powerState:'';focusRef=model.components.has(saved.focusRef)?saved.focusRef:focusRef;}}
     catch{storageWarning='Saved electrical review could not be read. Existing storage was left untouched.';}
     const initial=model.buses.find(b=>b.provenance==='Configured peripheral')||model.buses[0];if(!selection)selection=initial?{kind:'bus',id:initial.id}:focusRef?{kind:'component',id:focusRef}:null;
     focusSelection=selection;
@@ -52,21 +64,21 @@ export function createElectricalReview({message,onMode}){
     for(const [label,items]of [['Interfaces',model.buses.filter(b=>b.provenance!=='Net membership').map(b=>['bus',b.id,b.name])],['Components',[...model.components.values()].filter(c=>showPassives||!isPassive(c)||selected('component',c.ref)).map(c=>['component',c.ref,c.ref])],['Rails',model.rails.filter(r=>r.supplies.length||r.sources.length).map(r=>['net',r.net,r.net])]]){const g=el('optgroup');g.label=label;for(const [kind,id,name]of items){const o=el('option',name);o.value=JSON.stringify({kind,id});g.append(o);}picker.append(g);}
     if(focusSelection){const v=JSON.stringify(focusSelection);if(![...picker.options].some(o=>o.value===v)){const o=el('option',focusSelection.id);o.value=v;picker.append(o);}picker.value=v;}
     $('electrical-notes-list').textContent=`Notes (${notes.length})`;
-    $('electrical-back').disabled=!history.length;$('electrical-show-passives').checked=showPassives;$('electrical-zoom').hidden=view!=='focus'&&view!=='schematic'&&(view!=='power'||powerConnections)&&(view!=='bus'||busConnections);
+    $('electrical-back').disabled=!history.length;$('electrical-show-passives').checked=showPassives;$('electrical-zoom').hidden=view!=='schematic'&&(view!=='power'||powerConnections)&&(view!=='bus'||busConnections);
     $('electrical-state').replaceChildren(el('option','No state selected'));$('electrical-state').firstChild.value='';for(const s of model.powerStates){const o=el('option',s.name);o.value=s.name;$('electrical-state').append(o);}$('electrical-state').value=powerState;
     $('electrical-state').disabled=!model.powerStates.length;
-    $('electrical-title').textContent={schematic:'Schematic',focus:'Focused schematic',power:'Power hierarchy',bus:'Buses & interfaces'}[view];
+    $('electrical-title').textContent={schematic:'Schematic',power:'Power hierarchy',bus:'Buses & interfaces'}[view];
     $('electrical-disclaimer').textContent=`Nominal values and declared states; ${nativeCheck?`compiler ERC ${nativeCheck.passed?'passed':'has findings'}; no simulation`:'no simulation or ERC run'}. Connectivity and ratings come from the IR; purpose, protocol grouping, power sequencing and device behavior are not validated. ${storageWarning}`;
-    const canvas=$('electrical-canvas'),scroll=[canvas.scrollLeft,canvas.scrollTop];canvas.replaceChildren();({schematic:renderSchematic,focus:renderFocus,power:renderPower,bus:renderBuses})[view](canvas);canvas.scrollTo(...scroll);if(reveal){const target=canvas.querySelector(`.electrical-sch [data-kind="${reveal.kind}"][data-entity="${CSS.escape(reveal.id)}"]`);reveal=null;target?.scrollIntoView({block:'center',inline:'center'});}renderInspector();renderIntent();renderExplorer();
+    const canvas=$('electrical-canvas'),scroll=[canvas.scrollLeft,canvas.scrollTop];canvas.replaceChildren();({schematic:renderSchematic,power:renderPower,bus:renderBuses})[view](canvas);canvas.scrollTo(...scroll);if(reveal){const target=canvas.querySelector(`.electrical-sch [data-kind="${reveal.kind}"][data-entity="${CSS.escape(reveal.id)}"]`);reveal=null;target?.scrollIntoView({block:'center',inline:'center'});}renderInspector();renderIntent();renderExplorer();
     if(pendingPop){const target=pendingPop;pendingPop=null;openNote(canvas.querySelector(target)?.getBoundingClientRect());}
   }
   function renderExplorer(){const query=$('electrical-search').value.toLowerCase(),list=$('electrical-entities');list.replaceChildren();
-    const add=(kind,id,label=id)=>{const b=entity(kind,id,label);b.onclick=()=>view==='schematic'?locate(kind,id):focusEntity(kind,id);return b;};
+    const add=(kind,id,label=id)=>{const b=entity(kind,id,label);b.onclick=()=>view==='schematic'?locate(kind,id):choose(kind,id);return b;};
     for(const b of model.buses)if(b.provenance!=='Net membership'&&b.name.toLowerCase().includes(query))list.append(add('bus',b.id,b.name));
     const matches=[...model.components.values()].filter(c=>`${c.ref} ${c.part}`.toLowerCase().includes(query));group(list,matches,c=>add('component',c.ref),c=>!query&&!showPassives&&isPassive(c),'passive components');
     const railNames=new Set(model.rails.filter(r=>r.sources.length||r.supplies.length).map(r=>r.net));const nets=[...model.nets.values()].filter(n=>n.name.toLowerCase().includes(query));group(list,nets,n=>add('net',n.name),n=>!query&&!railNames.has(n.name),'other nets');
   }
-  let pendingPop=null;
+  let pendingPop=null;const SELECTION_LIMIT=60;
   function sheets(){if(!schematic||schematic.showPassives!==showPassives)schematic={showPassives,...schematicSheets(model,{showPassives}),layouts:new Map()};return schematic;}
   /** Open the sheet that shows an entity, select it and scroll it into view. */
   function locate(kind,id){
@@ -102,16 +114,21 @@ export function createElectricalReview({message,onMode}){
   }
   function renderSchematic(canvas){
     const s=sheets();if(!s.sheets.length){canvas.append(el('p','No components in this IR.'));return;}
-    if(!s.sheets.some(x=>x.id===sheetId)){const ref=selection?.kind==='component'?selection.id:selection?.kind==='pin'?model.pins.get(selection.id).component:null;sheetId=s.sheetOf.get(ref)||s.sheets[0].id;}
-    const sheet=s.sheets.find(x=>x.id===sheetId),bar=el('div',undefined,'electrical-sheet-bar'),pick=el('select');pick.id='electrical-sheet';pick.setAttribute('aria-label','Sheet');
+    const special=selectionSel&&{id:'selection',title:`Selection · ${selectionSel.id}`,scope:null,refs:selectionRefs(selectionSel),cache:`selection:${selectionSel.kind}:${selectionSel.id}`};
+    const list=special&&special.refs.length?[special,...s.sheets]:s.sheets;
+    if(!list.some(x=>x.id===sheetId)){const ref=selection?.kind==='component'?selection.id:selection?.kind==='pin'?model.pins.get(selection.id).component:null;sheetId=s.sheetOf.get(ref)||s.sheets[0].id;}
+    const sheet=list.find(x=>x.id===sheetId),bar=el('div',undefined,'electrical-sheet-bar'),pick=el('select');pick.id='electrical-sheet';pick.setAttribute('aria-label','Sheet');
     const noteCount=new Map();for(const n of notes)for(const id of sheetsOf(n.selection))noteCount.set(id,(noteCount.get(id)||0)+1);
+    if(special&&special.refs.length){const o=el('option',`${special.title} · ${special.refs.length} parts`);o.value='selection';pick.append(o);}
     for(const [i,x]of s.sheets.entries()){const k=noteCount.get(x.id);const o=el('option',`${i+1} / ${s.sheets.length} · ${x.title} · ${x.refs.length} parts${k?` · ✎ ${k}`:''}`);o.value=x.id;pick.append(o);}
     pick.value=sheetId;pick.onchange=()=>{sheetId=pick.value;render();$('electrical-canvas').scrollTo(0,0);};
     const fadeBox=el('label',undefined,'electrical-sheet-fade'),fadeInput=el('input');fadeInput.type='checkbox';fadeInput.checked=fade;fadeInput.onchange=()=>{fade=fadeInput.checked;render();};fadeBox.append(fadeInput,' Fade unrelated');
     const about=el('span','ⓘ Generated','quiet');about.title='Generated from the IR, not an authored drawing. Power and ground pins are flags; nets that would cross a symbol use labels; interfaces are drawn as one bus line until selected. Sheets split the board by connectivity.\nWheel zooms, right- or middle-drag pans. Double-click or press N to note the selection.';
-    bar.append(pick,fadeBox,about);canvas.append(bar);
-    if(!s.layouts.has(sheetId))s.layouts.set(sheetId,layoutSheet(model,sheet,s));
-    const L=s.layouts.get(sheetId),V=s.view,drawn=n=>drawnNet(s,n),active=new Set(activeNets().map(drawn));
+    bar.append(pick);
+    if(sheet.id==='selection'){const close=button('Close selection',()=>{const sel=selectionSel;selectionSel=null;locate(sel.kind,sel.id);});close.title='Back to the sheet that holds the selection';bar.append(close);}
+    bar.append(fadeBox,about);canvas.append(bar);
+    const cacheKey=sheet.cache||sheet.id;if(!s.layouts.has(cacheKey))s.layouts.set(cacheKey,layoutSheet(model,sheet,s));
+    const L=s.layouts.get(cacheKey),V=s.view,drawn=n=>drawnNet(s,n),active=new Set(activeNets().map(drawn));
     const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.classList.add('electrical-topology','electrical-sch');svg.setAttribute('role','group');svg.setAttribute('aria-label',`Generated schematic sheet ${sheet.title}`);
     function draw(tag,attrs,label,parent=svg){const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(label!==undefined)e.textContent=label;parent.append(e);return e;}
     function pickable(e,kind,id,title){e.dataset.kind=kind;e.dataset.entity=id;e.setAttribute('role','button');e.setAttribute('tabindex','0');e.setAttribute('aria-label',title||id);e.classList.add('electrical-svg-pick');e.onclick=event=>{event.stopPropagation();if(!selected(kind,id))choose(kind,id);};e.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();choose(kind,id);}};if(title)draw('title',{},title,e);return e;}
@@ -180,40 +197,6 @@ export function createElectricalReview({message,onMode}){
     if(here.length){const d=el('details',undefined,'electrical-folded'),sum=el('summary',`${here.length} folded parts`);sum.title='Decoupling shows as C×n by rail flags; pull resistors as ↑/↓, series links as ⟷ and ESD parts as ESD notes. Show passives draws them.';d.append(sum);const list=el('div');for(const f of here){const c=model.components.get(f.ref);list.append(entity('component',f.ref,`${f.ref} · ${c.value?compactQuantity(c.value):c.part.split('.').pop()} · ${describe(f)}`));}d.append(list);bar.insertBefore(d,about);}
   }
   function netHeader(n){const h=el('div',undefined,'electrical-net-heading');h.append(entity('net',n.name));const q=distinct(n.supplies.map(s=>quantity(s.voltage)));if(q.length)h.append(el('span',q.join(' / ')+' nominal','quiet'));return h;}
-  function pinTerminal(p){const box=el('div',undefined,'electrical-terminal');box.append(entity('component',p.component),entity('pin',p.id,`${p.name} · pin ${p.number||'unspecified'}`));const c=model.components.get(p.component);box.append(el('small',c.value?quantity(c.value):c.part,'quiet'));return box;}
-  function renderFocus(canvas){
-    const full=focusCircuit(model,focusSelection,focusRef),circuit=compactCircuit(model,full,showPassives,focusSelection);
-    canvas.append(el('p','Electrical slice · pins and nets from the IR. Select a terminal or wire to inspect it.','quiet'));
-    if(circuit.hidden.length){const d=el('details',undefined,'electrical-folded');d.append(el('summary',`${circuit.hidden.length} supporting passives collapsed`));for(const c of circuit.hidden)d.append(entity('component',c.ref,`${c.ref} · ${quantity(c.value)}`));canvas.append(d);}
-    if(circuit.components.length&&circuit.components.length<=8&&circuit.nets.length<=24)renderTopology(canvas,circuit);
-    const connections=el('details',undefined,'electrical-connections');connections.open=circuit.components.length>8||circuit.nets.length>24;connections.append(el('summary','Net-by-net connections (all terminals)'));canvas.append(connections);
-    if(!circuit.nets.length)canvas.append(el('p','Select a connected pin, net or interface to focus the circuit.'));
-    for(const n of full.nets){const section=el('section',undefined,'electrical-net');section.append(netHeader(n));const wire=el('div',undefined,'electrical-wire');
-      for(const p of [...n.pins].sort((a,b)=>(b.profile.directions?.includes('output')||false)-(a.profile.directions?.includes('output')||false)||a.component.localeCompare(b.component)))wire.append(pinTerminal(p));
-      section.append(wire);if(n.unresolved.length)section.append(el('p','Unresolved endpoints: '+n.unresolved.join(', '),'electrical-warning'));connections.append(section);
-    }
-    if(circuit.components.length){const support=el('details');support.append(el('summary','Component pins, supplies & support'));for(const c of circuit.components){const s=el('section',undefined,'electrical-support');s.append(entity('component',c.ref),el('div',c.part,'quiet'));const pins=el('div',undefined,'electrical-chips');for(const p of c.pins)if(p.net&&model.supplyNets.has(p.net))pins.append(entity('pin',p.id,`${p.name} → ${p.net}`));s.append(pins);for(const dec of model.components.values()){const target=dec.properties?.decouples;if(typeof target==='string'&&dec.scope===c.scope&&target.startsWith(c.ref.split('/').pop()+'.'))s.append(entity('component',dec.ref,`${dec.ref} · ${quantity(dec.value)} · ${target}`));}support.append(s);}canvas.append(support);}
-    canvas.append(el('p','Focus boundary: one net hop, or the selected interface path. Expand a component to inspect its other connections.','quiet'));
-  }
-  function renderTopology(canvas,circuit){
-    const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.classList.add('electrical-topology');svg.setAttribute('role','group');svg.setAttribute('aria-label','Focused electrical schematic with component pin terminals and selectable net wires');
-    const refs=circuit.components.map(c=>c.ref);const selectedBus=focusSelection?.kind==='bus'&&model.buses.find(b=>b.id===focusSelection.id);if(selectedBus){refs.sort((a,b)=>selectedBus.componentRefs.indexOf(a)-selectedBus.componentRefs.indexOf(b));}
-    const col=340,box=170,left=12,top=95,row=65,width=Math.max(360,refs.length*col-130),height=Math.max(270,top+circuit.nets.length*row+65);svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.dataset.naturalWidth=width;svg.dataset.naturalHeight=height;svg.style.width=`${width*schematicZoom}px`;svg.style.height=`${height*schematicZoom}px`;
-    function draw(tag,attrs,label,parent=svg){const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(label!==undefined)e.textContent=label;parent.append(e);return e;}
-    function click(e,kind,id){e.dataset.kind=kind;e.dataset.entity=id;e.setAttribute('role','button');e.setAttribute('tabindex','0');e.setAttribute('aria-label',id);e.classList.add('electrical-svg-pick');e.onclick=()=>{if(!selected(kind,id))choose(kind,id);};e.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();choose(kind,id);}};}
-    const positions=new Map();
-    for(const [i,ref]of refs.entries()){
-      const x=left+i*col,c=model.components.get(ref),g=draw('g',{});draw('rect',{x,y:30,width:box,height:height-55,rx:5,class:'electrical-symbol'},undefined,g);const title=draw('text',{x:x+10,y:54},ref,g);click(title,'component',ref);draw('text',{x:x+10,y:73,class:'electrical-svg-small'},c.part.split('.').pop().slice(0,24),g);
-      for(const [index,n]of circuit.nets.entries())for(const p of n.pins.filter(p=>p.component===ref)){
-        const other=n.pins.filter(q=>q.component!==ref).map(q=>refs.indexOf(q.component));const side=other.length&&other.every(j=>j<i)?'left':'right',px=side==='left'?x:x+box,py=top+index*row;
-        positions.set(p.id,[px,py]);draw('circle',{cx:px,cy:py,r:3,class:'electrical-pin-dot'},undefined,g);const label=draw('text',{x:side==='left'?x+10:x+box-10,y:py-8,'text-anchor':side==='left'?'start':'end'},`${p.name} · ${p.number||'?'}`,g);click(label,'pin',p.id);
-      }
-    }
-    for(const [index,n]of circuit.nets.entries()){
-      const points=n.pins.map(p=>positions.get(p.id)).filter(Boolean).sort((a,b)=>a[0]-b[0]);if(points.length<2)continue;const start=points[0],end=points.at(-1),g=draw('g',{});const path=points.map((p,i)=>`${i?'L':'M'}${p[0]},${p[1]}`).join(' ');draw('path',{d:path,class:`electrical-signal ${selected('net',n.name)?'selected':''}`},undefined,g);const hit=draw('rect',{x:start[0],y:start[1]-10,width:Math.max(1,end[0]-start[0]),height:20,fill:'transparent','pointer-events':'all'},undefined,g);click(hit,'net',n.name);const gap=points.findIndex((p,i)=>i&&p[0]-points[i-1][0]>box);const a=gap>0?points[gap-1]:start,b=gap>0?points[gap]:end;const text=draw('text',{x:(a[0]+b[0])/2,y:top+index*row+18,'text-anchor':'middle',class:'electrical-svg-small'},n.name,g);click(text,'net',n.name);
-    }
-    canvas.append(svg);drawMarkers(svg,boxAnchor(svg));
-  }
   function renderPower(canvas){
     const modes=el('div',undefined,'tabs');const topology=button('Topology',()=>{powerConnections=false;render();$('electrical-canvas').scrollTo(0,0);});topology.id='electrical-power-topology';topology.classList.toggle('active',!powerConnections);const connections=button('Connections',()=>{powerConnections=true;render();$('electrical-canvas').scrollTo(0,0);});connections.id='electrical-power-connections';connections.classList.toggle('active',powerConnections);modes.append(topology,connections);canvas.append(modes);
     if(!powerConnections){renderPowerTopology(canvas);return;}
@@ -307,11 +290,13 @@ export function createElectricalReview({message,onMode}){
     if(!model.buses.length)canvas.append(el('p','No configured interfaces or connected signal nets in this IR.'));
   }
   function renderInspector(){const inspector=$('electrical-inspector');inspector.replaceChildren();if(!selection){inspector.append(el('p','Select a pin, net, component or interface.'));return;}
-    inspector.append(el('h3',selection.id),button('Focus selected circuit',()=>focusEntity(selection.kind,selection.id)));
+    const show=button('Show selection sheet',()=>focusEntity(selection.kind,selection.id));show.title='Draw the selection and everything one connection away on one sheet, across sheets and modules';inspector.append(el('h3',selection.id),show);
     const netNames=activeNets();
     if(selection.kind==='pin'){const p=model.pins.get(selection.id);inspector.append(el('p',`Pin ${p.number||'unspecified'} · ${(p.profile.directions||[]).join(', ')||'direction unspecified'} · ${(p.profile.domains||[]).join(', ')||'domain unspecified'}`));inspector.append(el('p',p.net?'Connected':'No net in IR (intent unspecified)','quiet'));const v=p.profile.voltage;if(v)inspector.append(el('p',`Voltage: ${quantity(v.minimum)} … ${quantity(v.maximum)} · ${v.rating||'rating unspecified'}`));inspector.append(el('p',`Unpowered behavior: ${p.unpowered_behavior}`,'quiet'));}
-    if(selection.kind==='component'){const c=model.components.get(selection.id);inspector.append(el('p',`${c.part} ${c.value?quantity(c.value):''}`));const table=el('div',undefined,'electrical-pin-list');for(const p of c.pins){const row=el('div');row.append(entity('pin',p.id,`${p.name} · ${p.number||'?'}`));row.append(p.net?entity('net',p.net):el('span',`No net · ${p.connection_policy||'intent unspecified'}`,'quiet'));table.append(row);}inspector.append(table);}
-    else for(const name of netNames){const n=model.nets.get(name);inspector.append(entity('net',name));if(n.aliases.length>1)inspector.append(el('p',`Aliases: ${n.aliases.join(', ')}`,'quiet'));group(inspector,n.pins,p=>entity('pin',p.id,`${p.id} · pin ${p.number||'?'}`),p=>!showPassives&&isPassive(model.components.get(p.component))&&!selected('pin',p.id),'passive terminals');}
+    if(selection.kind==='component'){const c=model.components.get(selection.id);inspector.append(el('p',`${c.part} ${c.value?quantity(c.value):''}`));const support=[...model.components.values()].filter(d=>typeof d.properties?.decouples==='string'&&d.scope===c.scope&&d.properties.decouples.startsWith(c.ref.split('/').pop()+'.'));
+      if(support.length){const box=el('div',undefined,'electrical-chips');box.append(el('span','Support:','quiet'));for(const d of support)box.append(entity('component',d.ref,`${d.ref} · ${quantity(d.value)} → ${d.properties.decouples}`));inspector.append(box);}
+      const table=el('div',undefined,'electrical-pin-list');for(const p of c.pins){const row=el('div');row.append(entity('pin',p.id,`${p.name} · ${p.number||'?'}`));row.append(p.net?entity('net',p.net):el('span',`No net · ${p.connection_policy||'intent unspecified'}`,'quiet'));table.append(row);}inspector.append(table);}
+    else for(const name of netNames){const n=model.nets.get(name);inspector.append(entity('net',name));if(n.aliases.length>1)inspector.append(el('p',`Aliases: ${n.aliases.join(', ')}`,'quiet'));if(n.unresolved?.length)inspector.append(el('p',`Unresolved endpoints: ${n.unresolved.join(', ')}`,'electrical-warning'));group(inspector,n.pins,p=>entity('pin',p.id,`${p.id} · pin ${p.number||'?'}`),p=>!showPassives&&isPassive(model.components.get(p.component))&&!selected('pin',p.id),'passive terminals');}
   }
   function renderIntent(){const box=$('electrical-intent');box.replaceChildren();const tabs=el('div',undefined,'tabs');for(const id of ['intent','source','notes']){const b=button({intent:'Details',source:'Source',notes:'Notes'}[id],()=>{detail=id;renderIntent();});b.classList.toggle('active',detail===id);tabs.append(b);}box.append(tabs);
     if(detail==='notes'){renderNotes(box);return;}
@@ -354,8 +339,7 @@ export function createElectricalReview({message,onMode}){
   function editNote(i){
     const n=notes[i];editing=i;draft={observation:n.observation,desired:n.desired_behavior||'',category:n.category,priority:n.priority};
     pendingPop=`[data-note="${CSS.escape(n.id)}"]`;
-    if(['schematic','power','bus'].includes(n.view))view=n.view;if(view==='power')powerConnections=false;if(view==='bus')busConnections=false;
-    if(n.view==='focus'){focusSelection={...n.selection};view='focus';}
+    view=['power','bus'].includes(n.view)?n.view:'schematic';if(view==='power')powerConnections=false;if(view==='bus')busConnections=false;
     if(view==='schematic')locate(n.selection.kind,n.selection.id);else{selection={...n.selection};save();render();}
   }
   /** Notes as plain text for an issue, a chat or a prompt. */
@@ -397,14 +381,14 @@ export function createElectricalReview({message,onMode}){
   function exportReview(){download(`${model.name}.electrical.review.json`,{schema:'copper-electrical-review/v1',input,selection,view,power_state:powerState||null,annotations:notes});}
   function importReview(value){if(value?.schema!=='copper-electrical-review/v1'||value.input?.sha256!==input?.sha256)throw Error('Electrical review does not match the loaded IR hash');if(!Array.isArray(value.annotations)||value.annotations.some(n=>!n||!validSelection(n.selection)||typeof n.observation!=='string'||typeof n.id!=='string'))throw Error('Invalid electrical review notes');notes=value.annotations.map(normalNote);draft=blankDraft();editing=null;save();render();}
   for(const b of root.querySelectorAll('[data-electrical-view]'))b.onclick=()=>{view=b.dataset.electricalView;save();render();};
-  $('electrical-focus').onchange=e=>{if(e.target.value){const s=JSON.parse(e.target.value);if(view==='schematic')locate(s.kind,s.id);else focusEntity(s.kind,s.id);}};
-  $('electrical-back').onclick=()=>{const prev=history.pop();if(prev){focusSelection=prev.focusSelection;selection=prev.selection;view=prev.view;save();render();}};
+  $('electrical-focus').onchange=e=>{if(e.target.value){const s=JSON.parse(e.target.value);focusSelection=s;if(view==='schematic')locate(s.kind,s.id);else choose(s.kind,s.id);}};
+  $('electrical-back').onclick=()=>{const prev=history.pop();if(prev){selection=prev.selection;view=prev.view;sheetId=prev.sheetId;selectionSel=prev.selectionSel;save();render();}};
   $('electrical-show-passives').onchange=e=>{showPassives=e.target.checked;save();render();};
-  $('electrical-fit').onclick=()=>{const svg=root.querySelector('.electrical-topology');if(svg){const c=$('electrical-canvas'),[mx,my]=view==='schematic'?[26,(c.querySelector('.electrical-sheet-bar')?.offsetHeight||0)+20]:[44,100],zoom=Math.min(view==='schematic'?4:1,Math.max(.15,(c.clientWidth-mx)/Number(svg.dataset.naturalWidth)),Math.max(.15,(c.clientHeight-my)/Number(svg.dataset.naturalHeight)));if(view==='power')powerZoom=zoom;else if(view==='bus')busZoom=zoom;else if(view==='schematic')sheetZoom=zoom;else schematicZoom=zoom;render();c.scrollTo(0,0);}};
+  $('electrical-fit').onclick=()=>{const svg=root.querySelector('.electrical-topology');if(svg){const c=$('electrical-canvas'),[mx,my]=view==='schematic'?[26,(c.querySelector('.electrical-sheet-bar')?.offsetHeight||0)+20]:[44,100],zoom=Math.min(view==='schematic'?4:1,Math.max(.15,(c.clientWidth-mx)/Number(svg.dataset.naturalWidth)),Math.max(.15,(c.clientHeight-my)/Number(svg.dataset.naturalHeight)));if(view==='power')powerZoom=zoom;else if(view==='bus')busZoom=zoom;else sheetZoom=zoom;render();c.scrollTo(0,0);}};
   // Schematic: wheel zooms under the pointer, right/middle-drag pans (as in the PCB view).
   // Every drawing: wheel zooms under the pointer, right/middle-drag pans (as in the PCB view).
-  const getZoom=()=>view==='schematic'?sheetZoom:view==='power'?powerZoom:view==='bus'?busZoom:schematicZoom;
-  const setZoom=z=>{if(view==='schematic')sheetZoom=z;else if(view==='power')powerZoom=z;else if(view==='bus')busZoom=z;else schematicZoom=z;};
+  const getZoom=()=>view==='power'?powerZoom:view==='bus'?busZoom:sheetZoom;
+  const setZoom=z=>{if(view==='power')powerZoom=z;else if(view==='bus')busZoom=z;else sheetZoom=z;};
   const drawing=e=>{const svg=$('electrical-canvas').querySelector('svg.electrical-topology');return svg&&(e.target.closest?.('svg.electrical-topology')||e.target.id==='electrical-canvas')?svg:null;};
   const modal=()=>!!document.querySelector('dialog[open]');
   // Double-click an element of a drawing, or press N, to note the selection.
@@ -422,7 +406,7 @@ export function createElectricalReview({message,onMode}){
   for(const type of ['pointerup','pointercancel'])$('electrical-canvas').addEventListener(type,e=>{if(pan?.id!==e.pointerId)return;pan=null;e.currentTarget.classList.remove('panning');});
   $('electrical-canvas').addEventListener('contextmenu',e=>{if(drawing(e))e.preventDefault();});
   $('electrical-notes-list').onclick=showNotesList;
-  $('electrical-actual-size').onclick=()=>{if(view==='power')powerZoom=1;else if(view==='bus')busZoom=1;else if(view==='schematic')sheetZoom=1;else schematicZoom=1;render();};
+  $('electrical-actual-size').onclick=()=>{if(view==='power')powerZoom=1;else if(view==='bus')busZoom=1;else sheetZoom=1;render();};
   const maximize=on=>{document.body.classList.toggle('electrical-maximized',on);$('electrical-maximize').setAttribute('aria-pressed',String(on));$('electrical-maximize').textContent=on?'Restore':'Maximize';};
   $('electrical-maximize').onclick=()=>maximize(!document.body.classList.contains('electrical-maximized'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal()&&document.body.classList.contains('electrical-maximized'))maximize(false);});

@@ -54,20 +54,18 @@ are independent; the application does not assert that a PCB matches an IR.
   nets or pins, draws the nets separately. Selecting anything fades what is not on
   its signal nets (**Fade unrelated** turns this off); rails only count when selected
   directly, and clicking empty drawing space clears the selection. Unconnected-pin
-  counts show only on the selected part. Explorer and focus-picker choices open the
+  counts show only on the selected part. Explorer and **Go to** choices open the
   sheet that shows them.
-- **Focused schematic** draws a pin-labelled slice with one symbol per component.
-  It starts at a configured peripheral when present. The focus picker includes
-  interfaces, components and rails. Explorer items and interface titles focus in
-  one action; **Back** returns to the previous circuit. Selecting
-  a wire or pin inspects it without rearranging the current slice. Large slices
-  use the complete net-by-net terminal view; it remains expandable under smaller
-  drawings. Supplies and decoupling properties are in **Component pins, supplies
-  & support**. These are generic symbols, not manufacturer schematic artwork.
-  Supporting passives (explicit decoupling or passives connected only to supply/
-  ground nets) are collapsed by default. Signal-path resistors and other passive
-  circuits remain visible. Collapsed groups show their count; expand them or use
-  **Show passives** to see every component. Explicitly focusing a passive retains it.
+- **Show selection sheet** (in the side panel) adds a temporary **Selection** sheet
+  to the Schematic: the selected interface, net, pin or part and every part one
+  connection away, drawn with the same symbols, flags and wiring, whichever sheet
+  or module they are on. A folded series link counts as a wire. **Back** returns to
+  the previous sheet; **Close selection** opens the sheet that holds the selection.
+  Selections reaching more than 60 parts open their own sheet instead. The side
+  panel lists a net's terminals (including unresolved endpoints) and a part's pins
+  and decoupling/support parts. Interface titles in the Bus **Connections** list open
+  the Selection sheet; the explorer and the **Go to** picker select in place in the
+  Power and Bus views.
 - **Power hierarchy** opens with a simple **Topology** diagram. Red lines represent
   actual shared power nets between source/regulator/switch boxes and receiving ICs
   or connectors. Rail names, voltages, enable connections and declared states are
@@ -126,17 +124,17 @@ comments or requirements absent from the IR cannot be reconstructed.
 On desktop the explorer, canvas and inspector/intent panes have bounded scroll
 areas. Large schematics can scroll horizontally and vertically at readable size;
 **Fit view** fits the drawing and **100%** restores its natural size. In every drawing
-(Schematic, Focused schematic and the Power and Bus topologies) the wheel zooms under
+(Schematic and the Power and Bus topologies) the wheel zooms under
 the pointer and right- or middle-drag pans. The electrical view uses the full window width. **Maximize** hides the page
 header and side panels to give the drawing the whole window (Esc restores), and
-Fit view there may enlarge a small sheet. Power, bus and
-focused schematic zoom settings are independent. On narrow
+Fit view there may enlarge a small sheet. Schematic, power and
+bus zoom settings are independent. On narrow
 screens the page stacks and the canvas keeps its own scroll area. Passive visibility
 is remembered with the review. Searching the explorer includes collapsed passives.
 
 ### Notes
 
-In any drawing (Schematic, Focused schematic, Power or Bus topology), double-click an
+In any drawing (Schematic, Power or Bus topology), double-click an
 element or press **N** to write a note about the selection in a small editor next to it: category and priority chips, the
 observation, and an optional desired behavior (Ctrl+Enter saves, Esc cancels).
 Saved notes appear as numbered markers where their entity is drawn (red for high
@@ -190,7 +188,7 @@ status `open` or `resolved`. Categories are `connectivity`, `power`, `interface`
 load as `other`, `medium`, `open`. Selection kinds are `component`,
 `pin`, `net` and `bus`; IDs retain exact resolved instance/net identities. Bus IDs
 are prefixed `interface:`, `peripheral:` or `net:`. Loading requires the exact input
-hash and existing selected entities. Notes, view, selection, focus and chosen state
+hash and existing selected entities. Notes, view, selection, Go to choice and chosen state
 save locally per IR hash. Export JSON for durable sharing. PCB reviews are never
 silently converted into electrical reviews.
 
