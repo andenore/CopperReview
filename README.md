@@ -2,36 +2,46 @@
 
 [Open CopperReview on GitHub Pages](https://andenore.github.io/CopperReview/).
 
-A local electrical and PCB review tool for CopperScript. Inspect placed, partially routed, or
-fully routed board exports; select components, nets, and rectangular regions;
-annotate the geometry; export a file for the next LLM-assisted solver iteration.
+A review tool for CopperScript designs with two halves that can be open at once:
+
+- **Electrical review** — generated **Schematic** sheets, the **Power** hierarchy and
+  **Buses**, from the compiled electrical IR (no layout needed). Double-click or press
+  N to note the selection; notes show as numbered markers. See the
+  [electrical workflow and contracts](docs/electrical-review.md).
+- **Layout review** — the board's placement and routing from a CopperScript board
+  export: select components, nets and regions, annotate them, and export a review for
+  the next LLM-assisted solver iteration.
+
+The **Electrical · Layout · Both** switch in the top bar picks what is shown (E, L, B).
+**Both** puts the schematic and the board side by side with a draggable divider;
+selecting a part or net on either side selects and centres it on the other. Parts
+match by CopperScript path (or reference) and nets by name; the top bar counts parts
+found on only one side, and nothing proves the board was built from that exact source.
+Outside **Both**, **Show on board** and **Show in schematic** (S) jump across, and
+**Source** opens the declaration in the CopperScript project (found by searching the
+compiled sources, since the IR does not record source lines yet), with **Open on
+GitHub** at the pinned commit or **Open in VS Code** for a project served locally.
+
+Everything opens from one **Open** menu, or by dropping files on the page:
+**File…** (Ctrl+O) recognizes a board export, compiled IR, `.copper` source, saved
+scene, layout review, electrical review or CopperScript issue list by its contents,
+and accepts several at once. Opening a board keeps the open schematic, and the other
+way round. **Project folder…** compiles a local project (the folder holding
+`board.copper` and `copper.mod`) in the browser: sources never leave the computer,
+and only dependencies pinned in `copper.lock` are downloaded from GitHub and checked
+against the lock; re-pick the folder after editing. **From URL or GitHub…** compiles
+GitHub source projects with local imports and pinned dependencies, or opens direct
+HTTPS design files; private repositories need a fine-grained token with Contents:
+Read-only (⋯ → **Private GitHub access**), kept in the tab and sent only to
+`api.github.com`. See [URL loading and provenance](docs/wasm-hosting.md#open-from-url).
+**Export** writes the layout review, the electrical review or the board scene; ⋯
+holds the compiler check and the review limits.
 
 This is a **separate Git project**. Its static browser build reuses CopperScript's
 Rust compiler, ERC and queries through a bundled WebAssembly worker. No native
 CopperScript installation or hosted backend is required by that build. The local
 Python 3.11+ server additionally reads raw `.kicad_pcb` files without KiCad.
 See [WASM build, static hosting and current boundaries](docs/wasm-hosting.md).
-For schematic, power hierarchy and bus/interface review before layout, open the
-JSON produced by `copper compile` with **Open electrical IR**, or run
-`python -m copper_review --electrical-ir electrical.ir.json`. It opens on a generated
-**Schematic**; all three electrical views share one side panel (selection, details, source, notes). On the
-Schematic, double-click or press N to note the selection; notes show as numbered markers. See the
-[electrical workflow and input/feedback contracts](docs/electrical-review.md).
-**Open folder** compiles a local project folder (the one holding `board.copper` and
-`copper.mod`) in the browser with the same compiler: its sources never leave the
-computer, and only dependencies pinned in `copper.lock` are downloaded from GitHub
-and checked against the lock. A folder with several boards asks which to compile.
-Re-pick the folder after editing to recompile.
-**Compile .copper** and **Try example circuit** use the actual WASM compiler for
-self-contained source. **Open URL** compiles GitHub source projects with
-local imports and pinned library dependencies through the same Rust compiler.
-**Open URL** accepts GitHub repository/file links or direct HTTPS design files.
-Private repositories need a fine-grained token with Contents: Read-only under
-**Private repository access**; it stays in the tab and is sent only to `api.github.com`. Choose the board source at its resolved commit; the browser reads
-`copper.mod` / `copper.lock`, verifies imported source bytes and opens the electrical
-review. CopperAssetTracker can be opened directly from its GitHub `board.copper`.
-Exported IR and PCB scene files remain supported.
-See [URL loading and provenance](docs/wasm-hosting.md#open-from-url).
 The board is read-only. Feedback never edits the PCB or solver constraints.
 
 ## Run
@@ -42,7 +52,8 @@ On Ubuntu (or anywhere with `make`, [uv](https://docs.astral.sh/uv/) and Node.js
 make setup                                   # check tools, install, fetch the browser compiler
 make serve PROJECT=../BysseControl-32        # compile a project folder; reload to recompile
 make serve PROJECT=../BysseControl-32 HOST=0.0.0.0 OPEN=no   # reachable from other machines
-make serve IR=build/electrical.ir.json       # or a compiled IR; BOARD=… for a PCB
+make serve PROJECT=../BysseControl-32 BOARD=../BysseControl-32/build/board.kicad_pcb   # schematic and board, linked
+make serve IR=build/electrical.ir.json       # or a compiled IR; BOARD=… alone for a PCB
 make test
 ```
 
@@ -118,12 +129,12 @@ non-HTTPS network addresses.
    priority, and status; click **Add annotation**. Use **Board-wide observation**
    for a feature request that does not refer to specific geometry.
    To tie a note to a CopperScript run, save the run's issue list with
-   `copper issues RUN --json > issues.json` and click **Load issues**. Issue
+   `copper issues RUN --json > issues.json` and open it (**Open → File…**). Issue
    windows are drawn on the board and listed in the **Issues** tab; clicking one
    frames it, selects its window as a region and fills **Cites CopperScript
    issues**. The list is rejected when its board hash differs from the open board.
 5. Click a saved note to inspect/edit it. Set it to resolved when addressed.
-   Add a review summary and **Export review JSON** or **Copy JSON to clipboard**.
+   Add a review summary and **Export → Layout review JSON** or **Copy layout review JSON**.
 6. Paste the file contents into an LLM prompt with the relevant CopperScript
    checkout/source available. For example:
 
@@ -137,8 +148,8 @@ Review files are saved as `<board>.review.json`, schema `copper-review/v2`.
 See [the output contract](docs/review-format.md), [JSON Schema](docs/review.schema.json),
 and [the complete example review](examples/demo.review.json).
 
-Use **Load review** to resume notes after opening the exact matching PCB.
-Reviews for a different board hash are rejected. **Save scene** writes a
+Open a saved review (**Open → File…**) to resume notes after opening the exact matching PCB.
+Reviews for a different board hash are rejected. **Export → Board scene** writes a
 portable `<board>.scene.json`, containing the normalized geometry. Open that
 scene on another computer, then load its review. The scene is for the viewer;
 the review is the file to paste into a prompt. Native object UUIDs, component

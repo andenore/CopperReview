@@ -11,7 +11,7 @@ const page=await browser.newPage({viewport:{width:1600,height:1040}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));mkdirSync('test-results',{recursive:true});
 try {
   await page.goto(url);
-  await page.locator('#board-file').setInputFiles(filename);
+  await page.locator('#any-file').setInputFiles(filename);
   await page.waitForFunction(()=>Number(document.querySelector('#component-count').textContent)>10);
   assert((await page.locator('#board-meta').textContent()).includes('tracks'));
   await page.locator('#layer-list input').first().uncheck();
@@ -19,7 +19,7 @@ try {
   await page.locator('.entity').nth(5).click();
   await page.locator('#observation').fill('Read-only browser integration smoke test of this component.');
   await page.locator('#save-note').click();
-  const downloadPromise=page.waitForEvent('download');await page.locator('#export-review').click();
+  const downloadPromise=page.waitForEvent('download');await page.locator('#export-menu').click();await page.locator('#export-review').click();
   await (await downloadPromise).saveAs('test-results/real-board.review.json');
   const review=JSON.parse(readFileSync('test-results/real-board.review.json'));
   assert(review.annotations[0].context.components[0].pads.length>0);

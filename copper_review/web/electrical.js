@@ -14,7 +14,9 @@ export const NOTE_PRIORITIES=[['low','Low'],['medium','Medium'],['high','High']]
 const blankDraft=()=>({observation:'',desired:'',category:'connectivity',priority:'medium'});
 const normalNote=n=>({...n,category:NOTE_CATEGORIES.some(([k])=>k===n.category)?n.category:'other',priority:NOTE_PRIORITIES.some(([k])=>k===n.priority)?n.priority:'medium',status:n.status==='resolved'?'resolved':'open'});
 function download(name,value){const u=URL.createObjectURL(new Blob([json(value)+'\n'],{type:'application/json'}));const a=el('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
-export function createElectricalReview({message,onMode}){
+/** The electrical review. `onSelect` hears selections the reviewer makes here; `links` lets the
+ * side panel offer "Show on board" and "Source" when the host can answer them. */
+export function createElectricalReview({message,onSelect=()=>{},links={}}){
   const root=$('electrical-review');
   let model,input,selection=null,focusSelection=null,view='schematic',focusRef=null,powerState='',notes=[],detail='intent',editing=null;
   let draft=blankDraft(),storageWarning='',fade=true;
@@ -24,7 +26,8 @@ export function createElectricalReview({message,onMode}){
   const button=(label,action,cls)=>{const b=el('button',label,cls);b.type='button';b.onclick=action;return b;};
   const key=()=>`copper-review:electrical:v1:${input.sha256}`;
   function selected(kind,id){return selection?.kind===kind&&selection.id===id;}
-  function choose(kind,id){selection={kind,id};if(kind==='component')focusRef=id;save();render();for(const pane of root.querySelectorAll('.electrical-sidebar>section'))pane.scrollTo(0,0);}
+  let quiet=false;
+  function choose(kind,id){selection={kind,id};if(kind==='component')focusRef=id;save();render();for(const pane of root.querySelectorAll('.electrical-sidebar>section'))pane.scrollTo(0,0);if(!quiet)onSelect(selection);}
   /** A temporary Selection sheet: the entity and everything one connection away, across sheets. */
   function focusEntity(kind,id){
     const refs=selectionRefs({kind,id});
@@ -54,12 +57,10 @@ export function createElectricalReview({message,onMode}){
     const initial=model.buses.find(b=>b.provenance==='Configured peripheral')||model.buses[0];if(!selection)selection=initial?{kind:'bus',id:initial.id}:focusRef?{kind:'component',id:focusRef}:null;
     focusSelection=selection;
     try{const saved=JSON.parse(localStorage.getItem(key())||'null');if(validSelection(saved?.focusSelection))focusSelection=saved.focusSelection;showPassives=saved?.showPassives===true;}catch{}
-    show(true);render();$('electrical-canvas').scrollTo(0,0);
+    render();$('electrical-canvas').scrollTo(0,0);
   }
-  function show(value){root.hidden=!value;$('pcb-review').hidden=value;$('electrical-tabs').hidden=!value;onMode(value,model);}
+  function show(value){root.hidden=!value;if(value&&model)render();}
   function render(){
-    $('electrical-name').textContent=model.name;
-    $('electrical-meta').textContent=`${model.components.size} components · ${model.nets.size} nets · ${input.sha256.slice(0,12)} · electrical IR`;
     for(const b of root.querySelectorAll('[data-electrical-view]')){b.classList.toggle('active',b.dataset.electricalView===view);b.setAttribute('aria-selected',b.dataset.electricalView===view);}
     const picker=$('electrical-focus');picker.replaceChildren();
     for(const [label,items]of [['Interfaces',model.buses.filter(b=>b.provenance!=='Net membership').map(b=>['bus',b.id,b.name])],['Components',[...model.components.values()].filter(c=>showPassives||!isPassive(c)||selected('component',c.ref)).map(c=>['component',c.ref,c.ref])],['Rails',model.rails.filter(r=>r.supplies.length||r.sources.length).map(r=>['net',r.net,r.net])]]){const g=el('optgroup');g.label=label;for(const [kind,id,name]of items){const o=el('option',name);o.value=JSON.stringify({kind,id});g.append(o);}picker.append(g);}
@@ -68,7 +69,6 @@ export function createElectricalReview({message,onMode}){
     $('electrical-back').disabled=!history.length;$('electrical-show-passives').checked=showPassives;$('electrical-zoom').hidden=view!=='schematic'&&(view!=='power'||powerConnections)&&(view!=='bus'||busConnections);
     $('electrical-state').replaceChildren(el('option','No state selected'));$('electrical-state').firstChild.value='';for(const s of model.powerStates){const o=el('option',s.name);o.value=s.name;$('electrical-state').append(o);}$('electrical-state').value=powerState;
     $('electrical-state').disabled=!model.powerStates.length;
-    $('electrical-title').textContent={schematic:'Schematic',power:'Power hierarchy',bus:'Buses & interfaces'}[view];
     $('electrical-disclaimer').textContent=`Nominal values and declared states; ${nativeCheck?`compiler ERC ${nativeCheck.passed?'passed':'has findings'}; no simulation`:'no simulation or ERC run'}. Connectivity and ratings come from the IR; purpose, protocol grouping, power sequencing and device behavior are not validated. ${storageWarning}`;
     const canvas=$('electrical-canvas'),scroll=[canvas.scrollLeft,canvas.scrollTop];canvas.replaceChildren();({schematic:renderSchematic,power:renderPower,bus:renderBuses})[view](canvas);canvas.scrollTo(...scroll);if(reveal){const target=canvas.querySelector(`.electrical-sch [data-kind="${reveal.kind}"][data-entity="${CSS.escape(reveal.id)}"]`);reveal=null;target?.scrollIntoView({block:'center',inline:'center'});}renderInspector();renderIntent();renderExplorer();
     if(pendingPop){const target=pendingPop;pendingPop=null;openNote(canvas.querySelector(target)?.getBoundingClientRect());}
@@ -292,6 +292,10 @@ export function createElectricalReview({message,onMode}){
   }
   function renderInspector(){const inspector=$('electrical-inspector');inspector.replaceChildren();if(!selection){inspector.append(el('p','Select a pin, net, component or interface.'));return;}
     const show=button('Show selection sheet',()=>focusEntity(selection.kind,selection.id));show.title='Draw the selection and everything one connection away on one sheet, across sheets and modules';inspector.append(el('h3',selection.id),show);
+    const row=el('div',undefined,'link-row'),{kind,id}=selection;
+    if(links.board?.has(kind,id)){const b=button('Show on board',()=>links.board.show(kind,id));b.title='Select it on the board (S)';row.append(b);}
+    if(links.source?.has(kind,id)){const b=button('Source',()=>links.source.open(kind,id));b.title='Show where it is declared in the CopperScript source';row.append(b);}
+    if(row.childElementCount)inspector.append(row);
     const netNames=activeNets();
     if(selection.kind==='pin'){const p=model.pins.get(selection.id);inspector.append(el('p',`Pin ${p.number||'unspecified'} · ${(p.profile.directions||[]).join(', ')||'direction unspecified'} · ${(p.profile.domains||[]).join(', ')||'domain unspecified'}`));inspector.append(el('p',p.net?'Connected':'No net in IR (intent unspecified)','quiet'));const v=p.profile.voltage;if(v)inspector.append(el('p',`Voltage: ${quantity(v.minimum)} … ${quantity(v.maximum)} · ${v.rating||'rating unspecified'}`));inspector.append(el('p',`Unpowered behavior: ${p.unpowered_behavior}`,'quiet'));}
     if(selection.kind==='component'){const c=model.components.get(selection.id);inspector.append(el('p',`${c.part} ${c.value?quantity(c.value):''}`));const support=[...model.components.values()].filter(d=>typeof d.properties?.decouples==='string'&&d.scope===c.scope&&d.properties.decouples.startsWith(c.ref.split('/').pop()+'.'));
@@ -395,7 +399,7 @@ export function createElectricalReview({message,onMode}){
   // Double-click an element of a drawing, or press N, to note the selection.
   $('electrical-canvas').addEventListener('dblclick',e=>{const target=e.target.closest?.('svg.electrical-topology .electrical-svg-pick');if(target){e.preventDefault();openNote(target.getBoundingClientRect());}});
   document.addEventListener('keydown',e=>{
-    if(root.hidden||modal()||e.key.toLowerCase()!=='n'||e.ctrlKey||e.metaKey||e.altKey||!selection||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
+    if(root.hidden||modal()||e.key.toLowerCase()!=='n'||e.ctrlKey||e.metaKey||e.altKey||!selection||e.target.closest?.('input,textarea,select,[contenteditable],#pcb-review'))return;
     e.preventDefault();editing=null;
     const svg=$('electrical-canvas').querySelector('svg.electrical-topology'),target=svg?.querySelector(`[data-kind="${selection.kind}"][data-entity="${CSS.escape(selection.id)}"]`);
     if(svg)openNote(target?.getBoundingClientRect());else{detail='notes';renderIntent();$('electrical-observation')?.focus();}
@@ -414,9 +418,8 @@ export function createElectricalReview({message,onMode}){
   $('electrical-state').onchange=e=>{powerState=e.target.value;save();render();};
   $('electrical-search').oninput=renderExplorer;
   $('electrical-export').onclick=exportReview;
-  $('electrical-load-review').onclick=()=>$('electrical-review-file').click();
-  $('electrical-review-file').onchange=async e=>{const f=e.target.files[0];e.target.value='';try{if(f){if(f.size>50*1024*1024)throw Error('Review exceeds 50 MiB');importReview(JSON.parse(await f.text()));}}catch(error){message(error.message,true);}};
-  $('show-pcb').onclick=()=>show(false);$('show-electrical').onclick=()=>show(true);
-  new ResizeObserver(entries=>{root.style.setProperty('--electrical-header-height',`${entries[0].target.getBoundingClientRect().height}px`);}).observe(document.querySelector('body>header'));
-  return {load,show,hasModel:()=>!!model};
+  /** Select something chosen elsewhere (the board) without echoing it back. */
+  function revealEntity(kind,id){if(!model||!validSelection({kind,id}))return false;quiet=true;try{if(view==='schematic')locate(kind,id);else choose(kind,id);}finally{quiet=false;}return true;}
+  return {load,show,render:()=>{if(model)render();},hasModel:()=>!!model,model:()=>model,input:()=>input,selection:()=>selection,
+    has:(kind,id)=>!!model&&validSelection({kind,id}),reveal:revealEntity,exportReview:()=>{if(!model)throw Error('Open a schematic first.');exportReview();},importReview};
 }

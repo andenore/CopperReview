@@ -96,7 +96,7 @@ their full geometry:
   uses the recorded query layers. Intersection is conservative, not an
   electrical-clearance calculation.
 
-When a CopperScript issue list was loaded (**Load issues**, from
+When a CopperScript issue list was opened (**Open → File…**, from
 `copper issues RUN --json`), an annotation may cite issue ids: `issues` lists
 them and `context.issues` keeps each cited issue's id, stage, code, title,
 count, nets (a capped list's remainder as `nets_omitted`), mm window and

@@ -141,7 +141,10 @@ def make_handler(initial_scene, token, project=None, board=None, public=False):
                 except (OSError, ValueError) as exc:
                     self.send(500, {"error": f"Could not read project: {exc}"})
                     return
-                self.send(200, {"name": project.name, "board": board, "files": [{"path": p, "size": s} for p, s in files.items()]})
+                listing = {"name": project.name, "board": board, "files": [{"path": p, "size": s} for p, s in files.items()]}
+                if not public:
+                    listing["root"] = str(project)  # For "Open in VS Code" links; not sent to other machines.
+                self.send(200, listing)
                 return
             if path == "/api/project/file":
                 name = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
@@ -198,7 +201,7 @@ def make_handler(initial_scene, token, project=None, board=None, public=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Inspect PCB geometry and export review annotations without KiCad")
-    parser.add_argument("board", nargs="?", type=Path, help="CopperScript .kicad_pcb export (omit to open the file picker)")
+    parser.add_argument("board", nargs="?", type=Path, help="CopperScript .kicad_pcb export (omit to open the file picker); with --project, the board to review next to its schematic")
     parser.add_argument("--electrical-ir", type=Path, help="CopperScript compiled electrical IR JSON (no PCB required)")
     parser.add_argument("--stage", choices=STAGES, default="unknown", help="Declared review stage, not a verified routing status")
     parser.add_argument("--source", type=Path, help="Optional .copper source whose filename and hash accompany the board")
@@ -214,8 +217,10 @@ def main():
             parser.error("Board exceeds 50 MiB")
         if args.board and args.electrical_ir:
             parser.error("Choose a PCB or --electrical-ir, not both")
-        if args.project and (args.board or args.electrical_ir):
-            parser.error("Choose --project, a PCB or --electrical-ir, not several")
+        if args.project and args.electrical_ir:
+            parser.error("Choose --project or --electrical-ir, not both")
+        if args.project and args.board and args.board.suffix.lower() == ".json":
+            parser.error("With --project, the board must be a .kicad_pcb export")
         if args.entry and not args.project:
             parser.error("--entry needs --project")
         if args.project:

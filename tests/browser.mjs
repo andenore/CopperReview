@@ -39,7 +39,7 @@ try {
   await page.locator('#observation').fill('Reserve this region before area routing.');
   await page.locator('#desired').fill('Add a corridor planning heuristic.');await page.locator('#save-note').click();
   assert.equal(await page.locator('.note-row').count(),3);
-  const downloadPromise=page.waitForEvent('download');await page.locator('#export-review').click();
+  const downloadPromise=page.waitForEvent('download');await page.locator('#export-menu').click();await page.locator('#export-review').click();
   const download=await downloadPromise;await download.saveAs('test-results/browser.review.json');
   const review=JSON.parse(readFileSync('test-results/browser.review.json'));
   assert.equal(review.annotations.length,3);assert.equal(review.annotations[0].context.components[0].source_path,'control.U1');
@@ -48,7 +48,7 @@ try {
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.note-row').length===3);
   await page.locator('.note').first().click();await page.locator('#observation').fill('Edited package exit observation.');await page.locator('#save-note').click();
   assert((await page.locator('.note-title').first().textContent()).includes('Edited'));
-  await page.locator('#review-file').setInputFiles('test-results/browser.review.json');
+  await page.locator('#any-file').setInputFiles('test-results/browser.review.json');
   await page.waitForFunction(()=>document.querySelector('.note-title')?.textContent==='The package exits cross in front of U1.');
   await page.locator('#fit').click();await page.screenshot({path:'test-results/review-ui.png',fullPage:true});
   await page.locator('#layer-list input').last().uncheck();

@@ -97,3 +97,70 @@ body.electrical-maximized #electrical-review{height:100dvh;max-width:none;paddin
 #electrical-canvas:has(>svg.electrical-topology){display:flex;flex-direction:column;gap:4px}
 #electrical-canvas>svg.electrical-topology{margin:auto;flex:none}
 #electrical-canvas:has(>.electrical-sheet-bar){padding:0 12px 12px}
+/* ---- App shell: one slim top bar, then the workspace (electrical, layout, or both side by side) ---- */
+header.topbar{height:auto;min-height:44px;padding:6px 14px;gap:14px;flex-wrap:nowrap}
+.topbar .brand{min-width:0;gap:8px;flex:none}.topbar .brand strong{font-size:15px}.topbar .logo{width:26px;height:26px}
+.topbar .board-heading{display:flex;align-items:baseline;gap:10px;min-width:0;overflow:hidden;white-space:nowrap}
+.topbar .board-heading strong{display:inline;font-size:14px;flex:none;max-width:28vw}
+#project-origin{font-size:11px;color:var(--muted);background:#222c31;border-radius:4px;padding:1px 7px;flex:none;max-width:26vw;overflow:hidden;text-overflow:ellipsis}
+#board-meta{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mode-switch{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex:none}
+.mode-switch button{border:0;border-radius:0;background:transparent;padding:5px 12px;font-size:12px;color:var(--muted)}
+.mode-switch button+button{border-left:1px solid var(--border)}
+.mode-switch button[aria-pressed=true]{background:#3d3025;color:var(--copper)}
+.mode-switch button:disabled{opacity:.3}
+.topbar .header-actions{align-items:center;gap:6px;flex:none}
+.topbar .header-actions>button,.menu>button{padding:5px 11px;font-size:12px}
+.menu{position:relative}.menu>button:not(#more-menu)::after{content:' ▾';font-size:10px}
+.menu-list{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:260px;background:var(--panel);border:1px solid #3d4b51;border-radius:8px;padding:6px;box-shadow:0 10px 30px #0009;display:flex;flex-direction:column;gap:2px}
+.menu-list button{text-align:left;border:0;background:transparent;padding:7px 10px;white-space:normal}
+.menu-list button:hover,.menu-list button:focus-visible{background:#2a363c}
+.menu-list small{display:block;font-size:10px;color:var(--muted)}
+.menu-list p{margin:6px 10px 2px;line-height:1.5}
+.workspace{height:calc(100dvh - var(--topbar-height,45px));min-height:450px;display:flex;--split:50%}
+.workspace>#pcb-review,.workspace>#electrical-review{flex:1 1 0;min-width:0;height:100%}
+.workspace>main{min-height:0}
+#electrical-review{height:100%;padding:8px 12px 0}
+body[data-mode=both] .workspace>#electrical-review{flex:0 0 var(--split)}
+.splitter{flex:0 0 6px;cursor:col-resize;background:#1c262a;border-inline:1px solid var(--border)}
+.splitter:hover,.splitter:focus-visible,body.resizing .splitter{background:#3d5a55;outline:none}
+body.resizing{cursor:col-resize;user-select:none}
+/* Both: the schematic's side panel is the shared inspector; the board shows only its drawing. */
+body[data-mode=both] #pcb-review{grid-template-columns:minmax(0,1fr)}
+body[data-mode=both] #pcb-review>aside,body[data-mode=both] .review-tray,body[data-mode=both] .electrical-explorer,body[data-mode=both] #electrical-disclaimer{display:none}
+body[data-mode=both] .electrical-layout{grid-template-columns:minmax(0,1fr) 270px}
+/* Views, options and actions share one toolbar row; zoom floats over the drawing. */
+#electrical-review .electrical-toolbar{margin:0 0 8px;gap:12px;justify-content:flex-start}
+#electrical-review .electrical-toolbar label{display:flex;align-items:center;gap:6px;min-width:0}
+#electrical-review .electrical-toolbar select{display:inline-block;width:auto;max-width:220px;padding:5px 8px}
+#electrical-tabs{border:0;padding:0;margin-right:4px}
+.electrical-stage{position:relative;min-width:0;min-height:0;display:flex}
+.electrical-stage>#electrical-canvas{flex:1}
+.floating-controls{position:absolute;top:8px;right:22px;z-index:4;display:flex;gap:4px;background:#111a1ee6;border:1px solid var(--border);border-radius:6px;padding:3px}
+.floating-controls button{padding:4px 8px;font-size:11px}
+#canvas-wrap>.toolbar{height:auto;left:12px;right:auto;top:10px;gap:4px;border-bottom:1px solid var(--border)}
+#canvas-wrap>.toolbar .tool-group button{padding:4px 8px}
+#hover-info{top:56px}
+.empty-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:6px 0}
+#empty-state code{font-size:11px}
+.link-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.link-row:empty{display:none}
+.link-row button{padding:5px 10px;font-size:11px}.link-row a{font-size:12px;color:var(--mint)}
+#drop-hint{position:fixed;inset:10px;border:2px dashed var(--copper);border-radius:12px;background:#101619cc;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--copper);z-index:30;pointer-events:none}
+#info-dialog{padding:16px 20px}#info-content p{line-height:1.6}#info-content pre{max-height:40vh;overflow:auto;font-size:11px}
+.source-dialog{width:min(1000px,94vw);height:min(82vh,900px);padding:14px 18px}
+.source-dialog[open]{display:flex;flex-direction:column}
+.source-dialog .project-dialog-heading{margin-bottom:6px}.source-dialog h2{font:600 14px ui-monospace,Consolas,monospace!important;overflow:hidden;text-overflow:ellipsis}
+#source-note{margin:0 0 8px;padding:0}
+#source-text{flex:1;min-height:0;overflow:auto;margin:0;background:#111a1e;border:1px solid var(--border);border-radius:6px;padding:8px 0;font:12px/1.55 ui-monospace,Consolas,monospace}
+.source-line{display:block;white-space:pre;padding:0 12px 0 60px;position:relative}
+.source-line::before{content:attr(data-line);position:absolute;left:0;width:46px;text-align:right;color:#5d737c}
+.source-line.current{background:#3d3025;color:#fff0b6}
+@media(max-width:900px){.workspace{flex-direction:column;height:auto}body[data-mode=both] .workspace>#electrical-review{flex:none;height:70vh}.splitter{display:none}.topbar .board-heading{display:none}header.topbar{flex-wrap:wrap}}
+/* Zoom sits in the drawing's bottom-right corner, clear of the sheet bar. */
+.electrical-stage>.floating-controls{top:auto;bottom:16px;right:24px}
+/* Both: one toolbar row; the selects explain themselves, so their labels go. */
+body[data-mode=both] #electrical-review .electrical-toolbar{flex-wrap:nowrap;overflow:hidden;gap:8px}
+body[data-mode=both] #electrical-review .electrical-toolbar label:not(.electrical-passive-toggle){font-size:0;gap:0}
+body[data-mode=both] #electrical-review .electrical-toolbar select{font-size:12px;max-width:160px}
+body[data-mode=both] #electrical-review .electrical-toolbar button{padding:5px 9px;font-size:12px}
+dialog:focus,dialog:focus-visible{outline:none}

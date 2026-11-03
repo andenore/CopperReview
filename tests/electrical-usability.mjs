@@ -16,8 +16,8 @@ for(let i=0;i<30;i++){
  fixture.nets.find(n=>n.name==='RAIL').endpoints.push(`CAP${i}.1`,`IC${i}.VDD`);fixture.nets.find(n=>n.name==='GROUND').endpoints.push(`CAP${i}.2`);
 }
 try{
- await page.goto(url);await page.locator('#electrical-file').setInputFiles({name:'usability.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});
- await page.waitForFunction(()=>document.getElementById('electrical-name').textContent==='Usability');
+ await page.goto(url);await page.locator('#any-file').setInputFiles({name:'usability.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});
+ await page.waitForFunction(()=>document.getElementById('board-name').textContent==='Usability');
  // The explorer selects in place; the Selection sheet draws one hop around it and Back returns.
  await page.locator('#electrical-entities [data-entity="LOAD"]').click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),'LOAD');
  await page.getByRole('button',{name:'Show selection sheet'}).click();assert.equal(await page.locator('#electrical-sheet').inputValue(),'selection');
@@ -48,7 +48,7 @@ try{
  await page.locator('#electrical-search').fill('CAP0');await page.locator('#electrical-entities [data-entity="CAP0"]').click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),'CAP0');
  await page.locator('#electrical-search').fill('');await page.locator('[data-electrical-view="bus"]').click();await page.locator('#electrical-bus-connections').click();assert(await page.locator('.electrical-other-signals').isVisible());
  await page.locator('.electrical-bus [data-entity="peripheral:LINK"]').click();assert.equal(await page.locator('[data-electrical-view="schematic"]').getAttribute('aria-selected'),'true');assert.equal(await page.locator('#electrical-sheet').inputValue(),'selection');
- if(process.argv[3]){await page.locator('#electrical-file').setInputFiles(process.argv[3]);await page.waitForFunction(()=>document.getElementById('electrical-name').textContent!=='Usability');}
+ if(process.argv[3]){await page.locator('#any-file').setInputFiles(process.argv[3]);await page.waitForFunction(()=>document.getElementById('board-name').textContent!=='Usability');}
  mkdirSync('test-results',{recursive:true});
  for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();await page.screenshot({path:`test-results/usability-${view}.png`});}
  for(const width of [900,390]){await page.setViewportSize({width,height:800});for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`document overflow ${width}/${view}`);}}

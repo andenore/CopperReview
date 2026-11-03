@@ -33,7 +33,7 @@ try {
   // bridge. No physical copper edge exists along x=1..42, y=6.
   scene.zones=[{id:'linked-fill',net:'GND',layers:['B.Cu'],kind:'fill',points_mm:
     [[1,1],[49,1],[49,34],[1,34],[1,6],[42,6],[42,10],[46,10],[46,6],[42,6],[1,6],[1,1]]}];
-  await page.locator('#board-file').setInputFiles({name:'linked-fill.scene.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(scene))});
+  await page.locator('#any-file').setInputFiles({name:'linked-fill.scene.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(scene))});
   await page.waitForFunction(()=>document.querySelector('#component-count').textContent==='4');
   await fit();
   // Compare the bridge against adjacent filled pixels (all chosen off grid dots).

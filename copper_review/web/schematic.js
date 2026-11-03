@@ -28,7 +28,7 @@ const pinRole=(model,p)=>p.net?netRole(model,p.net):'nc';
 const twoPin=c=>c.pins.length===2;
 /** Short drawing values: 4.7k, 33Ω, 100nF, 10µH. */
 export function compactQuantity(q){
-  if(!q)return '';const v=engineeringText(q.value),unit=String(q.unit||''),ohm=/^([a-zA-Zµ]?)ohms?$/i.exec(unit);
+  if(!q)return '';if(typeof q!=='object')return String(q);const v=engineeringText(q.value),unit=String(q.unit||''),ohm=/^([a-zA-Zµ]?)ohms?$/i.exec(unit);
   const base=Number(q.base_value),trim=x=>String(Number(x.toPrecision(6)));
   if(ohm&&q.base_value!=null&&Number.isFinite(base))return base>=1e6?`${trim(base/1e6)}M`:base>=1e3?`${trim(base/1e3)}k`:`${trim(base)}Ω`;
   return ohm?(ohm[1]?`${v}${ohm[1].replace(/^u$/,'µ')}`:`${v}Ω`):`${v}${unit.replace(/^u/,'µ')}`;

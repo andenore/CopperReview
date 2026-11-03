@@ -10,8 +10,8 @@ const page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));mkdirSync('test-results',{recursive:true});
 try{
   await page.goto(url);
-  await page.locator('#electrical-file').setInputFiles('tests/fixtures/electrical-ir.json');
-  await page.waitForFunction(()=>document.getElementById('electrical-name').textContent==='Fixture');
+  await page.locator('#any-file').setInputFiles('tests/fixtures/electrical-ir.json');
+  await page.waitForFunction(()=>document.getElementById('board-name').textContent==='Fixture');
   await page.locator('#electrical-canvas [data-entity="DATA"]').first().click();
   const selected=await page.locator('#electrical-inspector h3').textContent();assert.equal(selected,'DATA');
   for(const view of ['power','bus','schematic']){await page.locator(`[data-electrical-view="${view}"]`).click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),selected);}
@@ -29,19 +29,19 @@ try{
   assert.equal(await page.locator('#electrical-inspector h3').textContent(),'P/U.OUT');
   await page.getByRole('button',{name:'Notes',exact:true}).click();assert.equal(await page.locator('.electrical-note').count(),1);
   assert.equal(await page.evaluate(()=>window.injected),undefined);
-  await page.locator('#electrical-review-file').setInputFiles('test-results/electrical.review.json');
+  await page.locator('#any-file').setInputFiles('test-results/electrical.review.json');
   assert.equal(await page.locator('.electrical-note').count(),1);
   // A second IR revision must not inherit notes or accept the previous review.
   const changed=JSON.parse(readFileSync('tests/fixtures/electrical-ir.json'));changed.name='Other revision';
-  await page.locator('#electrical-file').setInputFiles({name:'other.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(changed))});
-  await page.waitForFunction(()=>document.getElementById('electrical-name').textContent==='Other revision');
-  await page.locator('#electrical-review-file').setInputFiles('test-results/electrical.review.json');
+  await page.locator('#any-file').setInputFiles({name:'other.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(changed))});
+  await page.waitForFunction(()=>document.getElementById('board-name').textContent==='Other revision');
+  await page.locator('#any-file').setInputFiles('test-results/electrical.review.json');
   await page.waitForFunction(()=>document.getElementById('message').textContent.includes('does not match'));
   // PCB mode continues to load and select physical entities.
-  await page.locator('#board-file').setInputFiles('examples/demo.kicad_pcb');
+  await page.locator('#any-file').setInputFiles('examples/demo.kicad_pcb');
   await page.waitForSelector('#pcb-review:not([hidden])');assert.equal(await page.locator('.entity').count(),4);
-  await page.locator('#show-electrical').click();assert.equal(await page.locator('#electrical-name').textContent(),'Other revision');
-  if(process.argv[3]){await page.locator('#electrical-file').setInputFiles(process.argv[3]);await page.waitForFunction(()=>document.getElementById('electrical-name').textContent!=='Other revision');}
+  await page.locator('[data-mode="electrical"]').click();assert.equal(await page.locator('#board-name').textContent(),'Other revision');
+  if(process.argv[3]){await page.locator('#any-file').setInputFiles(process.argv[3]);await page.waitForFunction(()=>document.getElementById('board-name').textContent!=='Other revision');}
   for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();await page.screenshot({path:`test-results/electrical-${view}.png`,fullPage:true});}
   await page.setViewportSize({width:390,height:900});
   for(const view of ['schematic','power','bus']){await page.locator(`[data-electrical-view="${view}"]`).click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow in ${view}`);}

@@ -5,7 +5,7 @@ const require=createRequire(import.meta.url),{chromium}=require(process.env.COPP
 const url=process.argv[2];assert.equal(new URL(url).hostname,'127.0.0.1');
 const browser=await chromium.launch({headless:true,executablePath:process.env.COPPER_BROWSER_EXECUTABLE||undefined}),page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto(url);await page.locator('#electrical-file').setInputFiles(process.argv[3]||'tests/fixtures/electrical-ir.json');await page.waitForSelector('#electrical-review:not([hidden])');
+ await page.goto(url);await page.locator('#any-file').setInputFiles(process.argv[3]||'tests/fixtures/electrical-ir.json');await page.waitForSelector('#electrical-review:not([hidden])');
  mkdirSync('test-results',{recursive:true});
  for(const mode of ['power','bus']){
    await page.locator(`[data-electrical-view="${mode}"]`).click();

@@ -38,7 +38,7 @@ try {
     let box,zoom,offset;
     const screen=([x,y])=>[box.x+offset[0]+x*zoom,box.y+offset[1]+y*zoom];
     async function load(value){
-      await page.locator('#board-file').setInputFiles({name:'joints.scene.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
+      await page.locator('#any-file').setInputFiles({name:'joints.scene.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
       await page.waitForFunction(()=>document.querySelector('#component-count').textContent==='0');
       await page.locator('#fit').click();await page.mouse.move(10,10);await settle();
       box=await page.locator('#board-canvas').boundingBox();zoom=Math.min((box.width-80)/50,(box.height-80)/35);

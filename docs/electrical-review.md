@@ -2,21 +2,37 @@
 
 CopperReview reads `copperscript-ir/v0.1` board JSON produced by the public
 `copper compile` command. It requires no CopperScript installation at runtime.
-Use **Open electrical IR**, pass a JSON file as the CLI input, or run:
+Open it with **Open → File…** (or drop it on the page), pass a JSON file as the CLI input, or run:
 
 ```console
 copper compile board.copper --locked --offline -o electrical.ir.json
 python -m copper_review --electrical-ir electrical.ir.json
 ```
 
-Public GitHub source projects can also be opened through **Open URL**; browser
+Public GitHub source projects can also be opened through **Open → From URL or GitHub…**; browser
 dependency resolution reuses CopperScript WASM and verifies pinned source files.
 See [source snapshots and limits](wasm-hosting.md#open-from-url).
 
-No PCB or placement data is needed. PCB geometry review remains available with
-its original annotations and `copper-review/v2` contract. Use **PCB review** and
-**Electrical review** to switch between loaded documents. Their input identities
-are independent; the application does not assert that a PCB matches an IR.
+No PCB or placement data is needed. Layout review (board geometry) keeps its own
+annotations and `copper-review/v2` contract. The top bar's **Electrical · Layout ·
+Both** switch picks what is shown; opening one kind of document keeps the other open.
+In **Both** the schematic and the board sit side by side (drag the divider, or use
+the arrow keys on it) and a selection on either side selects and centres the same part
+or net on the other. The schematic's side panel is the shared inspector there; layout
+notes are written in **Layout**. Parts match by CopperScript path (the board export's
+`source_path`) or reference, nets by name, and the top bar counts parts found on only
+one side. Their input identities stay independent: the application does not assert
+that a board matches an IR.
+
+**Show on board** (in the side panel, or S) and **Show in schematic** (in the board's
+selection panel, or S) jump between the halves outside **Both**. **Source** opens a
+read-only view of the declaring `.copper` file at the line of `component NAME` or
+`net NAME`, inside the module that owns the scope (`PWR/U_CHARGE` is looked up in the
+module instantiated as `PWR`). It searches the sources the compiler read, so it needs a
+document compiled in this browser (project folder, served project, GitHub, or a
+`.copper` file); the IR itself carries no source lines yet. It offers **Open on
+GitHub** at the pinned commit for GitHub projects and dependencies, and **Open in VS
+Code** for a project served from this machine.
 
 ## Linked views
 

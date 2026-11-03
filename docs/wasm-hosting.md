@@ -48,12 +48,12 @@ and WASM URLs. No `/api/` server or session token is used in static mode.
 
 ## Use and limits
 
-- **Compile .copper** opens a source file read-only and runs CopperScript in a
+- Opening a `.copper` file (**Open → File…**) reads it read-only and runs CopperScript in a
   dedicated browser worker. **Try example circuit** runs the bundled educational
   circuit. Successful compilation opens the ordinary electrical review views.
 - Standalone file uploads accept self-contained source up to 512 KiB and the bundled
   demonstration library. Uploading one file provides no filesystem context;
-  `WEB_IMPORT` directs imported source to **Open URL** instead. Public GitHub
+  `WEB_IMPORT` directs imported source to **Open → From URL or GitHub…** instead. Public GitHub
   projects support local and transitive remote imports with pinned source bytes.
 - The worker has a 60-second loading deadline and a 30-second standalone analysis
   deadline. Project analysis gets 60 seconds per pass and 300 seconds overall.
@@ -72,7 +72,7 @@ and WASM URLs. No `/api/` server or session token is used in static mode.
   and presentation data needed by CopperReview, so it is not substituted with
   silent loss of pin names, UUIDs or geometry. A shared Rust review-scene export
   with conformance parity is the next reusable boundary for that importer.
-- Local files and source remain on the user's device. **Open URL** downloads the
+- Local files and source remain on the user's device. **From URL or GitHub…** downloads the
   explicitly requested remote design; workers fetch this site's static compiler
   assets and compile locally. No source is uploaded. Designs resume through IndexedDB;
   notes remain in hash-keyed browser storage and can be exported to JSON. A new
@@ -84,7 +84,7 @@ assets before using its source compiler button. Packaged distributions include
 
 ## Open a local folder
 
-**Open folder** picks a project folder on this computer and compiles it with the
+**Open → Project folder…** picks a project folder on this computer and compiles it with the
 same browser compiler and project transport as GitHub projects. Only `.copper`
 sources and `copper.mod` / `copper.lock` are read (`.git`, `.copper-cache`,
 `node_modules` and `target` are skipped); nothing from the folder is uploaded. The
@@ -98,7 +98,7 @@ path, manifest and lock hashes and resolved dependency commits.
 
 ## Open from URL
 
-Use **Open URL** in the header or empty state. It accepts a GitHub repository,
+Use **Open → From URL or GitHub…** in the top bar or empty state. It accepts a GitHub repository,
 folder, blob or raw file URL, or a direct HTTPS file URL on a host permitting browser
 downloads (CORS). A repository opens a file chooser; exports are never automatically
 selected or asserted to match current source. Discovery includes `.copper`,

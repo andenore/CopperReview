@@ -2,7 +2,8 @@
 import {engineeringText} from './core.js';
 export const IR_SCHEMA='copperscript-ir/v0.1';
 export const ELECTRICAL_SCHEMA='copper-review-electrical/v1';
-export const quantity=q=>q?`${engineeringText(q.value)} ${q.unit}`:'Unspecified';
+// A value is a quantity ({value, unit}) or plain text such as a part number.
+export const quantity=q=>q==null||q===''?'Unspecified':typeof q==='object'?`${engineeringText(q.value)} ${q.unit}`:String(q);
 export const isPassive=c=>/^passive\./.test(c?.partDefinition?.category||'');
 export function isSupportPassive(model,c){
   if(!isPassive(c))return false;

@@ -19,10 +19,10 @@ page.on('pageerror',e=>errors.push(e.message));
 try {
   await page.goto(url);await page.waitForFunction(()=>document.querySelectorAll('.entity').length===4);
   assert(await page.locator('#tab-issues').isHidden());
-  await page.locator('#issues-file').setInputFiles('test-results/other.issues.json');
+  await page.locator('#any-file').setInputFiles('test-results/other.issues.json');
   await page.waitForFunction(()=>document.querySelector('#message').textContent.includes('different board revision'));
   assert(await page.locator('#tab-issues').isHidden());
-  await page.locator('#issues-file').setInputFiles('test-results/demo.issues.json');
+  await page.locator('#any-file').setInputFiles('test-results/demo.issues.json');
   await page.waitForFunction(()=>!document.querySelector('#tab-issues').hidden);
   assert.equal(await page.locator('#issue-count').textContent(),'2');
   await page.locator('#tab-issues').click();assert.equal(await page.locator('.entity').count(),2);
@@ -35,7 +35,7 @@ try {
   await page.locator('#save-note').click();
   await page.waitForFunction(()=>document.querySelector('#message').textContent.includes('Z9 is not in the loaded list'));
   assert.equal(await page.locator('.note-row').count(),1);
-  const downloadPromise=page.waitForEvent('download');await page.locator('#export-review').click();
+  const downloadPromise=page.waitForEvent('download');await page.locator('#export-menu').click();await page.locator('#export-review').click();
   await (await downloadPromise).saveAs('test-results/issues.review.json');
   const review=JSON.parse(readFileSync('test-results/issues.review.json'));
   assert.deepEqual(review.annotations[0].issues,['P1']);assert.equal(review.annotations[0].context.issues[0].code,'PACKAGE-EXIT-PENDING');
@@ -46,12 +46,12 @@ try {
   await page.locator('#observation').fill('P1: edited.');await page.locator('#save-note').click();
   assert((await page.locator('.note-title').first().textContent()).includes('edited'));
   // The issue source survives a reload (local notes) and a review round trip without the issue list.
-  let again=page.waitForEvent('download');await page.locator('#export-review').click();
+  let again=page.waitForEvent('download');await page.locator('#export-menu').click();await page.locator('#export-review').click();
   await (await again).saveAs('test-results/issues-again.review.json');
   assert.equal(JSON.parse(readFileSync('test-results/issues-again.review.json')).copperscript_issues.run,'build/demo/runs/T1');
-  await page.locator('#review-file').setInputFiles('test-results/issues.review.json');
+  await page.locator('#any-file').setInputFiles('test-results/issues.review.json');
   await page.waitForFunction(()=>document.querySelector('.note-title')?.textContent==='P1: C1 blocks the U1 exits.');
-  again=page.waitForEvent('download');await page.locator('#export-review').click();
+  again=page.waitForEvent('download');await page.locator('#export-menu').click();await page.locator('#export-review').click();
   await (await again).saveAs('test-results/issues-third.review.json');
   assert.equal(JSON.parse(readFileSync('test-results/issues-third.review.json')).copperscript_issues.board_verified,true);
   assert((await page.locator('.note-caption').first().textContent()).includes('issue P1'));

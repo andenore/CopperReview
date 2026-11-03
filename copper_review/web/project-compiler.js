@@ -78,5 +78,8 @@ export async function compileLocalProject(files,entryPath,entryBytes,options={})
 async function compilePrepared({snapshot,identity,resolveSources},entryBytes,entryPath,options){
   const analysis=await compileProject(snapshot,resolveSources,options),result=await compiledInput(analysis,entryBytes,entryPath);
   identity.modules.sort((a,b)=>a.module.localeCompare(b.module));
-  result.input.project={...identity,...analysis.source_snapshot};return result;
+  result.input.project={...identity,...analysis.source_snapshot};
+  // The sources the compiler read, for "Source" links: workspace/<path> and dependency/<module>/<path>.
+  result.sources={files:{...snapshot.files},root:entryPath.slice(0,entryPath.length-snapshot.entry.length),entry:snapshot.entry};
+  return result;
 }

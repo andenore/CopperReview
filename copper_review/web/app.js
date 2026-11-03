@@ -3,6 +3,7 @@ import {randomId} from './hash.js';
 import {discoverProject,downloadDesign,setGithubToken,hasGithubToken,checkGithubToken} from './projects.js';
 import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
+import {findDeclaration,displayPath,githubLink} from './source-links.js';
 import {createElectricalReview} from './electrical.js';
 import {chipify} from './chips.js';
 for(const id of ['category','priority','note-status'])chipify(document.getElementById(id));
@@ -17,46 +18,93 @@ let startupReady=Promise.resolve(),documentBaseline='static';
 const documentIdentity=data=>data?.input?.sha256||data?.board?.sha256||'empty';
 const state={scene:null,selection:{components:[],nets:[],region:null},layers:[],annotations:[],tab:'components',mode:'component',
   zoom:1,offset:[0,0],width:0,height:0,drag:null,editing:null,hoverNet:'',hoverPad:null,trackCopper:[],issues:null,issueSource:null,hiddenLabels:0};
-const electrical=createElectricalReview({message,onMode:(shown,model)=>{
-  showProjectOrigin(shown?electricalOrigin:state.scene?.board?.origin);
-  for(const id of ['load-review','load-issues','export-scene','export-review'])$(id).hidden=shown;
-  $('show-electrical').hidden=!electrical.hasModel()||shown;
-  if(shown){$('board-name').textContent=model.name;$('board-meta').textContent='Electrical IR · no layout required';}
-  else if(state.scene){$('board-name').textContent=state.scene.board.name;$('board-meta').textContent='PCB geometry review';fit();}
-  else{$('board-name').textContent='Open a board to begin';$('board-meta').textContent='Local PCB inspection · no KiCad required';}
-}});
-function showCompilerResult(data){
-  const panel=$('compiler-result');panel.hidden=!data.analysis;if(!data.analysis)return;
+// Electrical review (schematic, power, buses) and layout review (the board) can both be open.
+// The mode decides what is shown; "Both" puts them side by side and links their selections.
+let mode='layout',syncing=false,sources=null,lastCompile=null;
+const electrical=createElectricalReview({message,
+  onSelect:sel=>{if(mode==='both')showOnBoard(sel.kind,sel.id,{quiet:true});},
+  links:{board:{has:(kind,id)=>!!boardTarget(kind,id),show:(kind,id)=>showOnBoard(kind,id)},
+    source:{has:(kind,id)=>!!sourceTarget(kind,id),open:(kind,id)=>openSource(kind,id)}}});
+const available=m=>m==='electrical'?electrical.hasModel():m==='both'?electrical.hasModel()&&!!state.scene:true;
+function setMode(next,{remember=true}={}){
+  if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
+  const changed=next!==mode;mode=next;document.body.dataset.mode=mode;
+  electrical.show(mode!=='layout');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
+  for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);}
+  $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
+  updateHeading();
+  if(remember)try{localStorage.setItem('copper-review:mode',mode);}catch{}
+  // The board canvas changes size with the mode; refit once the layout has settled.
+  if(changed&&state.scene&&mode!=='electrical')requestAnimationFrame(()=>fit());
+}
+for(const b of document.querySelectorAll('#mode-switch [data-mode]'))b.onclick=()=>setMode(b.dataset.mode);
+/** Parts on the board found by the schematic's names, and the other way round. */
+function linkSummary(){
+  if(!electrical.hasModel()||!state.scene)return null;
+  const model=electrical.model(),board=new Set(state.scene.components.map(c=>c.source_path||c.reference));
+  const schematic=[...model.components.keys()],both=schematic.filter(r=>board.has(r)||state.scene.components.some(c=>c.reference===r));
+  return {both:both.length,schematicOnly:schematic.length-both.length,boardOnly:state.scene.components.filter(c=>!model.components.has(c.source_path||c.reference)&&!model.components.has(c.reference)).length};
+}
+function updateHeading(){
+  const model=electrical.hasModel()?electrical.model():null,scene=state.scene;
+  const name=model?.name||scene?.board.name;
+  $('board-name').textContent=name||'Open a design to begin';
+  showProjectOrigin(mode==='layout'?scene?.board?.origin||null:electricalOrigin||(mode==='both'?scene?.board?.origin:null)||null);
+  let meta='';
+  if(mode==='both'){const l=linkSummary();meta=`Linked by reference and net name · ${l.both} parts on both${l.schematicOnly?` · ${l.schematicOnly} schematic only`:''}${l.boardOnly?` · ${l.boardOnly} board only`:''} · not checked against source`;}
+  else if(mode==='electrical'&&model)meta=`${model.components.size} components · ${model.nets.size} nets · IR ${electrical.input().sha256.slice(0,12)}`;
+  else if(scene)meta=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
+  $('board-meta').textContent=meta;$('board-meta').title=meta;
+  const check=lastCompile?.analysis?.check;$('show-compiler-result').hidden=!lastCompile?.analysis;
+  if(check)$('show-compiler-result').textContent=`Compiler check · ${check.passed?'ERC passed':'ERC findings'} · ${(check.diagnostics||[]).length} finding(s)`;
+  setEnabled();
+}
+function showCompilerResult(data){if(data?.analysis)lastCompile=data;updateHeading();}
+function compilerReport(){
+  const data=lastCompile,content=document.createElement('div');if(!data)return content;
   const analysis=data.analysis,findings=analysis.check?.diagnostics||[];
-  $('compiler-result-title').textContent=`CopperScript WASM · ${analysis.check?.passed?'ERC passed':'ERC findings'} · ${findings.length} finding(s)`;
-  const content=$('compiler-result-content');content.replaceChildren();
-  const origin=document.createElement('p');origin.textContent=`${data.input.source.filename} · ${analysis.compiler.source_revision||'working compiler'}${analysis.compiler.source_modified?' (modified source)':''}`;content.append(origin);
+  const head=document.createElement('p');head.textContent=`CopperScript WASM · ${analysis.check?.passed?'ERC passed':'ERC findings'} · ${findings.length} finding(s)`;content.append(head);
+  const origin=document.createElement('p');origin.className='quiet';origin.textContent=`${data.input.source.filename} · ${analysis.compiler.source_revision||'working compiler'}${analysis.compiler.source_modified?' (modified source)':''}`;content.append(origin);
   for(const finding of findings){const row=document.createElement('p');row.textContent=`${finding.severity||''} ${finding.code}: ${finding.message}${finding.location?` (line ${finding.location.line}, column ${finding.location.column})`:''}`;content.append(row);}
   if(data.input.project){const project=document.createElement('p');project.textContent=`Project: ${data.input.project.files?.length||0} source files · ${data.input.project.modules?.length||0} dependency repositories · ${data.input.project.scope}`;content.append(project);}
   const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Native compiler pin/net queries';pre.textContent=JSON.stringify({components:analysis.components,nets:analysis.nets,pins:analysis.pins},null,2);details.append(summary,pre);content.append(details);
+  return content;
 }
+function showInfo(title,content){$('info-dialog-title').textContent=title;$('info-content').replaceChildren(content);if(!$('info-dialog').open)$('info-dialog').showModal();}
+$('info-close').onclick=()=>$('info-dialog').close();
+$('show-compiler-result').onclick=()=>showInfo('Compiler check',compilerReport());
+$('show-about').onclick=()=>{const box=document.createElement('div');
+  for(const text of ['CopperReview inspects CopperScript designs and records review notes for the next iteration. It is read-only: notes never edit the source, the board or solver constraints.',
+    'Electrical review draws generated schematic sheets, the power hierarchy and buses from the compiled IR. Values are nominal and states are as declared; there is no simulation, and protocol grouping, power sequencing and device behavior are not validated.',
+    'Layout review shows board placement and routing from a CopperScript board export. Routing completeness is never inferred from track counts, and net guides show membership, not verified connections.',
+    'In Both, the schematic and the board are linked by reference and net name. Nothing proves the board was built from that exact source.',
+    'Everything is processed in this browser (or by the local server you started). Notes save in this browser per design revision; export them to keep or share.'])
+    {const p=document.createElement('p');p.textContent=text;box.append(p);}
+  showInfo('About and limits',box);};
+$('show-github-access').onclick=()=>{showProjectDialog();$('github-access').open=true;$('github-token').focus();};
 function showProjectOrigin(origin){const label=$('project-origin');label.hidden=!origin;label.textContent=origin?origin.provider==='github'?`${String(origin.repository||'').replace('https://github.com/','')} @ ${String(origin.commit||'').slice(0,12)} · ${origin.path}`:origin.provider==='local'?`${origin.folder}/${origin.path} · local folder`:origin.url:'';label.title=origin?.url||'';}
-function loadDocument(data){if(data?.schema==='copper-review-electrical/v1'){electrical.load(data);electricalOrigin=data.input.origin||null;showProjectOrigin(electricalOrigin);}else {loadScene(data);electrical.show(false);}showCompilerResult(data);}
+function loadDocument(data){
+  if(data?.schema==='copper-review-electrical/v1'){electrical.load(data);electricalOrigin=data.input.origin||null;sources=data.sources||null;setMode(state.scene?'both':'electrical');}
+  else{loadScene(data);electrical.render();setMode(electrical.hasModel()?'both':'layout');}
+  showCompilerResult(data);
+}
 function beginOpen(){if(remoteLoad){remoteLoad.abort();remoteLoad=null;projectBusy(false);}const revision=++documentRevision;cancelCompiler();$('compiler-cancel').hidden=true;return revision;}
-async function openDesignFile(file,electricalOnly=false,{origin=null,prepared=null,revision=beginOpen()}={}){
+async function openDesignFile(file,{origin=null,prepared=null,revision=beginOpen()}={}){
   if(!file)return;if(file.size>49*1024*1024)throw Error('File exceeds 49 MiB.');
   try{
     await startupReady;if(revision!==documentRevision)return false;const bytes=await file.arrayBuffer();if(revision!==documentRevision)return false;let value;
     if(prepared)value=prepared;
     else if(file.name.toLowerCase().endsWith('.copper')){
       $('compiler-cancel').hidden=false;message('Loading CopperScript WASM and checking source locally…');value=await compileInput(bytes,file.name);
+      value.sources={files:{[`workspace/${file.name}`]:new TextDecoder().decode(bytes)},root:'',entry:file.name};
     }else if(file.name.toLowerCase().endsWith('.json')){
       value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
       if(value.schema==='copperscript-ir/v0.1')value=await electricalInput(bytes,file.name);
-      else if(value.schema===ISSUES_SCHEMA)throw Error('Use Load issues for issue lists.');
-      else if(READABLE_REVIEW_SCHEMAS.includes(value.schema))throw Error('Use Load review for annotation files.');
-      else if(electricalOnly&&value.schema!=='copper-review-electrical/v1')throw Error('Expected compiled electrical IR.');
     }else{
-      if(electricalOnly)throw Error('Choose electrical IR JSON or .copper source.');
       if(!localServer)throw Error('Raw KiCad PCB import currently needs the local importer. Open an exported .scene.json in the hosted viewer.');
       const response=await fetch('./api/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Copper-Token':token,'X-Copper-Filename':encodeURIComponent(file.name)},body:bytes});value=await response.json();if(!response.ok)throw Error(value.error);documentBaseline=documentIdentity(value);
     }
-    if(revision!==documentRevision)return false;if(origin){if(value.schema==='copper-review-electrical/v1')value.input={...value.input,origin};else if(value.board)value.board={...value.board,origin};}loadDocument(value);try{await rememberDocument(value,documentBaseline);}catch{message('Design could not be saved in browser storage. Export reviews to keep your notes.',true);return true;}message(`Opened ${file.name}${value.analysis?' · compiled locally with CopperScript WASM':''}`);return true;
+    if(revision!==documentRevision)return false;if(origin){if(value.schema==='copper-review-electrical/v1')value.input={...value.input,origin};else if(value.board)value.board={...value.board,origin};}loadDocument(value);try{await rememberDocument(value,documentBaseline,value.schema==='copper-review-electrical/v1'?'electrical':'layout');}catch{message('Design could not be saved in browser storage. Export reviews to keep your notes.',true);return true;}message(`Opened ${file.name}${value.analysis?' · compiled locally with CopperScript WASM':''}`);return true;
   }catch(error){if(revision!==documentRevision)return;throw Error(`${error.message}${state.scene||electrical.hasModel()?' Previous design remains open.':' No design was loaded.'}`);}
   finally{if(revision===documentRevision)$('compiler-cancel').hidden=true;}
 }
@@ -73,7 +121,7 @@ async function openRemoteFile(file,revision,controller){
   $('project-status').textContent=downloaded.name.endsWith('.copper')?'Compiling with CopperScript WASM…':'Opening design…';
   const prepared=downloaded.name.endsWith('.copper')&&downloaded.origin.provider==='github'?await compileGithubProject(file,downloaded.bytes,{signal:controller.signal,onProgress:text=>{if(revision===documentRevision)$('project-status').textContent=text;}}):null;
   if(controller.signal.aborted||revision!==documentRevision)return;
-  if(await openDesignFile(new File([downloaded.bytes],downloaded.name),false,{origin:downloaded.origin,prepared,revision})){$('project-status').textContent='';$('project-dialog').close();}
+  if(await openDesignFile(new File([downloaded.bytes],downloaded.name),{origin:downloaded.origin,prepared,revision})){$('project-status').textContent='';$('project-dialog').close();}
 }
 async function projectAction(action){
   const revision=beginOpen(),controller=new AbortController();remoteLoad=controller;projectBusy(true);
@@ -103,14 +151,32 @@ $('github-token-form').onsubmit=async event=>{event.preventDefault();cancelProje
 };
 $('github-token-forget').onclick=()=>{cancelProject();forgetToken();showTokenState('Token forgotten. Only public repositories will load.');};
 $('project-open').onclick=()=>{const file=projectFiles[Number($('project-files').value)];if(file)projectAction((revision,controller)=>openRemoteFile(file,revision,controller));};
-$('open-electrical').onclick=()=>$('electrical-file').click();
-$('electrical-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file,true);});
+/** Open any mix of files: designs first, then reviews and issue lists that belong to them. */
+async function openFiles(list){
+  const files=[...list];if(!files.length)return;
+  const kinds=await Promise.all(files.map(async file=>{
+    if(!file.name.toLowerCase().endsWith('.json'))return {file,kind:'design'};
+    if(file.size>50*1024*1024)throw Error(`${file.name} exceeds 50 MiB.`);
+    let value;try{value=JSON.parse(await file.text());}catch{throw Error(`${file.name} is not valid JSON.`);}
+    const kind=value?.schema===ISSUES_SCHEMA?'issues':READABLE_REVIEW_SCHEMAS.includes(value?.schema)?'layout-review':value?.schema==='copper-electrical-review/v1'?'electrical-review':'design';
+    return {file,kind,value};
+  }));
+  for(const {file}of kinds.filter(k=>k.kind==='design'))await openDesignFile(file);
+  for(const {file,kind,value}of kinds.filter(k=>k.kind!=='design')){
+    if(kind==='issues'){if(!state.scene)throw Error(`Open the board before the issue list ${file.name}.`);loadIssues(value);}
+    else if(kind==='layout-review'){if(!state.scene)throw Error(`Open the board before the review ${file.name}.`);loadLayoutReview(value);setMode(mode==='electrical'?'layout':mode);}
+    else{if(!electrical.hasModel())throw Error(`Open the schematic before the review ${file.name}.`);electrical.importReview(value);setMode(mode==='layout'?'electrical':mode);message(`Loaded electrical review ${file.name}`);}
+  }
+}
+$('any-file').onchange=guarded(async e=>{const files=[...e.target.files];e.target.value='';await openFiles(files);});
+for(const id of ['open-file','empty-open'])$(id).onclick=()=>$('any-file').click();
+$('empty-folder').onclick=()=>$('folder-files').click();
 // A local project folder: only CopperScript sources and manifests are read; nothing is uploaded.
-let folderFiles=null,folderName='';
+let folderFiles=null,folderName='',folderRoot=null;
 $('open-folder').onclick=()=>$('folder-files').click();
 $('folder-files').onchange=guarded(async e=>{
   const picked=[...e.target.files];e.target.value='';if(!picked.length)return;
-  folderName=picked[0].webkitRelativePath.split('/')[0]||'folder';folderFiles=new Map();
+  folderName=picked[0].webkitRelativePath.split('/')[0]||'folder';folderRoot=null;folderFiles=new Map();
   for(const file of picked){const path=file.webkitRelativePath?file.webkitRelativePath.split('/').slice(1).join('/'):file.name;if(/(?:^|\/)(?:\.git|\.copper-cache|node_modules|target)\//.test(path))continue;if(path.endsWith('.copper')||/(?:^|\/)copper\.(?:mod|lock)$/.test(path))folderFiles.set(path,file);}
   const boards=await localBoardSources(folderFiles);
   if(!boards.length)throw Error(`No board source in ${folderName}. Choose the folder that holds board.copper and copper.mod.`);
@@ -124,13 +190,13 @@ async function openLocalBoard(path){
   try{prepared=await compileLocalProject(folderFiles,path,new Uint8Array(bytes),{onProgress:text=>{if(revision===documentRevision)message(text);}});}
   catch(error){if(revision!==documentRevision)return;$('compiler-cancel').hidden=true;throw Error(`${error.message}${state.scene||electrical.hasModel()?' Previous design remains open.':''}`);}
   if(revision!==documentRevision)return;
-  await openDesignFile(new File([bytes],path.split('/').pop()),false,{origin:{provider:'local',folder:folderName,path},prepared,revision});
+  await openDesignFile(new File([bytes],path.split('/').pop()),{origin:{provider:'local',folder:folderName,path,...(folderRoot?{root:folderRoot}:{})},prepared,revision});
 }
 /** A project served with `copper-review --project`: read its sources fresh and compile them, so a reload recompiles. */
 async function openServedProject(project){
   const files=new Map();message(`Reading ${project.files.length} project file(s) from ${project.name}…`);
   await Promise.all(project.files.map(async f=>{const response=await fetch(`./api/project/file?path=${encodeURIComponent(f.path)}`,{headers:{'X-Copper-Token':token},cache:'no-store'});if(!response.ok)throw Error(`Could not read ${f.path} from the server.`);files.set(f.path,new Blob([await response.arrayBuffer()]));}));
-  folderFiles=new Map([...files].sort(([a],[b])=>a.localeCompare(b)));folderName=project.name;
+  folderFiles=new Map([...files].sort(([a],[b])=>a.localeCompare(b)));folderName=project.name;folderRoot=project.root||null;
   const boards=project.board?[project.board]:await localBoardSources(folderFiles);
   if(!boards.length)throw Error(`No board source in ${project.name}.`);
   if(boards.length===1){await openLocalBoard(boards[0]);return;}
@@ -139,9 +205,8 @@ async function openServedProject(project){
 $('folder-open').onclick=guarded(async()=>{const path=$('folder-boards').value;$('folder-dialog').close();if(path)await openLocalBoard(path);});
 $('folder-boards').ondblclick=()=>$('folder-open').click();
 $('folder-close').onclick=()=>$('folder-dialog').close();
-$('open-source').onclick=()=>$('source-file').click();
-$('source-file').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';await openDesignFile(file);});
 $('compiler-cancel').onclick=()=>{beginOpen();$('compiler-cancel').hidden=true;message('Compilation cancelled. Previous design remains open.');};
+$('empty-example').onclick=()=>$('compiler-example').click();
 $('compiler-example').onclick=guarded(async()=>{const response=await fetch(new URL('./example.copper',import.meta.url));if(!response.ok)throw Error('Example is unavailable.');await openDesignFile(new File([await response.arrayBuffer()],'example.copper'));});
 const palette=['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'];
 const copperColor = layer => palette[Math.max(0,state.scene.board.layers.indexOf(layer))%palette.length];
@@ -364,7 +429,7 @@ function hit(point,forHover=false) {
   if((forHover || state.mode==='net') && $('show-zones').checked){const z=[...state.scene.zones].reverse().find(z=>['fill','copper'].includes(z.kind) && visible(z.layers) && renderNet(z.net) && pointInPolygon(point,z.points_mm));if(z)return {net:z.net};}
   return {};
 }
-function setMode(mode) {state.mode=mode;clearHover();for(const m of ['component','net','region'])$(`mode-${m}`).classList.toggle('active',m===mode);canvas.style.cursor=mode==='region'?'crosshair':'default';}
+function setTool(mode) {state.mode=mode;clearHover();for(const m of ['component','net','region'])$(`mode-${m}`).classList.toggle('active',m===mode);canvas.style.cursor=mode==='region'?'crosshair':'default';}
 function clearSelection() {state.selection={components:[],nets:[],region:null};updateSelection();}
 function select(kind,name,add=false) {
   if(!add)state.selection={components:[],nets:[],region:null};
@@ -379,7 +444,14 @@ function updateSelection() {
   if(s.region){const b=s.region;rows.push(`Region · X ${b[0].toFixed(3)}…${b[2].toFixed(3)} mm\nY ${b[1].toFixed(3)}…${b[3].toFixed(3)} mm`);}
   $('selection-detail').textContent=rows.join('\n\n') || 'Select a component, net, or drag a region on the board.';
   $('selection-status').textContent=`${s.components.length} components · ${s.nets.length} nets${s.region?' · region':''}`;
-  renderEntities();requestDraw();
+  renderEntities();requestDraw();renderSelectionLinks();
+  if(mode==='both'&&!syncing)showInSchematic({quiet:true});
+}
+function renderSelectionLinks(){
+  const row=$('selection-links');row.replaceChildren();if(!state.scene)return;
+  const target=schematicTarget(),source=boardSourceTarget();
+  if(target){const b=document.createElement('button');b.type='button';b.textContent='Show in schematic';b.title='Select it in the electrical review (S)';b.onclick=()=>showInSchematic();row.append(b);}
+  if(source){const b=document.createElement('button');b.type='button';b.textContent='Source';b.title='Show where it is declared in the CopperScript source';b.onclick=()=>openSource(source.kind,source.id);row.append(b);}
 }
 function renderEntities() {
   $('entity-list').replaceChildren();if(!state.scene)return;
@@ -414,6 +486,66 @@ function renderIssues(search) {
     $('entity-list').append(button);
   }
 }
+// ---- Linking the schematic and the board ------------------------------------------------------
+// Parts match by CopperScript path (the board export's source_path) or reference; nets by name.
+const plainNet=name=>String(name).replace(/^\//,'');
+const boardPart=ref=>state.scene?.components.find(c=>c.source_path===ref)||state.scene?.components.find(c=>c.reference===ref);
+const boardNet=name=>state.scene?.nets.find(n=>n.name===name)||state.scene?.nets.find(n=>plainNet(n.name)===plainNet(name));
+function boardTarget(kind,id){
+  if(!state.scene||!electrical.hasModel())return null;const model=electrical.model();
+  if(kind==='component'){const c=boardPart(id);return c?{components:[c.reference],nets:[]}:null;}
+  if(kind==='pin'){const pin=model.pins.get(id),c=pin&&boardPart(pin.component),net=pin?.net&&boardNet(pin.net);return c?{components:[c.reference],nets:net?[net.name]:[]}:null;}
+  if(kind==='net'){const n=boardNet(id);return n?{components:[],nets:[n.name]}:null;}
+  if(kind==='bus'){const bus=model.buses.find(b=>b.id===id),nets=(bus?.nets||[]).map(boardNet).filter(Boolean).map(n=>n.name);return nets.length?{components:[],nets}:null;}
+  return null;
+}
+function focusBoard(target){
+  const boxes=[...target.components.map(r=>state.scene.components.find(c=>c.reference===r)?.bounds_mm),
+    ...target.nets.flatMap(n=>(state.scene.nets.find(x=>x.name===n)?.pads||[]).map(p=>[p.position_mm[0],p.position_mm[1],p.position_mm[0],p.position_mm[1]]))].filter(Boolean);
+  if(!boxes.length)return;
+  const b=[Math.min(...boxes.map(x=>x[0])),Math.min(...boxes.map(x=>x[1])),Math.max(...boxes.map(x=>x[2])),Math.max(...boxes.map(x=>x[3]))];const margin=Math.max(12,(b[2]-b[0])*.6,(b[3]-b[1])*.6);fit([b[0]-margin,b[1]-margin,b[2]+margin,b[3]+margin]);
+}
+function showOnBoard(kind,id,{quiet=false}={}){
+  const target=boardTarget(kind,id);
+  if(!target){if(!quiet)message(state.scene?`${id} is not on the board`:'Open a board export to show it on the board',true);return;}
+  if(!quiet&&mode==='electrical')setMode('layout');
+  syncing=true;try{state.selection={components:target.components,nets:target.nets,region:null};updateSelection();}finally{syncing=false;}
+  focusBoard(target);
+}
+function schematicTarget(){
+  if(!electrical.hasModel()||!state.scene)return null;const s=state.selection,model=electrical.model();
+  for(const ref of s.components){const c=state.scene.components.find(c=>c.reference===ref);for(const id of [c?.source_path,ref])if(id&&model.components.has(id))return {kind:'component',id};}
+  for(const net of s.nets){if(model.nets.has(net))return {kind:'net',id:net};const found=[...model.nets.keys()].find(k=>plainNet(k)===plainNet(net));if(found)return {kind:'net',id:found};}
+  return null;
+}
+function showInSchematic({quiet=false}={}){
+  const target=schematicTarget();
+  if(!target){if(!quiet)message(electrical.hasModel()?'Not in the schematic':'Open the schematic (IR or .copper) to show it there',true);return;}
+  if(!quiet&&mode==='layout')setMode('electrical');electrical.reveal(target.kind,target.id);
+}
+// ---- Source links -----------------------------------------------------------------------------
+function sourceTarget(kind,id){
+  if(!sources||!electrical.hasModel())return null;const model=electrical.model();
+  const ref=kind==='component'?id:kind==='pin'?model.pins.get(id)?.component:null;
+  return ref?findDeclaration(sources,model.ir,'component',ref):kind==='net'?findDeclaration(sources,model.ir,'net',id):null;
+}
+function boardSourceTarget(){
+  const target=schematicTarget();return target&&sourceTarget(target.kind,target.id)?target:null;
+}
+function openSource(kind,id){
+  const found=sourceTarget(kind,id);if(!found){message(`No declaration of ${id} found in the project source`,true);return;}
+  $('source-dialog-title').textContent=`${found.path}:${found.line}`;
+  $('source-note').textContent=`${kind==='net'?'net':'component'} ${id.split('/').pop()} · found by searching the compiled project source; the IR does not record source lines.`;
+  const pre=$('source-text');pre.replaceChildren();
+  for(const [i,text]of found.text.split('\n').entries()){const line=document.createElement('span');line.className='source-line';line.dataset.line=String(i+1);line.textContent=text+'\n';if(i+1===found.line)line.classList.add('current');pre.append(line);}
+  const links=$('source-links');links.replaceChildren();
+  const origin=electricalOrigin,github=githubLink(sources,found.id,found.line,origin,electrical.input()?.project?.modules||[]);
+  if(github){const a=document.createElement('a');a.href=github;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open on GitHub';links.append(a);}
+  if(origin?.provider==='local'&&origin.root&&found.id.startsWith('workspace/')){const a=document.createElement('a');a.href=`vscode://file/${origin.root.replace(/\\/g,'/')}/${displayPath(sources,found.id)}:${found.line}`;a.textContent='Open in VS Code';links.append(a);}
+  if(!$('source-dialog').open)$('source-dialog').showModal();
+  pre.querySelector('.current')?.scrollIntoView({block:'center'});
+}
+$('source-close').onclick=()=>$('source-dialog').close();
 function issuesFromForm() {
   const ids=citedIssueIds();if(!ids.length)return [];
   const old=state.editing && state.annotations.find(a=>a.id===state.editing);
@@ -465,14 +597,13 @@ function loadScene(scene) {
     // Keep the unreadable notes instead of overwriting them with the next autosave.
     try{if(raw)localStorage.setItem(`${storageKey()}:unreadable:${new Date().toISOString()}`,raw);}catch{}
     message('Saved local notes could not be read; they were kept under an ":unreadable" key. Load an exported review to recover.',true);}
-  $('board-name').textContent=scene.board.name;$('board-meta').textContent=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
   renderLayers();renderEntities();renderNotes();fit();setEnabled();
 }
 function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,issueSource()),null,2)+'\n';}
 function download(name,text,type='application/json') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function setEnabled(){for(const id of ['load-review','load-issues','export-scene','export-review','copy-review','save-note','fit','clear'])$(id).disabled=!state.scene;}
+function setEnabled(){for(const id of ['export-scene','export-review','copy-review','save-note','fit','clear'])$(id).disabled=!state.scene;$('electrical-export').disabled=!electrical.hasModel();$('export-menu').disabled=!state.scene&&!electrical.hasModel();}
 // The issue list loaded now, else the one recorded with loaded or saved notes.
 function issueSource(){return state.issues?.source || state.issueSource || null;}
 function setIssues(issues) {
@@ -480,21 +611,16 @@ function setIssues(issues) {
   $('issue-count').textContent=issues?issues.issues.length:0;if(!shown && state.tab==='issues'){state.tab='components';for(const t of ['components','nets','issues'])$(`tab-${t}`).classList.toggle('active',t==='components');}
   renderEntities();requestDraw();
 }
-for(const id of ['open-board','empty-open'])$(id).onclick=()=>$('board-file').click();
-$('load-review').onclick=()=>$('review-file').click();
-$('load-issues').onclick=()=>$('issues-file').click();
-$('issues-file').onchange=guarded(async event=>{
-  const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>20*1024*1024)throw new Error('Issue list exceeds 20 MiB.');
-  const issues=validateIssues(JSON.parse(await file.text()),state.scene);setIssues(issues);
+function loadIssues(value){
+  const issues=validateIssues(value,state.scene);setIssues(issues);
   message(`Loaded ${issues.issues.length} CopperScript issues${issues.source.board_verified?'':' (no board hash in the file: could not confirm they belong to this board)'}`,!issues.source.board_verified);
-});
-$('board-file').onchange=guarded(async event=>{const file=event.target.files[0];event.target.value='';await openDesignFile(file);});
-$('review-file').onchange=guarded(async event=>{
-  const file=event.target.files[0];event.target.value='';if(!file)return;if(file.size>50*1024*1024)throw new Error('Review exceeds 50 MiB.');
-  const review=validateReview(JSON.parse(await file.text()),state.scene);state.annotations=refreshContexts(state.scene,review.annotations);state.issueSource=review.copperscript_issues || null;$('summary').value=review.summary || '';$('stage').value=review.board.stage;
-  resetForm();renderNotes();saveLocal();requestDraw();message(`Loaded ${state.annotations.length} review notes`);
-});
-$('export-review').onclick=guarded(()=>{download(`${state.scene.board.name}.review.json`,reviewText());message('Review exported. Paste its contents into your next LLM prompt.');});
+}
+function loadLayoutReview(value){
+  const review=validateReview(value,state.scene);state.annotations=refreshContexts(state.scene,review.annotations);state.issueSource=review.copperscript_issues || null;$('summary').value=review.summary || '';$('stage').value=review.board.stage;
+  resetForm();renderNotes();saveLocal();requestDraw();message(`Loaded ${state.annotations.length} layout notes`);
+}
+$('export-review').onclick=guarded(()=>{download(`${state.scene.board.name}.review.json`,reviewText());message('Layout review exported. Paste its contents into your next LLM prompt.');});
+$('electrical-export').onclick=guarded(()=>electrical.exportReview());
 $('export-scene').onclick=guarded(()=>download(`${state.scene.board.name}.scene.json`,JSON.stringify(state.scene,null,2)+'\n'));
 // The clipboard API needs a secure context; a network address falls back to a selected text area.
 $('copy-review').onclick=guarded(async()=>{const text=reviewText();try{await navigator.clipboard.writeText(text);}catch{const t=document.createElement('textarea');t.value=text;document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw Error('Copy is unavailable here; use Export review JSON.');}message('Review JSON copied.');});
@@ -506,7 +632,7 @@ $('save-note').onclick=guarded(()=>{
 $('cancel-edit').onclick=resetForm;$('summary').oninput=saveLocal;$('stage').onchange=saveLocal;
 $('search').oninput=renderEntities;
 for(const tab of ['components','nets','issues'])$(`tab-${tab}`).onclick=()=>{state.tab=tab;for(const t of ['components','nets','issues'])$(`tab-${t}`).classList.toggle('active',t===tab);renderEntities();};
-for(const mode of ['component','net','region'])$(`mode-${mode}`).onclick=()=>setMode(mode);
+for(const mode of ['component','net','region'])$(`mode-${mode}`).onclick=()=>setTool(mode);
 for(const id of ['show-labels','show-pad-labels','show-guides','show-zones','isolate','show-issues'])$(id).onchange=()=>{clearHover();requestDraw();};
 $('issue-ids').oninput=()=>{requestDraw();if(state.tab==='issues')renderEntities();};
 $('fit').onclick=()=>fit();$('clear').onclick=()=>{clearSelection();resetForm();};
@@ -530,11 +656,55 @@ function endDrag(e){if(state.drag && state.mode==='region' && !state.drag.pan &&
 canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
 canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
-  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setMode(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')fit();if(e.key==='Escape'){clearSelection();resetForm();}});
+  if(mode==='electrical'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
+  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')fit();if(e.key==='Escape'){clearSelection();resetForm();}});
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();const first=state.width===0;state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if(first && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
+// ---- Menus ------------------------------------------------------------------------------------
+function closeMenus(except){for(const list of document.querySelectorAll('.menu-list'))if(list!==except){list.hidden=true;list.previousElementSibling?.setAttribute('aria-expanded','false');}}
+for(const menu of document.querySelectorAll('.menu')){const trigger=menu.querySelector(':scope>button'),list=menu.querySelector('.menu-list');
+  trigger.onclick=e=>{e.stopPropagation();const open=list.hidden;closeMenus(list);list.hidden=!open;trigger.setAttribute('aria-expanded',String(open));if(open)list.querySelector('button:not([hidden]):not(:disabled)')?.focus();};
+  list.addEventListener('click',e=>{if(e.target.closest('button'))closeMenus();});}
+document.addEventListener('click',e=>{if(!e.target.closest?.('.menu'))closeMenus();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenus();});
+// ---- Drop files anywhere ------------------------------------------------------------------------
+let dragDepth=0;
+document.addEventListener('dragenter',e=>{if(!e.dataTransfer?.types.includes('Files'))return;e.preventDefault();dragDepth++;$('drop-hint').hidden=false;});
+document.addEventListener('dragover',e=>{if(e.dataTransfer?.types.includes('Files'))e.preventDefault();});
+document.addEventListener('dragleave',()=>{dragDepth=Math.max(0,dragDepth-1);if(!dragDepth)$('drop-hint').hidden=true;});
+document.addEventListener('drop',guarded(async e=>{e.preventDefault();dragDepth=0;$('drop-hint').hidden=true;
+  const items=[...e.dataTransfer.items||[]];if(items.some(i=>i.webkitGetAsEntry?.()?.isDirectory))throw Error('To open a folder, use Open → Project folder…');
+  await openFiles(e.dataTransfer.files);}));
+// ---- Keys: Ctrl+O opens, E / L / B switch the mode, S shows the selection on the other side ----
+document.addEventListener('keydown',e=>{
+  if(document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='o'){e.preventDefault();$('any-file').click();return;}
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  const key=e.key.toLowerCase(),modes={e:'electrical',l:'layout',b:'both'};
+  if(modes[key]&&available(modes[key])){e.preventDefault();setMode(modes[key]);return;}
+  if(key==='s'){const inBoard=mode==='layout'||mode==='both'&&e.target.closest?.('#pcb-review');
+    if(inBoard)showInSchematic();else{const sel=electrical.selection();if(sel)showOnBoard(sel.kind,sel.id);}e.preventDefault();}
+});
+// ---- The divider between schematic and board ----------------------------------------------------
+{const split=$('split'),workspace=$('workspace');let dragging=null;
+  const place=fraction=>{const f=Math.min(.8,Math.max(.2,fraction));workspace.style.setProperty('--split',`${(f*100).toFixed(1)}%`);try{localStorage.setItem('copper-review:split',String(f));}catch{}};
+  try{const saved=Number(localStorage.getItem('copper-review:split'));if(saved)workspace.style.setProperty('--split',`${(saved*100).toFixed(1)}%`);}catch{}
+  split.addEventListener('pointerdown',e=>{dragging=e.pointerId;split.setPointerCapture(e.pointerId);document.body.classList.add('resizing');});
+  split.addEventListener('pointermove',e=>{if(dragging!==e.pointerId)return;const r=workspace.getBoundingClientRect();place((e.clientX-r.left)/r.width);});
+  for(const type of ['pointerup','pointercancel'])split.addEventListener(type,()=>{dragging=null;document.body.classList.remove('resizing');if(state.scene)fit();});
+  split.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const r=workspace.getBoundingClientRect(),current=$('electrical-review').getBoundingClientRect().width/r.width;place(current+(e.key==='ArrowLeft'?-.05:.05));});}
+new ResizeObserver(entries=>document.documentElement.style.setProperty('--topbar-height',`${entries[0].target.getBoundingClientRect().height}px`)).observe(document.querySelector('body>header'));
+setMode('layout',{remember:false});
 setEnabled();
-startupReady=guarded(async()=>{const revision=documentRevision;let data=null,project=null;if(localServer){const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});data=await response.json();if(!response.ok)throw new Error(data.error);documentBaseline=documentIdentity(data);
-  if(!data){const served=await fetch('./api/project',{headers:{'X-Copper-Token':token},cache:'no-store'});project=await served.json();if(!served.ok)throw new Error(project.error);}}
+startupReady=guarded(async()=>{const revision=documentRevision;let data=null,project=null;
+  if(localServer){const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});data=await response.json();if(!response.ok)throw new Error(data.error);documentBaseline=documentIdentity(data);
+    const served=await fetch('./api/project',{headers:{'X-Copper-Token':token},cache:'no-store'});project=await served.json();if(!served.ok)throw new Error(project.error);}
+  let preferred=null;try{preferred=localStorage.getItem('copper-review:mode');}catch{}
+  const remembered=async slot=>{try{return await rememberedDocument(documentBaseline,slot);}catch{return null;}};
+  const layout=data||await remembered('layout')||(project?null:await remembered('last'));
+  if(layout&&revision===documentRevision&&layout.schema!=='copper-review-electrical/v1')loadDocument(layout);
   // Opening waits for startup to finish; this is startup, so release that wait first.
-  if(project){startupReady=null;await openServedProject(project);return;}
-  try{data=await rememberedDocument(documentBaseline)||data;}catch{}if(data&&revision===documentRevision)loadDocument(data);})();
+  if(project){startupReady=null;await openServedProject(project);}
+  else{const schematic=await remembered('electrical')||(layout?.schema==='copper-review-electrical/v1'?layout:null);if(schematic&&revision===documentRevision)loadDocument(schematic);}
+  // A served schematic and board open side by side; otherwise the mode last chosen here, if any.
+  if(data&&project)setMode('both',{remember:false});else if(preferred)setMode(preferred,{remember:false});
+})();
