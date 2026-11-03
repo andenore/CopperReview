@@ -1,6 +1,6 @@
 import {powerGraph,busGraph,layoutGraph,routeGraph} from './topology.js';
 import {electricalModel,focusCircuit,powerTopology,isPassive,quantity,ELECTRICAL_SCHEMA} from './electrical-model.js';
-import {schematicSheets,layoutSheet,netRole,compactQuantity} from './schematic.js';
+import {schematicSheets,layoutSheet,netRole,compactQuantity,glyph} from './schematic.js';
 import {randomId} from './hash.js';
 import {chips} from './chips.js';
 
@@ -183,7 +183,9 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     for(const sym of L.symbols){
       const c=model.components.get(sym.ref),g=fadeable(pickable(draw('g',{'data-symbol':sym.ref},undefined,parts),'component',sym.ref,`${sym.ref} · ${sym.part}${c.value?` · ${quantity(c.value)}`:''} · ${c.pins.length} pins`),relRefs.has(sym.ref)),cls=`electrical-sch-symbol${selected('component',sym.ref)?' selected':''}`;
       anchors.set(`component:${sym.ref}`,[sym.x+sym.w,sym.y]);
-      draw('rect',{x:sym.x,y:sym.y,width:sym.w,height:sym.h,rx:sym.two?3:4,class:cls},undefined,g);
+      const shape=sym.kind&&glyph(sym.kind,sym.x,sym.y,sym.w,sym.h,sym.cathode);
+      if(shape){draw('rect',{x:sym.x,y:sym.y-4,width:sym.w,height:sym.h+8,class:'electrical-sch-glyph-hit'},undefined,g);for(const s of shape)draw('path',{d:s.d,class:`electrical-sch-glyph${s.fill?' solid':''}${selected('component',sym.ref)?' selected':''}`},undefined,g);}
+      else draw('rect',{x:sym.x,y:sym.y,width:sym.w,height:sym.h,rx:sym.two?3:4,class:cls},undefined,g);
       if(sym.two){const inline=sym.inline,tx=inline?sym.x:sym.x+sym.w+8;draw('text',{x:tx,y:inline?sym.y-5:sym.y+sym.h/2-2,class:'electrical-sch-ref'},sym.title,g);draw('text',{x:tx,y:inline?sym.y+sym.h+13:sym.y+sym.h/2+11,class:'electrical-sch-meta'},sym.subtitle,g);}
       else{draw('text',{x:sym.x+8,y:sym.y+16,class:'electrical-sch-ref'},sym.title,g);draw('text',{x:sym.x+8,y:sym.y+31,class:'electrical-sch-meta'},short(sym.subtitle,Math.floor((sym.w-16)/6.5)),g);if(sym.nc&&selected('component',sym.ref))draw('text',{x:sym.x+8,y:sym.y+sym.h-5,class:'electrical-sch-meta'},`${sym.nc} unconnected pin${sym.nc>1?'s':''}`,g);}
       for(const p of sym.pins){anchors.set(`pin:${p.id}`,[p.end,p.y]);draw('path',{d:`M${p.x} ${p.y}L${p.end} ${p.y}`,class:`electrical-sch-stub${net(p.net)}`},undefined,g);if(!sym.two)pickable(draw('text',{x:p.side==='left'?p.x+6:p.x-6,y:p.y+4,'text-anchor':p.side==='left'?'start':'end',class:`electrical-sch-pin${selected('pin',p.id)?' selected':''}`},p.name,g),'pin',p.id,`${p.id} · pin ${p.number||'?'} · ${p.raw}`);}
@@ -290,18 +292,36 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     if(other.childElementCount>1)canvas.append(other);
     if(!model.buses.length)canvas.append(el('p','No configured interfaces or connected signal nets in this IR.'));
   }
+  // A part's datasheet, revision and the place in it that the definition cites.
+  function partDocument(c){const src=c.partDefinition.source||{};let href=null;try{const u=new URL(src.url);if(['https:','http:'].includes(u.protocol))href=u.href;}catch{}
+    if(!src.document&&!href&&!src.location)return null;
+    const box=el('div',undefined,'electrical-doc'),name=src.document||(href?decodeURIComponent(new URL(href).pathname.split('/').pop())||new URL(href).host:'Source document'),link=el(href?'a':'span',name);
+    if(href){link.href=href;link.target='_blank';link.rel='noopener noreferrer';link.title=href;}
+    box.append(el('span','Datasheet','electrical-label'),link);const where=[src.revision,src.location].filter(Boolean).join(' · ');if(where)box.append(el('p',where,'quiet'));return box;}
+  // Rows of aligned cells; long values clip and keep the full text as a tooltip.
+  function grid(rows,cls=''){const g=el('div',undefined,`electrical-grid ${cls}`);for(const cells of rows)for(const cell of cells){const e=typeof cell==='string'?el('span',cell):cell;if(!e.title)e.title=e.textContent;g.append(e);}return g;}
+  function pinTable(c){
+    const natural=(a,b)=>String(a.number??'').localeCompare(String(b.number??''),undefined,{numeric:true}),pins=[...c.pins].sort(natural);
+    const open=pins.filter(p=>!p.net&&!selected('pin',p.id)),row=p=>[el('span',p.number||'?','electrical-pin-number'),entity('pin',p.id,p.name),p.net?entity('net',p.net):el('span',p.connection_policy&&p.connection_policy!=='normal'?`— ${p.connection_policy}`:'—','quiet')];
+    const box=el('div',undefined,'electrical-pins');box.append(el('div',`Pins · ${pins.length}${open.length?` · ${open.length} unconnected`:''}`,'electrical-label'),grid(pins.filter(p=>!open.includes(p)).map(row),'electrical-pin-grid'));
+    if(open.length){const d=el('details',undefined,'electrical-folded');d.append(el('summary',`${open.length} unconnected`),grid(open.map(row),'electrical-pin-grid'));box.append(d);}
+    return box;}
   function renderInspector(){const inspector=$('electrical-inspector');inspector.replaceChildren();if(!selection){inspector.append(el('p','Select a pin, net, component or interface.'));return;}
-    const show=button('Show selection sheet',()=>focusEntity(selection.kind,selection.id));show.title='Draw the selection and everything one connection away on one sheet, across sheets and modules';inspector.append(el('h3',selection.id),show);
-    const row=el('div',undefined,'link-row'),{kind,id}=selection;
-    if(links.board?.has(kind,id)){const b=button('Show on board',()=>links.board.show(kind,id));b.title='Select it on the board (S)';row.append(b);}
+    const {kind,id}=selection,owner=kind==='component'?model.components.get(id):kind==='pin'?model.components.get(model.pins.get(id).component):null;
+    inspector.append(el('h3',id));
+    if(kind==='component'){const c=owner;const value=c.value?quantity(c.value):'';inspector.append(el('p',`${c.part}${value&&!c.part.endsWith(value)?` · ${value}`:''}`,'electrical-subtitle'));const about=[c.partDefinition.manufacturer,c.partDefinition.category].filter(Boolean).join(' · ');if(about)inspector.append(el('p',about,'quiet'));}
+    const row=el('div',undefined,'link-row'),show=button('Focus sheet',()=>focusEntity(kind,id));show.title='Draw the selection and everything one connection away on one sheet, across sheets and modules';row.append(show);
+    if(links.board?.has(kind,id)){const b=button('On board',()=>links.board.show(kind,id));b.title='Select it on the board (S)';row.append(b);}
     if(links.source?.has(kind,id)){const b=button('Source',()=>links.source.open(kind,id));b.title='Show where it is declared in the CopperScript source';row.append(b);}
-    if(row.childElementCount)inspector.append(row);
-    const netNames=activeNets();
-    if(selection.kind==='pin'){const p=model.pins.get(selection.id);inspector.append(el('p',`Pin ${p.number||'unspecified'} · ${(p.profile.directions||[]).join(', ')||'direction unspecified'} · ${(p.profile.domains||[]).join(', ')||'domain unspecified'}`));inspector.append(el('p',p.net?'Connected':'No net in IR (intent unspecified)','quiet'));const v=p.profile.voltage;if(v)inspector.append(el('p',`Voltage: ${quantity(v.minimum)} … ${quantity(v.maximum)} · ${v.rating||'rating unspecified'}`));inspector.append(el('p',`Unpowered behavior: ${p.unpowered_behavior}`,'quiet'));}
-    if(selection.kind==='component'){const c=model.components.get(selection.id);inspector.append(el('p',`${c.part} ${c.value?quantity(c.value):''}`));const support=[...model.components.values()].filter(d=>typeof d.properties?.decouples==='string'&&d.scope===c.scope&&d.properties.decouples.startsWith(c.ref.split('/').pop()+'.'));
-      if(support.length){const box=el('div',undefined,'electrical-chips');box.append(el('span','Support:','quiet'));for(const d of support)box.append(entity('component',d.ref,`${d.ref} · ${quantity(d.value)} → ${d.properties.decouples}`));inspector.append(box);}
-      const table=el('div',undefined,'electrical-pin-list');for(const p of c.pins){const row=el('div');row.append(entity('pin',p.id,`${p.name} · ${p.number||'?'}`));row.append(p.net?entity('net',p.net):el('span',`No net · ${p.connection_policy||'intent unspecified'}`,'quiet'));table.append(row);}inspector.append(table);}
-    else for(const name of netNames){const n=model.nets.get(name);inspector.append(entity('net',name));if(n.aliases.length>1)inspector.append(el('p',`Aliases: ${n.aliases.join(', ')}`,'quiet'));if(n.unresolved?.length)inspector.append(el('p',`Unresolved endpoints: ${n.unresolved.join(', ')}`,'electrical-warning'));group(inspector,n.pins,p=>entity('pin',p.id,`${p.id} · pin ${p.number||'?'}`),p=>!showPassives&&isPassive(model.components.get(p.component))&&!selected('pin',p.id),'passive terminals');}
+    inspector.append(row);
+    if(kind==='pin'){const p=model.pins.get(id);inspector.append(grid([['Pin',p.number||'unspecified'],['Net',p.net?entity('net',p.net):el('span','No net in IR (intent unspecified)','quiet')],['Direction',(p.profile.directions||[]).join(', ')||'unspecified'],['Domain',(p.profile.domains||[]).join(', ')||'unspecified'],...(p.profile.voltage?[['Voltage',`${quantity(p.profile.voltage.minimum)} … ${quantity(p.profile.voltage.maximum)} · ${p.profile.voltage.rating||'rating unspecified'}`]]:[]),['Unpowered',p.unpowered_behavior]],'electrical-facts'));}
+    const doc=owner&&partDocument(owner);if(doc)inspector.append(doc);
+    if(kind==='component'){const c=owner,props=Object.entries(c.properties||{});
+      if(props.length)inspector.append(grid(props.map(([k,v])=>[k,typeof v==='object'?JSON.stringify(v):String(v)]),'electrical-facts'));
+      const support=[...model.components.values()].filter(d=>typeof d.properties?.decouples==='string'&&d.scope===c.scope&&d.properties.decouples.startsWith(c.ref.split('/').pop()+'.'));
+      if(support.length)inspector.append(el('div',`Support · ${support.length}`,'electrical-label'),grid(support.map(d=>[entity('component',d.ref),d.value?compactQuantity(d.value):'',d.properties.decouples.split('.').pop()]),'electrical-support-grid'));
+      inspector.append(pinTable(c));}
+    if(kind!=='component')for(const name of activeNets()){const n=model.nets.get(name);if(kind==='bus')inspector.append(entity('net',name));if(n.aliases.length>1)inspector.append(el('p',`Aliases: ${n.aliases.join(', ')}`,'quiet'));if(n.unresolved?.length)inspector.append(el('p',`Unresolved endpoints: ${n.unresolved.join(', ')}`,'electrical-warning'));const hidden=p=>!showPassives&&isPassive(model.components.get(p.component))&&!selected('pin',p.id),row=p=>[entity('pin',p.id),el('span',p.number||'?','electrical-pin-number')],folded=n.pins.filter(hidden);inspector.append(el('div',`Endpoints · ${n.pins.length}`,'electrical-label'),grid(n.pins.filter(p=>!hidden(p)).map(row),'electrical-endpoint-grid'));if(folded.length){const d=el('details',undefined,'electrical-folded');d.append(el('summary',`${folded.length} passive terminals`),grid(folded.map(row),'electrical-endpoint-grid'));inspector.append(d);}}
   }
   function renderIntent(){const box=$('electrical-intent');box.replaceChildren();const tabs=el('div',undefined,'tabs');for(const id of ['intent','source','notes']){const b=button({intent:'Details',source:'Source',notes:'Notes'}[id],()=>{detail=id;renderIntent();});b.classList.toggle('active',detail===id);tabs.append(b);}box.append(tabs);
     if(detail==='notes'){renderNotes(box);return;}
@@ -311,7 +331,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     box.append(el('h3','Declared facts'));
     for(const n of netNames){const net=model.nets.get(n);for(const s of net.supplies)box.append(el('p',`${s.name}: ${quantity(s.voltage)} nominal${s.source?` · source ${s.source}`:s.externally_driven?' · external in this scope':''}`));if(powerState)box.append(el('p',`${n}: ${stateOf(n)} in ${powerState}`,'quiet'));}
     for(const b of model.buses.filter(b=>b.provenance!=='Net membership'&&b.nets.some(n=>netNames.includes(n))))box.append(el('p',`${b.provenance}: ${b.name} · ${b.type}${b.pullup_supply?` · pull-up ${b.pullup_supply}`:''}`));
-    for(const r of refs){const c=model.components.get(r);if(!showPassives&&isPassive(c)&&!(selection.kind==='component'&&selection.id===r)&&!(selection.kind==='pin'&&model.pins.get(selection.id).component===r))continue;for(const [k,v]of Object.entries(c.properties||{}))box.append(el('p',`${r} · ${k}: ${typeof v==='object'?json(v):v}`));const src=c.partDefinition.source;if(src?.document){box.append(el('p',`${r}: ${src.document}${src.revision?' · '+src.revision:''}`,'quiet'));if(src.url){try{const u=new URL(src.url);if(['https:','http:'].includes(u.protocol)){const a=el('a','Open source document');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';box.append(a);}}catch{}}}}
+    for(const r of refs){const c=model.components.get(r),own=selection.kind==='component'&&selection.id===r||selection.kind==='pin'&&model.pins.get(selection.id).component===r;if(selection.kind==='component'&&own||!showPassives&&isPassive(c)&&!own)continue;for(const [k,v]of Object.entries(c.properties||{}))box.append(el('p',`${r} · ${k}: ${typeof v==='object'?json(v):v}`));const src=c.partDefinition.source;if(src?.document&&!own){box.append(el('p',`${r}: ${src.document}${src.revision?' · '+src.revision:''}`,'quiet'));if(src.url){try{const u=new URL(src.url);if(['https:','http:'].includes(u.protocol)){const a=el('a','Open source document');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';box.append(a);}}catch{}}}}
     if(model.warnings.length){const d=el('details');d.append(el('summary',`${model.warnings.length} import warnings`));for(const w of model.warnings)d.append(el('p',w));box.append(d);}
   }
   function renderNotes(box){

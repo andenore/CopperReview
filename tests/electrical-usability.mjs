@@ -20,7 +20,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('board-name').textContent==='Usability');
  // The explorer selects in place; the Selection sheet draws one hop around it and Back returns.
  await page.locator('#electrical-entities [data-entity="LOAD"]').click();assert.equal(await page.locator('#electrical-inspector h3').textContent(),'LOAD');
- await page.getByRole('button',{name:'Show selection sheet'}).click();assert.equal(await page.locator('#electrical-sheet').inputValue(),'selection');
+ await page.getByRole('button',{name:'Focus sheet'}).click();assert.equal(await page.locator('#electrical-sheet').inputValue(),'selection');
  assert.equal(await page.locator('.electrical-sch [data-kind="component"][data-entity="R_SIGNAL"]').count(),1);
  await page.locator('#electrical-back').click();assert.notEqual(await page.locator('#electrical-sheet').inputValue(),'selection');assert.equal(await page.locator('#electrical-inspector h3').textContent(),'LOAD');
  // A legible schematic has genuine horizontal scrolling, and Fit can reduce it.

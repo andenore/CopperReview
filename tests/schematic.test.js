@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {electricalModel} from '../copper_review/web/electrical-model.js';
-import {schematicSheets,layoutSheet,netRole,compactQuantity,orderLanes} from '../copper_review/web/schematic.js';
+import {schematicSheets,layoutSheet,netRole,compactQuantity,orderLanes,symbolKind,isCathode,glyph} from '../copper_review/web/schematic.js';
 const pin=(name,domains,directions=['passive'])=>({name,number:name,profile:{domains,directions},bonds:[]});
 const volts=v=>({base_value:String(v),unit:'V',value:String(v)});
 const ohms=v=>({base_value:String(v),unit:'ohm',value:String(v)});
@@ -137,4 +137,17 @@ test('passive pins that claim power do not make a signal net a rail',()=>{
   nets:[{name:'DRV',endpoints:['U.Y','R.P1']},{name:'GATE',endpoints:['R.P2','Q.G']},{name:'RAIL',endpoints:['U.VCC']}],supplies:[]};
  const m=electricalModel(ir);
  assert.deepEqual(['DRV','GATE','RAIL'].map(n=>netRole(m,n)),['signal','signal','power']);
+});
+
+test('two-pin parts get symbols by category, then reference, then pin names',()=>{
+  const part=(ref,category,names=['1','2'])=>({ref,partDefinition:{category},pins:names.map((name,i)=>({name,number:String(i+1)}))});
+  assert.deepEqual([part('R1','passive.resistor'),part('PWR/C3','passive.capacitor'),part('L1','passive.inductor.power'),part('LED2','optoelectronics.led'),
+    part('D_BUCK','component.generic'),part('X','component.generic',['A','K']),part('F_MAIN','component.generic'),part('U1','component.generic'),
+    part('D1','protection.esd'),part('Y1','passive.crystal')].map(symbolKind),
+    ['resistor','capacitor','inductor','led','diode','diode','fuse',null,'tvs','crystal']);
+  assert.equal(symbolKind({...part('R1','passive.resistor'),pins:[{name:'1'},{name:'2'},{name:'3'}]}),null);
+  const named=part('D','x',['A','K']),numbered=part('D','x');
+  assert.deepEqual([isCathode(named,named.pins[1]),isCathode(named,named.pins[0]),isCathode(numbered,numbered.pins[0])],[true,false,true]);
+  // Every glyph spans its box so the pin stubs meet its leads.
+  for(const kind of ['resistor','capacitor','inductor','ferrite','diode','tvs','led','fuse','crystal','switch']){const d=glyph(kind,10,20,48,16).map(s=>s.d).join('');assert.match(d,/M10 28/,kind);assert.match(d,/H58|L58 28/,kind);}
 });

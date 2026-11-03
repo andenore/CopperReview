@@ -26,6 +26,46 @@ export function netRole(model,name){
 }
 const pinRole=(model,p)=>p.net?netRole(model,p.net):'nc';
 const twoPin=c=>c.pins.length===2;
+
+/** The drawn symbol for a two-pin part, from its category, then its reference prefix, then its
+ * pin names; null keeps the plain box. Libraries often file diodes as component.generic. */
+export function symbolKind(c){
+  if(!twoPin(c))return null;
+  const category=c.partDefinition?.category||'',ref=c.ref.split('/').pop().toUpperCase(),names=c.pins.map(p=>p.name.toUpperCase());
+  const rule=[
+    ['led',/\bled\b|optoelectronics\.led/,/^LED/],['fuse',/fuse|polyfuse|ptc/,/^F(\d|_|U)/],['ferrite',/ferrite|bead/,/^FB/],
+    ['crystal',/crystal|resonator/,/^(Y|X)\d|^XTAL/],['tvs',/protection\.(esd|tvs)|\btvs\b|zener/,/^(TVS|ZD)/],
+    ['diode',/diode|rectifier|schottky/,/^D\d|^D_/],['inductor',/inductor/,/^L\d|^L_/],['capacitor',/capacitor/,/^C\d|^C_/],
+    ['resistor',/resistor/,/^R\d|^R_/],['switch',/^switch\./,/^(SW|S)\d/]];
+  for(const [kind,byCategory]of rule)if(byCategory.test(category))return kind;
+  for(const [kind,,byRef]of rule)if(byRef.test(ref))return kind;
+  if(names.some(n=>/^(K|CATHODE)$/.test(n))&&names.some(n=>/^(A|ANODE)$/.test(n)))return 'diode';
+  return null;
+}
+/** Path data for a two-pin symbol drawn in its box (x, y, w, h), leads edge to edge:
+ * [{d, fill}] where fill marks a solid shape. cathode is 'left' or 'right' for diodes. */
+export function glyph(kind,x,y,w,h,cathode='right'){
+  const cy=y+h/2,m=x+w/2,x1=x+w,lead=(a,b)=>`M${x} ${cy}H${a}M${b} ${cy}H${x1}`;
+  const d=cathode==='left'?-1:1,base=m-7*d,tip=m+6*d;
+  const diode=[{d:`M${x} ${cy}H${x1}`},{d:`M${base} ${cy-7}L${tip} ${cy}L${base} ${cy+7}Z`,fill:true}];
+  switch(kind){
+    case 'resistor':{let p=`M${x} ${cy}H${x+10}`;for(let k=0;k<6;k++)p+=`L${(x+12.33+k*4.67).toFixed(2)} ${cy+(k%2?5:-5)}`;return [{d:`${p}L${x+38} ${cy}H${x1}`}];}
+    case 'capacitor':return [{d:`${lead(m-3,m+3)}M${m-3} ${cy-8}V${cy+8}M${m+3} ${cy-8}V${cy+8}`}];
+    case 'inductor':case 'ferrite':return [{d:`M${x} ${cy}H${x+8}${'a4 4 0 0 1 8 0'.repeat(4)}H${x1}`+(kind==='ferrite'?`M${x+8} ${cy-6}H${x+40}M${x+8} ${cy-8.5}H${x+40}`:'')}];
+    case 'diode':return [...diode,{d:`M${tip} ${cy-7}V${cy+7}`}];
+    case 'tvs':return [...diode,{d:`M${tip-2*d} ${cy-9}L${tip} ${cy-7}V${cy+7}L${tip+2*d} ${cy+9}`}];
+    case 'led':return [...diode,{d:`M${tip} ${cy-7}V${cy+7}M${m+1} ${cy-7}l4 -5m-3 0h3v3M${m+6} ${cy-7}l4 -5m-3 0h3v3`}];
+    case 'fuse':return [{d:`M${x} ${cy}H${x1}M${x+12} ${cy-4}H${x+36}V${cy+4}H${x+12}Z`}];
+    case 'crystal':return [{d:`${lead(m-8,m+8)}M${m-8} ${cy-7}V${cy+7}M${m+8} ${cy-7}V${cy+7}M${m-4} ${cy-8}H${m+4}V${cy+8}H${m-4}Z`}];
+    case 'switch':return [{d:`${lead(m-10,m+10)}M${m-10} ${cy}L${m+9} ${cy-8}`},{d:`M${m-12} ${cy}a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M${m+8} ${cy}a2 2 0 1 0 4 0a2 2 0 1 0 -4 0`}];
+  }
+  return null;
+}
+/** Whether a pin is a diode's cathode: named K/cathode, else pin 1 (the usual numbering). */
+export function isCathode(c,p){
+  const named=c.pins.find(q=>/^(K|CATHODE)$/i.test(q.name));
+  return named?named===p:c.pins.some(q=>/^(A|ANODE)$/i.test(q.name))?!/^(A|ANODE)$/i.test(p.name):String(p.number)==='1';
+}
 /** Short drawing values: 4.7k, 33Ω, 100nF, 10µH. */
 export function compactQuantity(q){
   if(!q)return '';if(typeof q!=='object')return String(q);const v=engineeringText(q.value),unit=String(q.unit||''),ohm=/^([a-zA-Zµ]?)ohms?$/i.exec(unit);
@@ -305,7 +345,7 @@ export function layoutSheet(source,sheet,{folded,view}){
     const text=Math.ceil(Math.max(title.length,(value||shortName).length)*6.4);
     const w=two?TWO:Math.max(130,(Math.max(0,...left.map(p=>p.name.length))+Math.max(0,...right.map(p=>p.name.length)))*CHAR+44,Math.max(top.size,bottom.size)*72,Math.max(title.length,shortName.length)*CHAR+24);
     const h=two?16:HEAD+Math.max(1,left.length,right.length)*PIN+FOOT;
-    symbols.set(r,{ref:r,part:c.part,title,subtitle:two?value||shortName:shortName,two,inline,col,w,h,extent:two?(inline?Math.max(TWO,text):TWO+8+text):w,left,right,top:[...top].map(([net,pins])=>({net,pins})),bottom:[...bottom].map(([net,pins])=>({net,pins})),nc});
+    symbols.set(r,{ref:r,part:c.part,title,subtitle:two?value||shortName:shortName,two,kind:symbolKind(c),inline,col,w,h,extent:two?(inline?Math.max(TWO,text):TWO+8+text):w,left,right,top:[...top].map(([net,pins])=>({net,pins})),bottom:[...bottom].map(([net,pins])=>({net,pins})),nc});
   }
   // Vertical stacking per column, leaving room for rail flags and ground symbols.
   // A grouped part sits level with the part it hangs off when its column has room; two passes
@@ -358,9 +398,14 @@ export function layoutSheet(source,sheet,{folded,view}){
   const out={id:sheet.id,title:sheet.title,symbols:[],wires:[],labels:[],notes:[],width:x,height:Math.max(160,...colY)};
   const pinPoint=p=>{const a=pinAt.get(p.id);return {x:a.side==='left'?a.s.x:a.s.x+a.s.w,y:a.y,dir:a.side==='left'?-1:1};};
   for(const s of symbols.values()){
-    const sym={ref:s.ref,title:s.title,subtitle:s.subtitle,part:s.part,two:s.two,inline:s.inline,x:s.x,y:s.y,w:s.w,h:s.h,nc:s.nc,pins:[],top:[],bottom:[]};
+    const sym={ref:s.ref,title:s.title,subtitle:s.subtitle,part:s.part,two:s.two,kind:s.kind,inline:s.inline,x:s.x,y:s.y,w:s.w,h:s.h,nc:s.nc,pins:[],top:[],bottom:[]};
     for(const side of ['left','right'])for(const p of s[side]){const pt=pinPoint(p);sym.pins.push({id:p.id,name:p.name,number:p.number,net:p.net,raw:p.rawNet||p.net,side,x:pt.x,y:pt.y,end:pt.x+pt.dir*STUB});}
-    const spread=(groups,y,dir)=>groups.map((g,i)=>{const split=s.two&&groups.length===2,gx=split?s.x+(i?s.w-4:4):s.x+s.w*(i+1)/(groups.length+1);const badges=[...folded.values()].filter(f=>f.kind==='support'&&f.pin&&model.pins.get(f.pin).component===s.ref&&f.net===g.net);return {net:g.net,pins:g.pins.map(p=>p.id),names:g.pins.map(p=>p.name),x:gx,y,end:y+dir*16,anchor:split?(i?'start':'end'):'middle',badges:badges.map(f=>f.ref)};});
+    // A diode points at its cathode; the side follows wherever layout put that pin.
+    if(['diode','led','tvs'].includes(s.kind)){const c=model.components.get(s.ref),k=c.pins.find(p=>isCathode(c,p));sym.cathode=s.left.includes(k)||!s.right.includes(k)&&s.right.length?'left':'right';}
+    const spread=(groups,y,dir)=>groups.map((g,i)=>{const split=s.two&&groups.length===2,end=s.two&&groups.length===1;
+      // A two-pin part takes a single flag on a free lead end, not through its body: the end
+      // without a wire, or power on the left and ground on the right when both pins are flags.
+      const gx=split?s.x+(i?s.w-4:4):end&&s.left.length?s.x+s.w-2:end&&(s.right.length||dir<0)?s.x+2:end?s.x+s.w-2:s.x+s.w*(i+1)/(groups.length+1);const badges=[...folded.values()].filter(f=>f.kind==='support'&&f.pin&&model.pins.get(f.pin).component===s.ref&&f.net===g.net);return {net:g.net,pins:g.pins.map(p=>p.id),names:g.pins.map(p=>p.name),x:gx,y,end:y+dir*16,anchor:split?(i?'start':'end'):'middle',badges:badges.map(f=>f.ref)};});
     sym.top=spread(s.top,s.y,-1);sym.bottom=spread(s.bottom,s.y+s.h,1);
     out.symbols.push(sym);
   }
