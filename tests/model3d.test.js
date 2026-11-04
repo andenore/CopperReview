@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {parseVrml,resolveModelPath,pickModel,placement,buildSoup,modelPaths,loadBodies,bodyInputKey,WRL_UNIT_MM} from '../copper_review/web/model3d.js';
+import {parseVrml,resolveModelPath,pickModel,placement,buildSoup,modelPaths,loadBodies,bodyInputKey,padOutline,BOARD_FEATURE_COLORS,WRL_UNIT_MM} from '../copper_review/web/model3d.js';
 import {cameraEye} from '../copper_review/web/view3d.js';
 
 const wrl=readFileSync(new URL('./fixtures/chip-0805.wrl',import.meta.url),'utf8');
@@ -148,4 +148,27 @@ test('loadBodies reuses a cache across calls: nothing is fetched or generated tw
   assert.equal(generated,1);
   const failedBatch=new Map();await loadBodies(scene([bare('C1')]),{cache:failedBatch,fetchBody:async()=>null,generate:async()=>[]});
   assert.equal(failedBatch.size,0,'a batch that failed as a whole is retried next time');
+});
+
+test('pad outlines keep their size and turn with the pad', () => {
+  const box=points=>[0,1].map(a=>{const v=points.map(p=>p[a]);return +(Math.max(...v)-Math.min(...v)).toFixed(6);});
+  const pad={position_mm:[5,5],size_mm:[2,1],rotation_deg:0,shape:'rect'};
+  assert.deepEqual(box(padOutline(pad)),[2,1]);
+  assert.deepEqual(box(padOutline({...pad,rotation_deg:90})),[1,2]);
+  assert.deepEqual(box(padOutline({...pad,shape:'oval'})),[2,1]);
+  assert.deepEqual(box(padOutline({...pad,shape:'circle',size_mm:[1.5,1.5]})),[1.5,1.5]);
+});
+
+test('outer copper, pads, holes and silk sit on their own face; fills come back as polygons', () => {
+  const colored=(soup,color)=>{const z=[];for(let i=0;i<soup.colors.length;i+=3)if(soup.colors.slice(i,i+3).every((c,k)=>Math.abs(c-color[k])<1e-6))z.push(soup.positions[i+2]);return z;};
+  const board={...scene([{reference:'J1',position_mm:[10,10],rotation_deg:0,side:'front',pads:[
+      {position_mm:[10,10],size_mm:[2,2],rotation_deg:0,shape:'rect',layers:['F.Cu','B.Cu'],drill_mm:[1,1]}],
+      graphics:[{points:[[8,8],[12,8]],layer:'F.SilkS',width_mm:.12}]}]),
+    tracks:[{points_mm:[[0,0],[5,0]],width_mm:.2,layer:'B.Cu'},{points_mm:[[0,1],[5,1]],width_mm:.2,layer:'In1.Cu'}],
+    vias:[],zones:[{kind:'fill',layers:['F.Cu'],points_mm:[[0,0],[4,0],[4,4],[0,4]]},{kind:'intent',layers:['F.Cu'],points_mm:[[0,0],[4,0],[4,4]]}],drawings:[]};
+  const soup=buildSoup(board,new Map()),C=BOARD_FEATURE_COLORS;
+  assert.ok(colored(soup,C.copper).length&&colored(soup,C.copper).every(z=>z<-1.6),'the bottom track is under the board; the inner one is not drawn');
+  assert.ok(colored(soup,C.pad).some(z=>z>0)&&colored(soup,C.pad).some(z=>z<-1.6),'a through-hole pad shows on both faces');
+  assert.ok(colored(soup,C.hole).length&&colored(soup,C.silk).every(z=>z>0));
+  assert.equal(soup.fills.length,1);assert.deepEqual(Array.from(soup.fills[0].points.slice(0,6)),Array.from(Float32Array.of(0,-0,.015,4,-0,.015)));
 });

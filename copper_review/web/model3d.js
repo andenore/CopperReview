@@ -136,7 +136,61 @@ export function placement(component, model, thickness=DEFAULT_THICKNESS_MM, {uni
   };
 }
 
-/** One flat-shaded triangle soup for the whole board: board slab plus every placed body. */
+export const BOARD_FEATURE_COLORS={copper:[.18,.47,.31],pad:[.82,.66,.34],silk:[.93,.93,.89],hole:[.04,.05,.05]};
+const LIFT={fill:.015,copper:.03,pad:.045,silk:.06,hole:.07};
+
+/** A pad's outline in board millimetres (y down): a convex polygon, rotated like the 2D view draws it. */
+export function padOutline(pad) {
+  const [w,h]=pad.size_mm,[px,py]=pad.position_mm,local=[];
+  const arc=(cx,cy,r,from,steps)=>{for(let i=0;i<=steps;i++){const a=from+(steps?i*Math.PI/2/steps:0);local.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);}};
+  if(pad.shape==='circle'){const r=w/2;for(let i=0;i<24;i++){const a=i*Math.PI/12;local.push([r*Math.cos(a),r*Math.sin(a)]);}}
+  else{
+    // Rounded rectangle covers rect (r=0), roundrect (KiCad's ratio of the short side) and oval (a full half circle).
+    const r=pad.shape==='oval'?Math.min(w,h)/2:pad.shape==='roundrect'?Math.min(w,h)*Math.min(.5,pad.roundrect_ratio??.25):0;
+    const x=w/2-r,y=h/2-r,steps=r?6:0;
+    arc(x,y,r,0,steps);arc(-x,y,r,Math.PI/2,steps);arc(-x,-y,r,Math.PI,steps);arc(x,-y,r,Math.PI*1.5,steps);
+  }
+  const t=(pad.rotation_deg||0)*Math.PI/180,c=Math.cos(t),s=Math.sin(t);
+  return local.map(([x,y])=>[px+x*c+y*s,py-x*s+y*c]);
+}
+
+/** Copper, pads, vias, drill holes and silkscreen on the outer faces, as triangles; copper fills come back as
+    polygons (their holes joined by zero-width bridges) for the viewer to fill with a stencil. Inner layers are hidden. */
+function boardFeatures(scene,thickness,triangle) {
+  const faces=layer=>layer==='F.Cu'||layer==='F.SilkS'?[1]:layer==='B.Cu'||layer==='B.SilkS'?[-1]:[];
+  const at=(side,lift)=>([x,y])=>[x,-y,side>0?lift:-thickness-lift];
+  const polygon=(points,color)=>{for(let i=1;i+1<points.length;i++)triangle(points[0],points[i],points[i+1],color);};
+  const disc=(center,r,place,color,steps=16)=>{const ring=[];for(let i=0;i<steps;i++){const a=i*2*Math.PI/steps;ring.push(place([center[0]+r*Math.cos(a),center[1]+r*Math.sin(a)]));}polygon(ring,color);};
+  const stroke=(points,width,place,color)=>{
+    const r=width/2;
+    for(let i=1;i<points.length;i++){
+      const [a,b]=[points[i-1],points[i]],length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)continue;
+      const n=[-(b[1]-a[1])/length*r,(b[0]-a[0])/length*r];
+      polygon([[a[0]+n[0],a[1]+n[1]],[b[0]+n[0],b[1]+n[1]],[b[0]-n[0],b[1]-n[1]],[a[0]-n[0],a[1]-n[1]]].map(place),color);
+    }
+    for(const p of points)disc(p,r,place,color,10);
+  };
+  const C=BOARD_FEATURE_COLORS,fills=[];
+  for(const zone of scene.zones||[]){
+    if(zone.kind!=='fill'||zone.points_mm.length<3)continue;
+    for(const side of zone.layers.flatMap(faces))
+      fills.push({points:Float32Array.from(zone.points_mm.flatMap(at(side,LIFT.fill))),color:C.copper,normal:[0,0,side]});
+  }
+  for(const track of scene.tracks||[])for(const side of faces(track.layer))stroke(track.points_mm,track.width_mm,at(side,LIFT.copper),C.copper);
+  for(const via of scene.vias||[])for(const side of [1,-1]){
+    disc(via.position_mm,via.size_mm/2,at(side,LIFT.copper),C.copper);if(via.drill_mm)disc(via.position_mm,via.drill_mm/2,at(side,LIFT.hole),C.hole,10);
+  }
+  for(const component of scene.components)for(const pad of component.pads||[]){
+    if(!pad.size_mm||!pad.position_mm)continue;
+    const sides=new Set((pad.layers||[]).flatMap(faces)),drill=pad.drill_mm?.length?Math.min(...pad.drill_mm)/2:0;
+    for(const side of sides){polygon(padOutline(pad).map(at(side,LIFT.pad)),C.pad);if(drill)disc(pad.position_mm,drill,at(side,LIFT.hole),C.hole);}
+  }
+  const silk=[...scene.drawings||[],...scene.components.flatMap(c=>c.graphics||[])];
+  for(const g of silk)for(const side of faces(g.layer))if(g.points?.length)stroke(g.points,g.width_mm||.12,at(side,LIFT.silk),C.silk);
+  return fills;
+}
+
+/** One flat-shaded triangle soup for the whole board: board slab, its outer copper and silkscreen, and every placed body. */
 export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
   const positions=[],normals=[],colors=[],ranges=[];
   const triangle=(a,b,c,color)=>{
@@ -151,6 +205,7 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
   const top=slab.map(p=>[...p,0]),bottom=slab.map(p=>[...p,-thickness]);
   quad(top[0],top[1],top[2],top[3],green);quad(bottom[3],bottom[2],bottom[1],bottom[0],green);
   for(let i=0;i<4;i++){const j=(i+1)%4;quad(bottom[i],bottom[j],top[j],top[i],[.07,.22,.15]);}
+  const fills=boardFeatures(scene,thickness,triangle);
   let drawn=0,approximate=0;
   for(const component of scene.components){
     const choice=chosen(component,bodies),served=choice&&bodies.get(choice.path),key=bodyInputKey(component);
@@ -169,7 +224,7 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
     ranges.push({reference:component.reference,start,count:positions.length/3-start,approximate:guess});
     drawn++;if(guess)approximate++;
   }
-  return {positions:Float32Array.from(positions),normals:Float32Array.from(normals),colors:Float32Array.from(colors),ranges,
+  return {positions:Float32Array.from(positions),normals:Float32Array.from(normals),colors:Float32Array.from(colors),ranges,fills,
           summary:{components:scene.components.length,drawn,approximate,missing:scene.components.length-drawn}};
 }
 

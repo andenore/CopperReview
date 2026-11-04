@@ -32,9 +32,24 @@ const electrical=createElectricalReview({message,
     source:{has:(kind,id)=>!!sourceTarget(kind,id),open:(kind,id)=>openSource(kind,id)}}});
 // Both needs a schematic and a board that share parts; an unrelated pair stays apart.
 const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:true;
+// Side panels fold away per mode; Both starts with the board's panels and the schematic list folded.
+const PANEL_DEFAULTS={both:{'board-left':true,'board-right':true,'schematic-left':true}};
+const folded=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:panels'))||{};}catch{return {};}})();
+function applyPanels(){
+  for(const button of document.querySelectorAll('.panel-toggle')){
+    const panel=button.dataset.panel,left=panel.endsWith('left'),fold=folded[`${mode}:${panel}`]??PANEL_DEFAULTS[mode]?.[panel]??false;
+    button.parentElement.classList.toggle('collapsed',fold);button.parentElement.parentElement.classList.toggle(left?'left-collapsed':'right-collapsed',fold);
+    button.setAttribute('aria-expanded',String(!fold));button.textContent=left===fold?'›':'‹';button.title=fold?'Show panel':'Hide panel';
+  }
+}
+for(const button of document.querySelectorAll('.panel-toggle'))button.onclick=()=>{
+  folded[`${mode}:${button.dataset.panel}`]=button.getAttribute('aria-expanded')==='true';
+  try{localStorage.setItem('copper-review:panels',JSON.stringify(folded));}catch{}
+  applyPanels();
+};
 function setMode(next,{remember=true}={}){
   if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
-  const changed=next!==mode;mode=next;document.body.dataset.mode=mode;
+  const changed=next!==mode;mode=next;document.body.dataset.mode=mode;applyPanels();
   electrical.show(mode!=='layout');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
   for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
     b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
@@ -253,6 +268,7 @@ function fit(bounds=state.scene?.board.bounds_mm) {
   state.zoom=Math.min((state.width-80)/width,(state.height-80)/height);
   state.zoom=Math.max(.05,state.zoom);
   state.offset=[state.width/2-(bounds[0]+bounds[2])/2*state.zoom,(state.height-20)/2-(bounds[1]+bounds[3])/2*state.zoom];
+  state.fitted=bounds===state.scene?.board.bounds_mm;
   requestDraw();
 }
 function path(points,closed=false) {
@@ -295,9 +311,11 @@ function buildTrackCopper(tracks) {
 function isNetFocused(net) {return !!net && (net===state.hoverNet || state.selection.nets.includes(net));}
 function renderNet(net) {return !$('isolate').checked || !state.selection.nets.length || state.selection.nets.includes(net);}
 function opacity(net,selected=false) {return selected || isNetFocused(net) ? 1 : state.hoverNet || state.selection.nets.length ? .22 : .85;}
-function setHover(found={}) {
-  const net=found.net && renderNet(found.net) ? found.net : '',pad=found.pad?.id || null;
-  if(net!==state.hoverNet || pad!==state.hoverPad){state.hoverNet=net;state.hoverPad=pad;canvas.dataset.hoverNet=net;requestDraw();}
+// Pointing at the board only names what is under the cursor; a net highlights from the list.
+function setHover(found={},highlight=false) {
+  const net=found.net && renderNet(found.net) ? found.net : '',pad=found.pad?.id || null,shown=highlight?net:'';
+  canvas.dataset.hoverNet=net;
+  if(shown!==state.hoverNet || pad!==state.hoverPad){state.hoverNet=shown;state.hoverPad=pad;requestDraw();}
 }
 function clearHover(){setHover();$('hover-info').hidden=true;}
 function graphic(g,color) {
@@ -491,7 +509,7 @@ function renderEntities() {
     button.classList.toggle('selected',state.selection[nets?'nets':'components'].includes(name));
     const label=document.createElement('span');label.textContent=name;const detail=document.createElement('span');detail.className='secondary';detail.textContent=nets?`${entity.pads.length} pads`:engineeringText(entity.value || entity.side);button.append(label,detail);
     button.title=nets?name:`${entity.source_path}\n${entity.footprint}${entity.native_reference!==undefined?`\nnative reference: "${entity.native_reference}"`:''}`;
-    if(nets){button.onpointerenter=()=>setHover({net:name});button.onpointerleave=clearHover;button.onfocus=()=>setHover({net:name});button.onblur=clearHover;}
+    if(nets){button.onpointerenter=()=>setHover({net:name},true);button.onpointerleave=clearHover;button.onfocus=()=>setHover({net:name},true);button.onblur=clearHover;}
     button.onclick=e=>{select(nets?'nets':'components',name,e.shiftKey);if(!nets){const b=entity.bounds_mm;fit([b[0]-5,b[1]-5,b[2]+5,b[3]+5]);}};
     $('entity-list').append(button);
   }
@@ -676,7 +694,7 @@ async function fetchBody(path,cache=bodyCache){
 }
 async function show3d(on){
   $('view-3d').setAttribute('aria-pressed',String(on));$('view-3d').classList.toggle('active',on);
-  canvas.hidden=on;view3dCanvas.hidden=!on;if(!on)return;
+  canvas.hidden=on;view3dCanvas.hidden=!on;$('view-flip').hidden=!on;if(!on)return;
   const scene=state.scene;
   if(!scene){message('Open a board first.',true);return show3d(false);}
   try{view3d||=createView3d(view3dCanvas);}catch(e){message(`3D view failed: ${e.message}`,true);return show3d(false);}
@@ -693,9 +711,10 @@ async function show3d(on){
   message(`3D: ${drawn} bodies${approximate?` (${approximate} generated by CopperScript, approximate)`:''}${missing?` · ${missing} without a body`:''}${generateError?` · ${generateError}`:''}${cache.stepProblem?` · STEP models not drawn: ${cache.stepProblem}`:''} · board thickness assumed 1.6 mm`);
 }
 $('view-3d').onclick=guarded(()=>show3d(view3dCanvas.hidden));
+$('view-flip').onclick=()=>view3d?.flip();
 $('fit').onclick=()=>{if(!view3dCanvas.hidden&&view3d&&state.scene)view3d.fit(state.scene.board.bounds_mm);else fit();};$('clear').onclick=()=>{clearSelection();resetForm();};
 canvas.oncontextmenu=e=>e.preventDefault();
-canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
+canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();state.fitted=false;const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
 canvas.addEventListener('pointerdown',e=>{
   if(!state.scene || ![0,1,2].includes(e.button))return;e.preventDefault();canvas.focus();canvas.setPointerCapture(e.pointerId);
   clearHover();
@@ -706,7 +725,7 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('pointermove',e=>{
   if(!state.scene)return;const point=world(e);$('cursor').textContent=`X ${point[0].toFixed(3)} mm · Y ${point[1].toFixed(3)} mm`;
   if(state.drag){const drag=state.drag,s=screen(e);drag.moved=true;
-    if(drag.pan){state.offset=[drag.offset[0]+s[0]-drag.screen[0],drag.offset[1]+s[1]-drag.screen[1]];requestDraw();}
+    if(drag.pan){state.fitted=false;state.offset=[drag.offset[0]+s[0]-drag.screen[0],drag.offset[1]+s[1]-drag.screen[1]];requestDraw();}
     else if(state.mode==='region'){state.selection.region=[Math.min(drag.start[0],point[0]),Math.min(drag.start[1],point[1]),Math.max(drag.start[0],point[0]),Math.max(drag.start[1],point[1])].map(round);updateSelection();}
   }else{const found=hit(point,true);setHover(found);$('hover-info').hidden=!(found.component || found.net);$('hover-info').textContent=[found.component?.reference,found.pad?`Pad ${padLabel(found.pad)}`:'',found.net?`Net ${found.net}`:'',found.track?`${found.track.layer} · ${found.track.width_mm} mm`:''].filter(Boolean).join(' · ');}
 });
@@ -716,7 +735,9 @@ canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
   if(mode==='electrical'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
   const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
-new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();const first=state.width===0;state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if(first && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
+// A resize (panel folded, splitter, window) refits a fitted board and otherwise keeps the middle of the view in place.
+new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();if(!rect.width||!rect.height)return;const first=state.width===0;
+  if(!first&&!state.fitted)state.offset=[state.offset[0]+(rect.width-state.width)/2,state.offset[1]+(rect.height-state.height)/2];state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if((first||state.fitted) && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
 // ---- Menus ------------------------------------------------------------------------------------
 function closeMenus(except){for(const list of document.querySelectorAll('.menu-list'))if(list!==except){list.hidden=true;list.previousElementSibling?.setAttribute('aria-expanded','false');}}
 for(const menu of document.querySelectorAll('.menu')){const trigger=menu.querySelector(':scope>button'),list=menu.querySelector('.menu-list');

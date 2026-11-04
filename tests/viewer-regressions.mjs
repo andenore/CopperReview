@@ -41,23 +41,14 @@ try {
   assert.deepEqual(bridge,inside,'Zero-area hole connectors must not appear as stroked horizontal lines');
   assert.deepEqual(hole,outside,'Stored copper-fill holes must remain empty');
   assert.notDeepEqual(inside,hole,'The filled area itself must still render');
-  // Hover a routed segment in Component mode and check the entire remote net.
+  // Pointing at the board names the net under the cursor but highlights nothing.
   await page.locator('#mode-component').click();await page.mouse.move(...screen([28,18.8]));await settleHover('SENSOR_SCL');
   assert.equal(await page.locator('.entity.selected').count(),0,'Hover must not change the review selection');
-  for(const point of [[28,18.8],[23.65,16.1],[34.45,16.1]]) {
-    const color=await pixel(point);assert.deepEqual(color.slice(0,3),[255,240,182],`Matching track/pads should highlight at ${point}`);
-  }
-  assert.notDeepEqual((await pixel([23.65,18.1])).slice(0,3),[255,240,182],'A different net should remain subdued');
-  await page.mouse.move(10,10);await settleHover('');
-  assert.notDeepEqual((await pixel([28,18.8])).slice(0,3),[255,240,182],'Hover highlight should clear on leaving the canvas');
-  // Vias and stored fills are entry points too, and remote through-hole pads
-  // on the same net receive the same highlight while the fill brightens.
+  assert((await page.locator('#hover-info').textContent()).includes('Net SENSOR_SCL'));
+  for(const point of [[23.65,16.1],[34.45,16.1]])
+    assert.notDeepEqual((await pixel(point)).slice(0,3),[255,240,182],`Board hover must not highlight the net at ${point}`);
   await page.mouse.move(...screen([15,21]));await settleHover('GND');
-  assert.deepEqual((await pixel([15.25,21])).slice(0,3),[255,240,182]);
-  assert.deepEqual((await pixel([7.75,25.27])).slice(0,3),[255,240,182]);
-  assert((await pixel([10.13,6.23]))[0]>inside[0]+80,'Matching copper fill should highlight with its net');
-  await page.mouse.move(...screen([10.13,6.23]));await settleHover('GND');
-  assert.deepEqual((await pixel([15.25,21])).slice(0,3),[255,240,182]);
+  assert.notDeepEqual((await pixel([7.75,25.27])).slice(0,3),[255,240,182],'Board hover must not highlight remote pads');
   await page.mouse.move(10,10);await settleHover('');
   // Named labels draw at component inspection zoom, stay toggleable, and expose
   // both number and pin/net identity in the always-available pad tooltip.
@@ -72,7 +63,7 @@ try {
   await page.mouse.move(...screen([23.2,16]));await settleHover('SENSOR_SCL');
   assert((await page.locator('#hover-info').textContent()).includes('Pad 3 · SCL'));
   assert((await page.locator('#hover-info').textContent()).includes('Net SENSOR_SCL'));
-  // Hover in the explorer also highlights the net; hiding its copper layer
+  // Hover in the explorer highlights the net; hiding its copper layer
   // prevents canvas hover from resurrecting it.
   await page.locator('#tab-nets').click();
   await page.getByRole('button',{name:'SENSOR_SDA 2 pads',exact:true}).hover();await settleHover('SENSOR_SDA');
@@ -83,5 +74,5 @@ try {
   await page.mouse.move(10,10);await settleHover('');
   await page.screenshot({path:'test-results/viewer-fixed.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  console.log('PASS: linked-fill bridges disappear, holes remain, pad names/toggle, whole-net pad/track/via/fill/explorer hover, selection unchanged, layer filters respected');
+  console.log('PASS: linked-fill bridges disappear, holes remain, pad names/toggle, board hover names without highlighting, explorer hover highlights, selection unchanged, layer filters respected');
 } finally {await browser.close();}
