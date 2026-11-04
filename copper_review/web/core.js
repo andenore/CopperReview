@@ -305,6 +305,12 @@ export function validateScene(scene) {
     n.pads.forEach((p,j)=>check(typeof p.component==='string' && typeof p.number==='string' && vector(p.position_mm) && strings(p.layers),
       `${where}.pads[${j}]`,'component/number/position_mm/layers'));});
   scene.drawings.forEach((g,i)=>graphicCheck(g,`drawings[${i}]`));
+  // Older scenes have no texts.
+  check(scene.texts===undefined || Array.isArray(scene.texts),'scene','texts','must be a list');
+  (scene.texts||[]).forEach((x,i)=>{const where=`texts[${i}]`;
+    check(typeof x.text==='string',where,'text','must be a string');check(vector(x.position_mm),where,'position_mm','must be [x,y] mm');
+    check(vector(x.size_mm) && x.size_mm.every(n=>n>0),where,'size_mm','must be two positive mm values');check(finite(x.rotation_deg),where,'rotation_deg');
+    check(typeof x.layer==='string',where,'layer');check(strings(x.justify),where,'justify','must be strings');check(typeof x.mirror==='boolean',where,'mirror','must be true/false');});
   return scene;
 }
 export function validateReview(review,scene) {

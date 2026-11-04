@@ -1323,6 +1323,7 @@
       "filled": false
     }
   ],
+  "texts": [],
   "warnings": [
     "Curves are sampled to a maximum 0.01 mm chord error for display and region queries.",
     "Filled polygons are displayed as stored; fills are not recomputed or electrically verified."

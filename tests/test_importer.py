@@ -152,6 +152,24 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(scene["components"][0]["pads"][0]["pin_name"], "SCL")
         self.assertEqual(scene["nets"][0]["pads"][0]["pin_name"], "SCL")
 
+    def test_visible_silkscreen_text_is_kept_with_its_layout(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (gr_text "BRAND" (at 10 20 90) (layer "F.SilkS") (effects (font (size 1.5 1.2) (thickness 0.3) (bold yes)) (justify left)))
+          (gr_text "UNDER" (at 5 5) (layer "B.SilkS") (effects (font (size 1 1) (thickness 0.15)) (justify mirror)))
+          (gr_text "FAB ONLY" (at 1 1) (layer "F.Fab") (effects (font (size 1 1))))
+          (footprint "R" (layer "F.Cu") (at 30 40 90)
+            (property "Reference" "R1" (at 0 -2 90) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+            (property "Value" "10k" (at 0 2 90) (layer "F.SilkS") (hide yes) (effects (font (size 1 1))))
+            (fp_text user "${REFERENCE}" (at 0 0 90) (layer "F.Fab") (effects (font (size 1 1))))))'''
+        texts = import_pcb(data, "silk.kicad_pcb")["texts"]
+        self.assertEqual([t["text"] for t in texts], ["R1", "BRAND", "UNDER"])
+        r1, brand, under = texts
+        self.assertEqual(r1["position_mm"], [28.0, 40.0])
+        self.assertEqual(r1["component"], "R1")
+        self.assertEqual((brand["size_mm"], brand["rotation_deg"], brand["bold"], brand["justify"], brand["mirror"]),
+                         ([1.2, 1.5], 90, True, ["left"], False))
+        self.assertEqual((under["layer"], under["mirror"], under["justify"]), ("B.SilkS", True, []))
+
     def test_blank_and_repeated_references_are_disambiguated(self):
         data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
           (footprint "" (layer "F.Cu") (at 1 1) (property "Reference" ""))

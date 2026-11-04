@@ -1,6 +1,8 @@
 /* 3D bodies: VRML parsing, model choice and placement. Pure, so Node tests it.
    World frame: millimetres, x right, y up the page (board y negated), z up from the top copper face.
    Board slab is thickness below z=0; back-side parts hang below it. */
+import {textTransform} from './silk-text.js';
+
 export const WRL_UNIT_MM = 2.54; // KiCad reads one VRML unit as 0.1 inch. STEP bodies are already millimetres.
 export const MAX_TRIANGLES = 3e6;
 export const DEFAULT_THICKNESS_MM = 1.6;
@@ -155,8 +157,10 @@ export function padOutline(pad) {
 }
 
 /** Copper, pads, vias, drill holes and silkscreen on the outer faces, as triangles; copper fills come back as
-    polygons (their holes joined by zero-width bridges) for the viewer to fill with a stencil. Inner layers are hidden. */
-function boardFeatures(scene,thickness,triangle) {
+    polygons (their holes joined by zero-width bridges) for the viewer to fill with a stencil, and so do filled silk
+    shapes such as logos. `textRects(text)` gives a silk text's glyph rectangles in its own frame (see silk-text.js).
+    Inner layers are hidden. */
+function boardFeatures(scene,thickness,triangle,textRects) {
   const faces=layer=>layer==='F.Cu'||layer==='F.SilkS'?[1]:layer==='B.Cu'||layer==='B.SilkS'?[-1]:[];
   const at=(side,lift)=>([x,y])=>[x,-y,side>0?lift:-thickness-lift];
   const polygon=(points,color)=>{for(let i=1;i+1<points.length;i++)triangle(points[0],points[i],points[i+1],color);};
@@ -186,12 +190,19 @@ function boardFeatures(scene,thickness,triangle) {
     for(const side of sides){polygon(padOutline(pad).map(at(side,LIFT.pad)),C.pad);if(drill)disc(pad.position_mm,drill,at(side,LIFT.hole),C.hole);}
   }
   const silk=[...scene.drawings||[],...scene.components.flatMap(c=>c.graphics||[])];
-  for(const g of silk)for(const side of faces(g.layer))if(g.points?.length)stroke(g.points,g.width_mm||.12,at(side,LIFT.silk),C.silk);
+  for(const g of silk)for(const side of faces(g.layer))if(g.points?.length){
+    stroke(g.points,g.width_mm||.12,at(side,LIFT.silk),C.silk);
+    if(g.filled&&g.points.length>=3)fills.push({points:Float32Array.from(g.points.flatMap(at(side,LIFT.silk))),color:C.silk,normal:[0,0,side]});
+  }
+  if(textRects)for(const text of scene.texts||[])for(const side of faces(text.layer)){
+    const board=textTransform(text),place=at(side,LIFT.silk);
+    for(const [x0,y0,x1,y1] of textRects(text))polygon([[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(p=>place(board(p))),C.silk);
+  }
   return fills;
 }
 
 /** One flat-shaded triangle soup for the whole board: board slab, its outer copper and silkscreen, and every placed body. */
-export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
+export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM, {textRects}={}) {
   const positions=[],normals=[],colors=[],ranges=[];
   const triangle=(a,b,c,color)=>{
     const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
@@ -205,7 +216,7 @@ export function buildSoup(scene, bodies, thickness=DEFAULT_THICKNESS_MM) {
   const top=slab.map(p=>[...p,0]),bottom=slab.map(p=>[...p,-thickness]);
   quad(top[0],top[1],top[2],top[3],green);quad(bottom[3],bottom[2],bottom[1],bottom[0],green);
   for(let i=0;i<4;i++){const j=(i+1)%4;quad(bottom[i],bottom[j],top[j],top[i],[.07,.22,.15]);}
-  const fills=boardFeatures(scene,thickness,triangle);
+  const fills=boardFeatures(scene,thickness,triangle,textRects);
   let drawn=0,approximate=0;
   for(const component of scene.components){
     const choice=chosen(component,bodies),served=choice&&bodies.get(choice.path),key=bodyInputKey(component);

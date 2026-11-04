@@ -145,6 +145,30 @@ def arc_points(start, mid, end):
                       for i in range(1, count)] + [end]
 
 
+def silk_text(node, value, transform=lambda p: p, reference=""):
+    """A visible silkscreen text item (gr_text, fp_text or footprint property); None for other layers or hidden text.
+    Its angle is the absolute board angle, as KiCad stores it for footprint text too."""
+    layer = first(node, "layer", ["layer", ""])[1]
+    effects = first(node, "effects", [])
+    if not layer.endswith(".SilkS") or "hide" in node or "hide" in effects or \
+            first(node, "hide", ["hide", "no"])[1] == "yes" or first(effects, "hide", ["hide", "no"])[1] == "yes":
+        return None
+    at = first(node, "at", ["at", "0", "0"])
+    font = first(effects, "font", [])
+    size = first(font, "size", ["size", "1", "1"])
+    justify = first(effects, "justify", ["justify"])[1:]
+    text = value.replace("${REFERENCE}", reference).replace("\\n", "\n")
+    if not text.strip():
+        return None
+    return {"text": text, "position_mm": transform([number(at[1]), number(at[2])]),
+            "rotation_deg": number(at[3]) if len(at) > 3 else 0,
+            "size_mm": [number(size[2]) if len(size) > 2 else number(size[1]), number(size[1])],
+            "thickness_mm": number(first(font, "thickness", ["thickness", "0.15"])[1]),
+            "bold": "bold" in font or first(font, "bold", ["bold", "no"])[1] == "yes",
+            "layer": layer, "justify": [j for j in justify if j in {"left", "right", "top", "bottom"}],
+            "mirror": "mirror" in justify}
+
+
 def graphic(node, transform=lambda p: p):
     kind = node[0].split("_", 1)[1]
     stroke = first(node, "stroke", [])
@@ -207,7 +231,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
     def identity(item, fallback):
         return first(item, "uuid", first(item, "tstamp", ["uuid", fallback]))[1]
 
-    components, tracks, vias, zones, drawings = [], [], [], [], []
+    components, tracks, vias, zones, drawings, silk_texts = [], [], [], [], [], []
     footprints = children(tree, "footprint") + children(tree, "module")
     native_refs = []
     for index, fp in enumerate(footprints):
@@ -313,6 +337,10 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                 result = graphic(g, transform)
                 if result:
                     component["graphics"].append(result)
+            elif isinstance(g, list) and len(g) > 2 and g[0] in {"fp_text", "property"} and isinstance(g[2], str):
+                result = silk_text(g, g[2], transform, ref)
+                if result:
+                    silk_texts.append({**result, "component": ref})
         component["body_input"] = body_input(fp, props, angle, local_pads)
         points = [p for g in component["graphics"] for p in g["points"]]
         for p in component["pads"]:
@@ -353,6 +381,10 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                     drawings.append(result)
                     if result["layer"].endswith(".Cu"):
                         warnings.add("Graphic copper without a supported filled netted shape: select it through a region.")
+    for g in children(tree, "gr_text"):
+        result = silk_text(g, g[1]) if len(g) > 1 and isinstance(g[1], str) else None
+        if result:
+            silk_texts.append(result)
     if children(tree, "gr_curve"):
         warnings.add("Bezier board graphics are not displayed.")
     if children(tree, "group"):
@@ -376,4 +408,4 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
             "sha256": hashlib.sha256(data).hexdigest(), "stage": stage, "stage_evidence": "reviewer-declared; not connectivity validation",
             "source": source, "bounds_mm": board_bounds, "coordinates": COORDINATES, "layers": layers},
             "components": components, "nets": nets, "tracks": tracks, "vias": vias, "zones": zones,
-            "drawings": drawings, "warnings": sorted(warnings)}
+            "drawings": drawings, "texts": silk_texts, "warnings": sorted(warnings)}

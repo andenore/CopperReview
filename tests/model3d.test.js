@@ -172,3 +172,15 @@ test('outer copper, pads, holes and silk sit on their own face; fills come back 
   assert.ok(colored(soup,C.hole).length&&colored(soup,C.silk).every(z=>z>0));
   assert.equal(soup.fills.length,1);assert.deepEqual(Array.from(soup.fills[0].points.slice(0,6)),Array.from(Float32Array.of(0,-0,.015,4,-0,.015)));
 });
+
+test('silk text rectangles land on their face through the text transform, and filled silk becomes a fill', async () => {
+  const {textTransform,textLines}=await import('../copper_review/web/silk-text.js');
+  const text={text:'AB',position_mm:[10,10],rotation_deg:90,size_mm:[1,1],layer:'B.SilkS',justify:[],mirror:true};
+  assert.deepEqual(textTransform(text)([1,0]).map(v=>+v.toFixed(6)),[10,11],'x along the text runs down the page when turned 90 degrees, mirrored');
+  assert.deepEqual(textLines({...text,text:'A\nB'}).map(l=>+l.baseline.toFixed(3)),[-.31,1.31]);
+  const board={...scene([]),texts:[text],drawings:[{points:[[0,0],[2,0],[2,2],[0,0]],layer:'F.SilkS',width_mm:.1,filled:true}]};
+  const soup=buildSoup(board,new Map(),undefined,{textRects:()=>[[0,-.5,.5,.5]]}),silk=[];
+  for(let i=0;i<soup.colors.length;i+=3)if(soup.colors[i]===Float32Array.of(BOARD_FEATURE_COLORS.silk[0])[0])silk.push([soup.positions[i],soup.positions[i+1],soup.positions[i+2]]);
+  assert.ok(silk.some(p=>p[2]<-1.6&&Math.abs(p[1]+10)<1),'the text sits under the board, at its anchor');
+  assert.equal(soup.fills.length,1);assert.deepEqual(soup.fills[0].color,BOARD_FEATURE_COLORS.silk);
+});
