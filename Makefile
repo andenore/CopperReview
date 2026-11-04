@@ -15,7 +15,7 @@ ENTRY ?=
 IR ?=
 BOARD ?=
 STAGE ?= unknown
-HOST ?= 127.0.0.1
+HOST ?= 0.0.0.0
 PORT ?= 8769
 OPEN ?= yes
 
