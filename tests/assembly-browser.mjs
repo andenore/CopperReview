@@ -26,6 +26,15 @@ try {
   await page.keyboard.press(' ');
   plan=await lines();
   assert(plan[0].done&&plan[1].current,JSON.stringify(plan));
+  // Moving on selects the next part to place and zooms in on it.
+  await page.waitForFunction(()=>document.querySelector('#assembly-part-title').textContent==='PART U2');
+  const zoomOf=async()=>Number((await page.locator('#zoom-status').textContent()).match(/([\d.]+) px\/mm/)[1]);
+  const focused=await zoomOf();
+  // Back to the finished first line: nothing left to place, so its parts are framed and none selected.
+  await page.keyboard.press('k');
+  assert(await page.locator('#assembly-part').isHidden(),'no part selected on a finished line');
+  await page.waitForFunction(z=>!document.querySelector('#zoom-status').textContent.includes(`${z.toFixed(1)} px/mm`),focused);
+  await page.keyboard.press('j');await page.locator('#fit').click();
   assert.match(await page.locator('#assembly-progress-text').textContent(),/^1\/4 placed/);
 
   // Opening the sheet asks before replacing board-only progress, then matches by CopperScript path.

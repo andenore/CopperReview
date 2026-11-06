@@ -212,8 +212,9 @@ the view with an arrow towards it. When zoomed in, a **minimap** in the corner
 line's parts and where the view is; click or drag in it to move the view.
 
 - **Space** marks the line placed and moves to the next open line, **I** marks it
-  inspected, **J/K** or the arrows step (a line elsewhere on the board is brought
-  into view), **Z** zooms to its parts, **F** fits the board.
+  inspected, **J/K** or **↓/↑** step, **Z** zooms to its parts, **F** fits the board.
+  Changing line selects its first part still to place and zooms to it; when every
+  part of the line is done, the view frames them all instead.
 - **→** / **←** (or **N** / **Shift+N**) step through the parts of the current line, panning to each,
   since identical parts can be spread over the board. **X** marks the selected part
   and moves to the next open one.
