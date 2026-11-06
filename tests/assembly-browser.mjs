@@ -64,7 +64,7 @@ try {
   assert.equal(await page.locator('#zoom-status').textContent(),before,'the minimap pans without zooming');
   await page.screenshot({path:'test-results/assembly-zoomed.png'});
   // N cycles the parts of the current line (one part here, so it stays on U1).
-  await page.keyboard.press('Escape');await page.keyboard.press('n');
+  await page.keyboard.press('Escape');await page.keyboard.press('ArrowRight');
   await page.waitForFunction(()=>document.querySelector('#assembly-part-title').textContent==='PART U1');
   await page.locator('#fit').click();
 
