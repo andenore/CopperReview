@@ -1057,12 +1057,19 @@ function setParts(items,status){
   saveAssembly();renderAssembly();requestDraw();
 }
 /** Make a line current; if none of its parts is in view (another side, or zoomed elsewhere), go to its first. */
+/**
+ * Make a line current and go to its work: select the first part still to place (or, for a line
+ * that is only inspected or checked empty, still to check) and bring it into view; with every
+ * part done, frame them all.
+ */
 function goLine(id){
-  asm.current=id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();
-  const line=currentLine();if(!line||!state.scene)return;
-  const v=viewBox();
-  const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);
-  if(boxes.length&&!boxes.some(b=>boxesOverlap(b,v)))centerOnPart(line.items[0].reference);
+  asm.current=id;asm.focus=null;
+  const line=currentLine();
+  const next=line?.items.find(i=>{const s=statusOf(asm.progress,i.reference);return forward(line)==='placed'?s==='todo':s!=='inspected';});
+  if(next)asm.focus=next.reference;
+  saveAssembly();renderAssembly();requestDraw();
+  if(!line||!state.scene)return;
+  if(next)centerOnPart(next.reference);else zoomLine();
 }
 function nextLine(from,test){const lines=visibleLines(),start=lines.findIndex(l=>l.id===from);return lines.slice(start+1).find(test)||null;}
 function markCurrent(){
