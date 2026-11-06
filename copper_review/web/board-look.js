@@ -57,11 +57,22 @@ export function bodyBox(component){
   return w<.2||h<.2?null:{cx:(x0+x1)/2,cy:(y0+y1)/2,w,h,angle};
 }
 
+/**
+ * Width, height and corner radius of a pad grown by `grow` mm (negative shrinks it), never
+ * negative: canvas `roundRect` and `ellipse` throw on a negative radius, which would abort the
+ * whole realistic drawing. A shrunk rounded rectangle with a small corner ratio (0.05, say)
+ * would otherwise get a negative radius from the paste inset.
+ */
+export function padOutline(p,grow=0){
+  const w=Math.max(0,p.size_mm[0]+grow*2),h=Math.max(0,p.size_mm[1]+grow*2),half=Math.min(w,h)/2;
+  const radius=p.shape==='oval'?half:p.shape==='roundrect'?Math.min(half,Math.max(0,Math.min(w,h)*(p.roundrect_ratio??.25)+grow)):0;
+  return {w,h,radius};
+}
+
 function padShape(ctx,p,grow=0){
-  const w=p.size_mm[0]+grow*2,h=p.size_mm[1]+grow*2;ctx.beginPath();
+  const {w,h,radius}=padOutline(p,grow);ctx.beginPath();
   if(p.shape==='circle')ctx.ellipse(0,0,w/2,h/2,0,0,Math.PI*2);
-  else if(p.shape==='oval')ctx.roundRect(-w/2,-h/2,w,h,Math.min(w,h)/2);
-  else if(p.shape==='roundrect')ctx.roundRect(-w/2,-h/2,w,h,Math.min(w,h)*(p.roundrect_ratio??.25)+grow);
+  else if(p.shape==='oval'||p.shape==='roundrect')ctx.roundRect(-w/2,-h/2,w,h,radius);
   else ctx.rect(-w/2,-h/2,w,h);
 }
 /** A lit fill: light from the top left, in the shape's own frame. */
