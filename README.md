@@ -12,6 +12,9 @@ A review tool for CopperScript designs with two halves that can be open at once:
   export: select components, nets and regions, annotate them, and export a review for
   the next LLM-assisted solver iteration.
 
+**Assembly** (A) uses the same board to track a manual build part by part; see
+[Assembly tracking](#assembly-tracking).
+
 The **Electrical · Layout · Both** switch in the top bar picks what is shown (E, L, B).
 **Both** puts the schematic and the board side by side with a draggable divider;
 selecting a part or net on either side selects and centres it on the other. Parts
@@ -156,6 +159,47 @@ scene on another computer, then load its review. The scene is for the viewer;
 the review is the file to paste into a prompt. Native object UUIDs, component
 references, CopperScript paths, and net names are retained in both.
 
+## Assembly tracking
+
+**Assembly** (A) tracks a manual build of the open board, part by part. It works
+from the board export alone (parts grouped by value and footprint), but is meant
+to be used with the assembly sheet CopperScript writes from the reviewed
+`assembly.lock`:
+
+```sh
+copper assembly bom board.copper --locked --offline --lock assembly.lock -o build/bom.csv \
+    --assembly-sheet build/assembly-sheet.json
+```
+
+Open the board, then the sheet (**Open → File…**, or drop both). The sheet adds
+manufacturer, MPN, supplier and how each part reaches the board: fitted by hand,
+by the assembler (inspect only) or not fitted (confirm the footprint is empty).
+Parts match the board by CopperScript path, then designator; sheet parts missing
+from the board and board footprints missing from the sheet are listed under
+**Assembly details & limits**. Try it with `examples/demo.kicad_pcb` and
+`examples/demo.assembly-sheet.json`.
+
+The plan lists one line per identical part on one side, in passes: SMD on the
+side with fewer hand-placed parts first, then the other side, then through-hole,
+then assembler-fitted and not-fitted parts. Within a pass, small bodies come
+first. The current line's parts are highlighted with pin 1 (the pad numbered 1
+or A1) ringed; placed parts turn green and copper is dimmed.
+
+- **Space** marks the line placed and moves to the next open line, **I** marks it
+  inspected, **J/K** or the arrows step, **Z** zooms to its parts, **F** fits the board.
+- Click a part on the board or in the list to set its own status, flag it
+  **Needs rework** (P) and add a note; **Add as layout note** carries the note
+  into the layout review. Double-click toggles a single part.
+- Progress saves in this browser per board file. **Export → Assembly progress**
+  writes `<board>.assembly.json` (`copper-review-assembly/v1`) with the sheet,
+  to continue on another device; it only opens with the same board file. A part's
+  progress is kept only while its sheet selection digest, MPN and footprint are
+  unchanged, so a changed selection starts again and is listed.
+
+Ticks record what was done at the bench. They do not verify placement,
+orientation or solder joints, and nothing proves the board was built from the
+sheet's source.
+
 ## Mechanical review and constraint feedback
 
 Inspect the exported board outline, cutouts, footprint geometry, drills and
@@ -274,6 +318,8 @@ node tests/browser.mjs "http://127.0.0.1:PORT/#token=TOKEN"
 The test verifies component/net/region annotations, geometry exports, edit/delete,
 review import, persistence, layer controls, and search. Artifacts go to ignored
 `test-results/`.
+`node tests/assembly-browser.mjs URL` checks assembly mode: planning with and without
+the demo sheet, marking, rework notes, persistence, progress export and import.
 `node tests/viewer-regressions.mjs "http://127.0.0.1:PORT/#token=TOKEN"` additionally
 checks linked-fill holes/connector pixels, pad labels, and transient whole-net hover;
 `node tests/issues-labels.mjs URL` checks issue loading/citation and label thinning.

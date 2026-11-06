@@ -4,11 +4,11 @@
 <body>
 <header class="topbar"><div class="brand"><img class="logo" src="./copper-logo.svg" width="26" height="26" alt=""><strong>CopperReview</strong></div>
 <div class="board-heading"><strong id="board-name">Open a design to begin</strong><span id="project-origin" hidden></span><span id="board-meta"></span></div>
-<nav id="mode-switch" class="mode-switch" aria-label="Review mode"><button data-mode="electrical" title="Schematic, power and bus review (E)">Electrical</button><button data-mode="layout" title="Board placement and routing review (L)">Layout</button><button data-mode="both" title="Schematic and board side by side, linked (B)">Both</button></nav>
+<nav id="mode-switch" class="mode-switch" aria-label="Review mode"><button data-mode="electrical" title="Schematic, power and bus review (E)">Electrical</button><button data-mode="layout" title="Board placement and routing review (L)">Layout</button><button data-mode="both" title="Schematic and board side by side, linked (B)">Both</button><button data-mode="assembly" title="Track a manual build part by part (A)">Assembly</button></nav>
 <div class="header-actions"><button id="compiler-cancel" hidden>Cancel compilation</button>
 <div class="menu"><button id="open-menu" class="primary" aria-haspopup="menu" aria-expanded="false">Open</button>
 <div id="open-list" class="menu-list" role="menu" hidden>
-<button id="open-file" role="menuitem">File…<small>Board, IR, .copper, scene, review or issue list · Ctrl+O</small></button>
+<button id="open-file" role="menuitem">File…<small>Board, IR, .copper, scene, review, issue list or assembly sheet · Ctrl+O</small></button>
 <button id="open-folder" role="menuitem">Project folder…<small>Compiles locally in this browser</small></button>
 <button id="open-url" role="menuitem">From URL or GitHub…</button>
 <button id="compiler-example" role="menuitem">Example circuit</button>
@@ -18,7 +18,8 @@
 <button id="export-review" role="menuitem">Layout review JSON</button>
 <button id="copy-review" role="menuitem">Copy layout review JSON</button>
 <button id="electrical-export" role="menuitem">Electrical review JSON</button>
-<button id="export-scene" role="menuitem">Board scene<small>Portable board geometry for sharing</small></button></div></div>
+<button id="export-scene" role="menuitem">Board scene<small>Portable board geometry for sharing</small></button>
+<button id="export-assembly" role="menuitem">Assembly progress<small>Placed and inspected parts, to resume elsewhere</small></button></div></div>
 <div class="menu"><button id="more-menu" aria-haspopup="menu" aria-expanded="false" aria-label="More">⋯</button>
 <div id="more-list" class="menu-list" role="menu" hidden>
 <button id="show-compiler-result" role="menuitem" hidden>Compiler check</button>
@@ -43,6 +44,13 @@
 <label><input id="isolate" type="checkbox"> Isolate selected nets</label><label id="show-issues-label" hidden><input id="show-issues" type="checkbox" checked> CopperScript issue windows</label></div>
 <details class="limits"><summary>Import details &amp; limits <span id="warning-count"></span></summary><ul id="warnings"></ul></details>
 </aside>
+<aside class="assembly-panel assembly-list-panel" aria-label="Assembly plan"><button class="panel-toggle" data-panel="assembly-left" aria-expanded="true"></button><div class="section-label">ASSEMBLY</div>
+<div id="assembly-progress" class="assembly-progress" aria-live="polite"><div class="assembly-bar"><span id="assembly-bar-fill"></span></div><span id="assembly-progress-text">Open a board to plan its assembly.</span></div>
+<div id="assembly-source" class="assembly-source quiet"></div>
+<label class="field">Show<select id="assembly-filter"><option value="all">All lines</option><option value="remaining">Not done</option><option value="problems">Needs rework</option></select></label>
+<div id="assembly-lines" class="assembly-lines" aria-label="Assembly lines"></div>
+<details class="limits"><summary>Assembly details &amp; limits <span id="assembly-warning-count"></span></summary><ul id="assembly-warnings"></ul></details>
+</aside>
 <section class="workbench">
 <div id="canvas-wrap"><canvas id="board-canvas" aria-label="Interactive PCB board viewer" tabindex="0"></canvas><canvas id="view3d-canvas" aria-label="3D board view: drag to orbit, shift or right-drag to pan, wheel to zoom" tabindex="0" hidden></canvas>
 <div class="toolbar floating-controls"><div class="tool-group"><button id="mode-component" class="active" title="Select component (C)">Component</button><button id="mode-net" title="Select net by pad/track/via (N)">Net</button><button id="mode-region" title="Drag a rectangular region (R)">Region</button></div><button id="fit" title="Fit board (F)">Fit</button><button id="view-3d" title="Show placed 3D bodies" aria-pressed="false">3D</button><button id="view-flip" title="Turn the board over to see the other side" hidden>Flip</button><button id="clear" title="Clear selection (Esc)">Clear</button></div>
@@ -60,6 +68,20 @@
 <label class="field">Status<select id="note-status"><option value="open">Open</option><option value="resolved">Resolved</option></select></label>
 <button id="save-note" class="primary full">Add annotation</button><button id="cancel-edit" class="full" hidden>Cancel edit</button>
 <div class="export-context"><div class="section-label">CONTEXT FOR THE NEXT PASS</div><label class="field">Review summary<textarea id="summary" rows="3" placeholder="What should the next placement/routing iteration focus on?"></textarea></label><p>Export includes board hash, source paths, exact entity names, geometry, regions, layers, and your notes.</p><span id="autosave-status">Notes save locally per board revision.</span></div>
+</aside>
+<aside class="assembly-panel assembly-detail-panel" aria-label="Current assembly line"><button class="panel-toggle" data-panel="assembly-right" aria-expanded="true"></button><div class="section-label">NOW PLACING</div>
+<div id="assembly-current" class="selection-detail assembly-current">Choose a line on the left.</div>
+<div class="assembly-actions"><button id="assembly-mark" class="primary full" title="Mark every part of this line placed and go to the next (Space)">Mark placed</button>
+<button id="assembly-inspect" class="full" title="Mark every part of this line inspected (I)">Mark inspected</button>
+<div class="form-row"><button id="assembly-prev" title="Previous line (K or ↑)">← Previous</button><button id="assembly-next" title="Next line (J or ↓)">Next →</button><button id="assembly-zoom" title="Zoom to this line's parts (Z)">Zoom</button></div></div>
+<div class="section-label">PARTS</div>
+<div id="assembly-refs" class="assembly-refs" aria-label="Parts in this line"></div>
+<div id="assembly-part" class="assembly-part" hidden><div class="section-label" id="assembly-part-title">PART</div>
+<label class="field">Status<select id="assembly-part-status" aria-label="Part status"><option value="todo">Not placed</option><option value="placed">Placed</option><option value="inspected">Inspected</option></select></label>
+<label class="board-wide"><input id="assembly-problem" type="checkbox"> Needs rework</label>
+<label class="field">Note<textarea id="assembly-note" rows="3" placeholder="e.g. Bridge on pin 4, reworked with wick"></textarea></label>
+<button id="assembly-to-layout" class="full" title="Open a layout note for this part with the note text">Add as layout note</button></div>
+<div class="export-context"><p>Ticks record what you did at the bench. They do not verify placement, orientation or solder joints.</p><button id="assembly-reset" class="full">Clear progress…</button><span id="assembly-save-status">Progress saves in this browser per board file.</span></div>
 </aside>
 </main>
 </div>

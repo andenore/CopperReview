@@ -11,7 +11,8 @@ import {parseVrml,buildSoup,loadBodies,modelKind} from './model3d.js';
 import {drawText,textRects} from './silk-text.js';
 import {readStep} from './steps.js';
 import {generateBodies} from './bodies.js';
-for(const id of ['category','priority','note-status'])chipify(document.getElementById(id));
+import {buildAssembly,validateSheet,reconcileProgress,emptyProgress,updateEntry,entryOf,statusOf,lineDone,summarize,validateProgress,makeProgress,pinOne,phaseLabel,phaseHint,ASSEMBLY_SHEET_SCHEMA,ASSEMBLY_PROGRESS_SCHEMA} from './assembly.js';
+for(const id of ['category','priority','note-status','assembly-part-status','assembly-filter'])chipify(document.getElementById(id));
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
@@ -32,7 +33,7 @@ const electrical=createElectricalReview({message,
   links:{board:{has:(kind,id)=>!!boardTarget(kind,id),show:(kind,id)=>showOnBoard(kind,id)},
     source:{has:(kind,id)=>!!sourceTarget(kind,id),open:(kind,id)=>openSource(kind,id)}}});
 // Both needs a schematic and a board that share parts; an unrelated pair stays apart.
-const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:true;
+const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:m==='assembly'?!!state.scene:true;
 // Side panels fold away per mode; Both starts with the board's panels and the schematic list folded.
 const PANEL_DEFAULTS={both:{'board-left':true,'board-right':true,'schematic-left':true}};
 const folded=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:panels'))||{};}catch{return {};}})();
@@ -51,7 +52,8 @@ for(const button of document.querySelectorAll('.panel-toggle'))button.onclick=()
 function setMode(next,{remember=true}={}){
   if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
   const changed=next!==mode;mode=next;document.body.dataset.mode=mode;applyPanels();
-  electrical.show(mode!=='layout');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
+  electrical.show(mode==='electrical'||mode==='both');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
+  if(mode==='assembly'){setTool('component');renderAssembly();}requestDraw();
   for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
     b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
   $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
@@ -72,7 +74,7 @@ function updateHeading(){
   const model=electrical.hasModel()?electrical.model():null,scene=state.scene;
   const name=model?.name||scene?.board.name;
   $('board-name').textContent=name||'Open a design to begin';
-  showProjectOrigin(mode==='layout'?scene?.board?.origin||null:electricalOrigin||(mode==='both'?scene?.board?.origin:null)||null);
+  showProjectOrigin(mode==='layout'||mode==='assembly'?scene?.board?.origin||null:electricalOrigin||(mode==='both'?scene?.board?.origin:null)||null);
   let meta='';
   if(mode==='both'){const l=linkSummary();meta=`Linked by reference and net name · ${l.both} parts on both${l.schematicOnly?` · ${l.schematicOnly} schematic only`:''}${l.boardOnly?` · ${l.boardOnly} board only`:''} · not checked against source`;}
   else if(mode==='electrical'&&model)meta=`${model.components.size} components · ${model.nets.size} nets · IR ${electrical.input().sha256.slice(0,12)}`;
@@ -101,6 +103,7 @@ $('show-about').onclick=()=>{const box=document.createElement('div');
     'Electrical review draws generated schematic sheets, the power hierarchy and buses from the compiled IR. Values are nominal and states are as declared; there is no simulation, and protocol grouping, power sequencing and device behavior are not validated.',
     'Layout review shows board placement and routing from a CopperScript board export. Routing completeness is never inferred from track counts, and net guides show membership, not verified connections.',
     'In Both, the schematic and the board are linked by reference and net name. Nothing proves the board was built from that exact source.',
+    'Assembly tracks a manual build part by part, from the board and an optional CopperScript assembly sheet. Ticks record what was done at the bench; they do not verify placement, orientation or solder joints.',
     'Everything is processed in this browser (or by the local server you started). Notes save in this browser per design revision; export them to keep or share.'])
     {const p=document.createElement('p');p.textContent=text;box.append(p);}
   showInfo('About and limits',box);};
@@ -124,8 +127,8 @@ async function openDesignFile(file,{origin=null,prepared=null,revision=beginOpen
       value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
       if(value.schema==='copperscript-ir/v0.1')value=await electricalInput(bytes,file.name);
       // Notes and issue lists belong to an open design (openFiles adds them); a URL can still name one.
-      else if(value.schema===ISSUES_SCHEMA||READABLE_REVIEW_SCHEMAS.includes(value.schema)||value.schema==='copper-electrical-review/v1')
-        throw Error(`${file.name} is a ${value.schema===ISSUES_SCHEMA?'CopperScript issue list':'review notes file'}, not a design. Open its design first, then add it with Open → File….`);
+      else if(value.schema===ISSUES_SCHEMA||READABLE_REVIEW_SCHEMAS.includes(value.schema)||value.schema==='copper-electrical-review/v1'||value.schema===ASSEMBLY_SHEET_SCHEMA||value.schema===ASSEMBLY_PROGRESS_SCHEMA)
+        throw Error(`${file.name} is a ${value.schema===ISSUES_SCHEMA?'CopperScript issue list':value.schema===ASSEMBLY_SHEET_SCHEMA?'CopperScript assembly sheet':value.schema===ASSEMBLY_PROGRESS_SCHEMA?'assembly progress file':'review notes file'}, not a design. Open its design first, then add it with Open → File….`);
     }else{
       if(!localServer)throw Error('Raw KiCad PCB import currently needs the local importer. Open an exported .scene.json in the hosted viewer.');
       const response=await fetch('./api/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Copper-Token':token,'X-Copper-Filename':encodeURIComponent(file.name)},body:bytes});value=await response.json();if(!response.ok)throw Error(value.error);documentBaseline=documentIdentity(value);
@@ -184,12 +187,14 @@ async function openFiles(list){
     if(!file.name.toLowerCase().endsWith('.json'))return {file,kind:'design'};
     if(file.size>50*1024*1024)throw Error(`${file.name} exceeds 50 MiB.`);
     let value;try{value=JSON.parse(await file.text());}catch{throw Error(`${file.name} is not valid JSON.`);}
-    const kind=value?.schema===ISSUES_SCHEMA?'issues':READABLE_REVIEW_SCHEMAS.includes(value?.schema)?'layout-review':value?.schema==='copper-electrical-review/v1'?'electrical-review':'design';
+    const kind=value?.schema===ISSUES_SCHEMA?'issues':value?.schema===ASSEMBLY_SHEET_SCHEMA?'assembly-sheet':value?.schema===ASSEMBLY_PROGRESS_SCHEMA?'assembly-progress':READABLE_REVIEW_SCHEMAS.includes(value?.schema)?'layout-review':value?.schema==='copper-electrical-review/v1'?'electrical-review':'design';
     return {file,kind,value};
   }));
   for(const {file}of kinds.filter(k=>k.kind==='design'))await openDesignFile(file);
   for(const {file,kind,value}of kinds.filter(k=>k.kind!=='design')){
     if(kind==='issues'){if(!state.scene)throw Error(`Open the board before the issue list ${file.name}.`);loadIssues(value);}
+    else if(kind==='assembly-sheet'||kind==='assembly-progress'){if(!state.scene)throw Error(`Open the board before the assembly ${kind==='assembly-sheet'?'sheet':'progress'} ${file.name}.`);
+      if(kind==='assembly-sheet'?loadAssemblySheet(value):loadAssemblyProgress(value))setMode('assembly');}
     else if(kind==='layout-review'){if(!state.scene)throw Error(`Open the board before the review ${file.name}.`);loadLayoutReview(value);setMode(mode==='electrical'?'layout':mode);}
     else{if(!electrical.hasModel())throw Error(`Open the schematic before the review ${file.name}.`);electrical.importReview(value);setMode(mode==='layout'?'electrical':mode);message(`Loaded electrical review ${file.name}`);}
   }
@@ -238,10 +243,10 @@ $('compiler-example').onclick=guarded(async()=>{const response=await fetch(new U
 const BOARD_COLORS={
   dark:{layers:['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'],board:'#0d171b',padText:'#2a2721',focus:'#fff0b6',label:'#c1d0d5',
     cited:'#ffd27a',issue:'#ff7a7a',grid:'#26353d',edge:'#9abfba',keepout:'#d486ac',graphic:'#779099',courtyard:'#8c829c',fab:'#a7b8bd',padless:'#27363b',
-    outline:'#ffe9a6',via:'#bba5d7',guideFocus:'#c6fff0',guide:'#6e9eab',regionDone:'#526662',region:'#c19562',selectFill:'#82d5c019',selectLine:'#84d4c0'},
+    outline:'#ffe9a6',done:'#7fd18b',via:'#bba5d7',guideFocus:'#c6fff0',guide:'#6e9eab',regionDone:'#526662',region:'#c19562',selectFill:'#82d5c019',selectLine:'#84d4c0'},
   light:{layers:['#c4502f','#2f6fb8','#8350bd','#23885e','#9c7c12','#178892'],board:'#eef1ec',padText:'#ffffff',focus:'#e07b00',label:'#2c393e',
     cited:'#b07d00',issue:'#cc3a3a',grid:'#d9dfdb',edge:'#3f5e59',keepout:'#ad3f78',graphic:'#7c8f95',courtyard:'#8577a3',fab:'#62757b',padless:'#c3ccd0',
-    outline:'#c46d00',via:'#6f55a0',guideFocus:'#0f7c66',guide:'#7fa3ac',regionDone:'#9aaba7',region:'#b06b2c',selectFill:'#16806a1f',selectLine:'#16806a'}};
+    outline:'#c46d00',done:'#2e8b4a',via:'#6f55a0',guideFocus:'#0f7c66',guide:'#7fa3ac',regionDone:'#9aaba7',region:'#b06b2c',selectFill:'#16806a1f',selectLine:'#16806a'}};
 const darkTheme=()=>document.documentElement.dataset.theme==='dark';
 let colors=BOARD_COLORS[darkTheme()?'dark':'light'];
 function setTheme(dark){
@@ -387,6 +392,8 @@ function draw() {
     for(let y=((state.offset[1]%step)+step)%step;y<state.height;y+=step)ctx.fillRect(x,y,1,1);
   if(!state.scene)return;
   const scene=state.scene,padLabels=[],referenceLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
+  // Assembly mode quiets the copper and shows each part as current, done, still to fit or not tracked.
+  const plan=assemblyDrawState(),dim=plan?.18:1;
   // Edge geometry (including inner cutouts) remains visible at all layer settings.
   for(const g of scene.drawings.filter(g=>g.layer==='Edge.Cuts')){ctx.globalAlpha=1;graphic(g,colors.edge);}
   if($('show-zones').checked)for(const z of scene.zones) {
@@ -395,7 +402,7 @@ function draw() {
     ctx.strokeStyle=z.kind==='keepout'?colors.keepout:isNetFocused(z.net)?colors.focus:copperColor(z.layers.find(l=>state.layers.includes(l)));
     ctx.fillStyle=ctx.strokeStyle;
     const actual=['fill','copper'].includes(z.kind);
-    ctx.globalAlpha=opacity(z.net)*(actual?(isNetFocused(z.net)?.24:.095):.55);
+    ctx.globalAlpha=opacity(z.net)*(actual?(isNetFocused(z.net)?.24:.095):.55)*dim;
     ctx.setLineDash(actual?[]:[4/state.zoom,4/state.zoom]);
     // Native fill polygons link hole contours with retraced, zero-area bridges.
     // Fill the area with even/odd holes, never stroke those internal connectors.
@@ -405,7 +412,7 @@ function draw() {
   ctx.setLineDash([]);
   for(const t of state.trackCopper) {
     if(!state.layers.includes(t.layer) || !renderNet(t.net))continue;
-    ctx.globalAlpha=opacity(t.net);ctx.fillStyle=isNetFocused(t.net)?colors.focus:copperColor(t.layer);
+    ctx.globalAlpha=opacity(t.net)*dim;ctx.fillStyle=isNetFocused(t.net)?colors.focus:copperColor(t.layer);
     ctx.fill(t.path,'nonzero');
   }
   ctx.lineCap='round';ctx.lineJoin='round';
@@ -418,10 +425,10 @@ function draw() {
   ctx.globalAlpha=.8;ctx.fillStyle=colors.label;
   for(const text of scene.texts||[])if(state.layers.includes(text.layer.startsWith('B.')?'B.Cu':'F.Cu'))drawText(ctx,text);
   for(const c of scene.components) {
-    const selected=state.selection.components.includes(c.reference);
+    const role=plan?plan.role(c.reference):null,selected=plan?role==='current':state.selection.components.includes(c.reference);
     const cVisible=state.layers.includes(c.side==='back'?'B.Cu':'F.Cu');
     if(cVisible)for(const g of c.graphics) {
-      ctx.globalAlpha=selected?1:.4;
+      ctx.globalAlpha=selected?1:plan?.25:.4;
       graphic(g,selected?colors.focus:g.layer.endsWith('CrtYd')?colors.courtyard:colors.fab);
     }
     for(const p of c.pads) {
@@ -429,21 +436,25 @@ function draw() {
       if(p.layers.length && (!visible(p.layers) || !renderNet(p.net)))continue;
       ctx.save();ctx.translate(...p.position_mm);ctx.rotate(-p.rotation_deg*Math.PI/180);
       const padSelected=selected && !state.hoverNet;
-      ctx.globalAlpha=opacity(p.net,padSelected);padPath(p);
-      ctx.fillStyle=padSelected || isNetFocused(p.net)?colors.focus:p.layers.length?copperColor(p.layers.find(l=>state.layers.includes(l))):colors.padless;
+      ctx.globalAlpha=plan?{current:1,done:.75,todo:.55}[role]??.12:opacity(p.net,padSelected);padPath(p);
+      ctx.fillStyle=padSelected || isNetFocused(p.net)?colors.focus:role==='done'?colors.done:p.layers.length?copperColor(p.layers.find(l=>state.layers.includes(l))):colors.padless;
       ctx.fill();
       if(p.drill_mm.length){ctx.beginPath();ctx.ellipse(0,0,p.drill_mm[0]/2,p.drill_mm[1]/2,0,0,Math.PI*2);ctx.fillStyle=colors.board;ctx.fill();}
       ctx.restore();
       padLabels.push([c,p,selected]);
     }
-    if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=1.6/state.zoom;ctx.setLineDash([5/state.zoom,3/state.zoom]);
+    if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=(plan?.focus===c.reference?3:1.6)/state.zoom;ctx.setLineDash(plan?.focus===c.reference?[]:[5/state.zoom,3/state.zoom]);
       const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
+    if(plan?.problem(c.reference)){ctx.globalAlpha=1;ctx.strokeStyle=colors.issue;ctx.lineWidth=1.6/state.zoom;const b=c.bounds_mm;ctx.strokeRect(b[0]-.5,b[1]-.5,b[2]-b[0]+1,b[3]-b[1]+1);}
+    // Pin 1 of the part being placed, from its pad numbering: orientation is the usual mistake.
+    const one=selected&&plan?pinOne(c):null;
+    if(one){ctx.save();ctx.globalAlpha=1;ctx.translate(...one.position_mm);ctx.strokeStyle=colors.issue;ctx.lineWidth=2/state.zoom;ctx.beginPath();ctx.arc(0,0,Math.max(...one.size_mm)/2+.3,0,Math.PI*2);ctx.stroke();ctx.restore();}
     if($('show-labels').checked && cVisible)referenceLabels.push([c,selected]);
   }
   drawReferenceLabels(referenceLabels);
   for(const v of scene.vias) {
     if(!visible(v.layers) || !renderNet(v.net))continue;
-    ctx.globalAlpha=opacity(v.net);ctx.fillStyle=isNetFocused(v.net)?colors.focus:colors.via;
+    ctx.globalAlpha=opacity(v.net)*dim;ctx.fillStyle=isNetFocused(v.net)?colors.focus:colors.via;
     ctx.beginPath();ctx.arc(...v.position_mm,v.size_mm/2,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=colors.board;ctx.beginPath();ctx.arc(...v.position_mm,v.drill_mm/2,0,Math.PI*2);ctx.fill();
   }
@@ -456,8 +467,8 @@ function draw() {
     }ctx.setLineDash([]);
   }
   for(const args of padLabels)drawPadLabel(...args);
-  ctx.globalAlpha=1;drawIssues();
-  for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?colors.regionDone:colors.region;ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
+  ctx.globalAlpha=1;if(!plan)drawIssues();
+  if(!plan)for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?colors.regionDone:colors.region;ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle=colors.selectFill;ctx.strokeStyle=colors.selectLine;ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
@@ -648,12 +659,12 @@ function loadScene(scene) {
     message('Saved local notes could not be read; they were kept under an ":unreadable" key. Load an exported review to recover.',true);}
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
-  renderLayers();renderEntities();renderNotes();fit();setEnabled();
+  renderLayers();renderEntities();renderNotes();loadAssemblyState();fit();setEnabled();
   if(!view3dCanvas.hidden)show3d(true);
 }
 function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,issueSource()),null,2)+'\n';}
 function download(name,text,type='application/json') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function setEnabled(){for(const id of ['export-scene','export-review','copy-review','save-note','fit','clear'])$(id).disabled=!state.scene;$('electrical-export').disabled=!electrical.hasModel();$('export-menu').disabled=!state.scene&&!electrical.hasModel();}
+function setEnabled(){for(const id of ['export-scene','export-review','copy-review','export-assembly','save-note','fit','clear'])$(id).disabled=!state.scene;$('electrical-export').disabled=!electrical.hasModel();$('export-menu').disabled=!state.scene&&!electrical.hasModel();}
 // The issue list loaded now, else the one recorded with loaded or saved notes.
 function issueSource(){return state.issues?.source || state.issueSource || null;}
 function setIssues(issues) {
@@ -723,7 +734,8 @@ canvas.addEventListener('pointerdown',e=>{
   if(!state.scene || ![0,1,2].includes(e.button))return;e.preventDefault();canvas.focus();canvas.setPointerCapture(e.pointerId);
   clearHover();
   const point=world(e),pan=e.button===2 || e.button===1;state.drag={pan,start:point,screen:screen(e),offset:[...state.offset],moved:false};
-  if(!pan && state.mode==='region'){if(!e.shiftKey)clearSelection();state.selection.region=[...point,...point];updateSelection();}
+  if(!pan && mode==='assembly'){const found=hit(point);if(found.component)pickAssemblyPart(found.component.reference);}
+  else if(!pan && state.mode==='region'){if(!e.shiftKey)clearSelection();state.selection.region=[...point,...point];updateSelection();}
   else if(!pan){const found=hit(point);if(state.mode==='net' && found.net)select('nets',found.net,e.shiftKey);else if(state.mode==='component' && found.component)select('components',found.component.reference,e.shiftKey);else if(!e.shiftKey)clearSelection();}
 });
 canvas.addEventListener('pointermove',e=>{
@@ -737,11 +749,193 @@ function endDrag(e){if(state.drag && state.mode==='region' && !state.drag.pan &&
 canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
 canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
-  if(mode==='electrical'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
+  if(mode==='electrical'||mode==='assembly'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
   const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
 // A resize (panel folded, splitter, window) refits a fitted board and otherwise keeps the middle of the view in place.
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();if(!rect.width||!rect.height)return;const first=state.width===0;
   if(!first&&!state.fitted)state.offset=[state.offset[0]+(rect.width-state.width)/2,state.offset[1]+(rect.height-state.height)/2];state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if((first||state.fitted) && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
+// ---- Assembly: track a manual build part by part ------------------------------------------------
+// The plan comes from the board (and the assembly sheet, when one is open); progress is what the
+// person at the bench reported, saved per board file in this browser.
+const asm={sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[]};
+const assemblyStorageKey=()=>`copper-review:assembly:v1:${state.scene.board.sha256}`;
+const currentLine=()=>asm.plan?.lines.find(l=>l.id===asm.current)||null;
+const lineOf=ref=>asm.plan?.lines.find(l=>l.items.some(i=>i.reference===ref))||null;
+const shortFootprint=f=>String(f||'').split(/[/:]/).pop().replace(/\.kicad_mod$/,'');
+const forward=line=>line.phase==='not-fitted'||line.phase==='supplier'?'inspected':'placed';
+function assemblyDrawState(){
+  if(mode!=='assembly'||!asm.plan)return null;
+  const line=currentLine(),current=new Set(line?line.items.map(i=>i.reference):[]);
+  return {focus:asm.focus,problem:ref=>!!asm.progress.components[ref]?.problem,
+    role:ref=>current.has(ref)?'current':!asm.plan.items.has(ref)?'untracked':statusOf(asm.progress,ref)==='todo'&&asm.plan.items.get(ref).route!=='do not fit'?'todo':'done'};
+}
+function saveAssembly(){
+  if(!state.scene||!asm.plan)return;
+  try{localStorage.setItem(assemblyStorageKey(),JSON.stringify({sheet:asm.sheet,progress:asm.progress,current:asm.current,filter:asm.filter}));$('assembly-save-status').textContent='Saved in this browser · export progress to move it to another device';}
+  catch{$('assembly-save-status').textContent='Browser storage unavailable or full · export progress now';}
+}
+/** Build the plan from the board and a sheet, keep the progress of unchanged parts, and say what changed. */
+function planAssembly(sheet,saved){
+  const plan=buildAssembly(state.scene,sheet),{progress,reset}=reconcileProgress(saved,plan,state.scene),list=(refs,n=12)=>refs.slice(0,n).join(', ')+(refs.length>n?`, +${refs.length-n} more`:'');
+  asm.sheet=sheet;asm.plan=plan;asm.progress=progress;asm.focus=null;
+  const warnings=[];
+  if(sheet)warnings.push(`Assembly sheet for ${sheet.board} (lock ${String(sheet.lock?.sha256||'').slice(0,12)}). Parts match the board by CopperScript path, then designator; nothing proves the board was built from that source.`);
+  else warnings.push('No assembly sheet: parts, values and footprints come from the board file, without MPNs or fit routes. Run copper assembly bom … --assembly-sheet and open the sheet for them.');
+  if(plan.unmatched.length)warnings.push(`${plan.unmatched.length} sheet part(s) are not on this board: ${list(plan.unmatched)}.`);
+  if(plan.untracked.length)warnings.push(sheet?`${plan.untracked.length} board footprint(s) are not in the sheet (not assembled, or not in the lock): ${list(plan.untracked)}.`:`${plan.untracked.length} footprint(s) without solderable pads are not listed: ${list(plan.untracked)}.`);
+  if(reset.length)warnings.push(`Progress cleared for ${reset.length} part(s) whose part identity changed: ${list(reset)}.`);
+  asm.warnings=warnings;
+  if(!currentLine())asm.current=(plan.lines.find(l=>!lineDone(l,progress))||plan.lines[0])?.id||null;
+  return reset;
+}
+function loadAssemblyState(){
+  Object.assign(asm,{sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[]});
+  let raw=null;
+  try{raw=localStorage.getItem(assemblyStorageKey());const saved=JSON.parse(raw||'null');
+    if(saved?.sheet)validateSheet(saved.sheet);
+    asm.current=typeof saved?.current==='string'?saved.current:null;asm.filter=['all','remaining','problems'].includes(saved?.filter)?saved.filter:'all';
+    planAssembly(saved?.sheet||null,saved?.progress||null);}
+  catch{
+    try{if(raw)localStorage.setItem(`${assemblyStorageKey()}:unreadable:${new Date().toISOString()}`,raw);}catch{}
+    if(raw)message('Saved assembly progress could not be read; it was kept under an ":unreadable" key. Open an exported progress file to recover.',true);
+    try{planAssembly(null,null);}catch{asm.plan=null;}}
+  $('assembly-filter').value=asm.filter;renderAssembly();
+}
+function loadAssemblySheet(value){
+  const sheet=validateSheet(value),recorded=Object.keys(asm.progress?.components||{}).length;
+  // Progress recorded from the board alone has no selection identity to carry over to a sheet.
+  if(!asm.sheet&&recorded&&!confirm(`Opening the assembly sheet starts the progress again: ${recorded} part record(s) made without a sheet cannot be matched to its selections. Continue?`))return false;
+  const reset=planAssembly(sheet,asm.sheet?asm.progress:null);saveAssembly();renderAssembly();requestDraw();
+  const s=summarize(asm.plan,asm.progress);
+  message(`Assembly sheet: ${s.parts} parts on the board${asm.plan.unmatched.length?`, ${asm.plan.unmatched.length} not on it`:''}${reset.length?` · progress cleared for ${reset.length} changed part(s)`:''}`,asm.plan.unmatched.length>0);
+  return true;
+}
+function loadAssemblyProgress(value){
+  const file=validateProgress(value,state.scene),reset=planAssembly(file.sheet||null,file);saveAssembly();renderAssembly();requestDraw();
+  message(`Loaded assembly progress for ${Object.keys(asm.progress.components).length} part(s)${reset.length?` · ${reset.length} no longer match their part and were cleared`:''}`,reset.length>0);
+  return true;
+}
+function visibleLines(){
+  const {lines}=asm.plan;
+  if(asm.filter==='remaining')return lines.filter(l=>!lineDone(l,asm.progress)||l.id===asm.current);
+  if(asm.filter==='problems')return lines.filter(l=>l.items.some(i=>entryOf(asm.progress,i.reference).problem)||l.id===asm.current);
+  return lines;
+}
+function lineTitle(line){return line.value||line.mpn||shortFootprint(line.footprint)||line.items[0].designator;}
+function renderAssembly(){
+  if(!state.scene||!asm.plan){$('assembly-lines').replaceChildren();$('assembly-progress-text').textContent='Open a board to plan its assembly.';renderAssemblyDetail();return;}
+  const s=summarize(asm.plan,asm.progress);
+  $('assembly-progress-text').textContent=`${s.placed}/${s.to_place} placed · ${s.inspected}/${s.fitted} inspected · ${s.lines_done}/${s.lines} lines done${s.problems?` · ${s.problems} need rework`:''}`;
+  $('assembly-bar-fill').style.width=`${(s.to_place?s.placed/s.to_place:s.fitted?s.inspected/s.fitted:0)*100}%`;
+  const source=$('assembly-source');source.replaceChildren();
+  source.append(document.createTextNode(asm.sheet?`Sheet: ${asm.sheet.board} · ${asm.sheet.components.length} parts`:'From the board file only · no MPNs or fit routes'));
+  const open=document.createElement('button');open.type='button';open.textContent=asm.sheet?'Open another sheet…':'Open assembly sheet…';open.onclick=()=>$('any-file').click();source.append(document.createElement('br'),open);
+  const list=$('assembly-lines');list.replaceChildren();let phase=null;
+  for(const line of visibleLines()){
+    if(line.phase!==phase){phase=line.phase;const head=document.createElement('div');head.className='assembly-phase';head.textContent=phaseLabel(phase);const hint=document.createElement('small');hint.textContent=phaseHint(phase);head.append(hint);list.append(head);}
+    const done=line.items.filter(i=>statusOf(asm.progress,i.reference)!=='todo').length,complete=lineDone(line,asm.progress);
+    const button=document.createElement('button');button.type='button';button.className='assembly-line';button.classList.toggle('current',line.id===asm.current);button.classList.toggle('done',complete);button.classList.toggle('partial',!complete&&done>0);
+    button.setAttribute('aria-current',String(line.id===asm.current));
+    const check=document.createElement('span');check.className='line-check';check.textContent=complete?'✓':'';check.setAttribute('aria-hidden','true');
+    const body=document.createElement('span');body.className='line-text';const title=document.createElement('span');title.className='line-title';title.textContent=lineTitle(line);
+    const caption=document.createElement('span');caption.className='line-caption';caption.textContent=[shortFootprint(line.footprint),line.mpn,line.items.map(i=>i.designator).join(' ')].filter(Boolean).join(' · ');body.append(title,caption);
+    const count=document.createElement('span');count.className='line-count';count.textContent=`${done}/${line.items.length}`;
+    button.append(check,body,count);
+    if(line.items.some(i=>entryOf(asm.progress,i.reference).problem)){const flag=document.createElement('span');flag.className='line-problem';flag.textContent='!';flag.title='A part needs rework';button.append(flag);}
+    button.title=`${lineTitle(line)}${complete?' · done':''}`;
+    button.onclick=()=>{asm.current=line.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();};
+    list.append(button);
+  }
+  if(!asm.plan.lines.length){const p=document.createElement('p');p.className='quiet';p.textContent='Nothing to assemble: no part on this board has solderable pads.';list.append(p);}
+  $('assembly-warnings').replaceChildren();for(const warning of asm.warnings){const li=document.createElement('li');li.textContent=warning;$('assembly-warnings').append(li);}
+  $('assembly-warning-count').textContent=`(${asm.warnings.length})`;
+  renderAssemblyDetail();list.querySelector('.assembly-line.current')?.scrollIntoView({block:'nearest'});
+}
+function renderAssemblyDetail(){
+  const line=currentLine(),box=$('assembly-current');box.replaceChildren();
+  for(const id of ['assembly-mark','assembly-inspect','assembly-prev','assembly-next','assembly-zoom','assembly-reset'])$(id).disabled=!line;
+  $('assembly-refs').replaceChildren();$('assembly-part').hidden=true;
+  if(!line){box.textContent=asm.plan?'Choose a line on the left.':'Open a board to plan its assembly.';return;}
+  const title=document.createElement('strong');title.textContent=lineTitle(line);box.append(title);
+  const facts=document.createElement('dl'),fact=(name,value)=>{if(!value)return;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;if(value instanceof Node)dd.append(value);else dd.textContent=value;facts.append(dt,dd);};
+  fact('Pass',`${phaseLabel(line.phase)} · ${phaseHint(line.phase)}`);
+  fact('Quantity',String(line.items.length));fact('Parts',line.items.map(i=>i.designator).join(' '));
+  fact('Footprint',shortFootprint(line.footprint));fact('Manufacturer',line.manufacturer);fact('MPN',line.mpn);
+  if(line.supplier||line.supplier_part){let value=[line.supplier,line.supplier_part].filter(Boolean).join(' ');
+    if(/^https:\/\//.test(line.source_url)){const a=document.createElement('a');a.href=line.source_url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=value||'catalogue';value=a;}fact('Supplier',value);}
+  const ones=line.items.filter(i=>pinOne(state.scene.components.find(c=>c.reference===i.reference)||{pads:[]})).length;
+  fact('Pin 1',ones?`ringed on the board${ones<line.items.length?` for ${ones} of ${line.items.length}`:''} (pad 1 / A1)`:'no pad numbered 1 or A1');
+  box.append(facts);
+  const target=forward(line),complete=lineDone(line,asm.progress);
+  $('assembly-mark').textContent=complete?(target==='placed'?'Mark not placed':'Undo check'):line.phase==='not-fitted'?'Confirm left empty':target==='inspected'?'Mark inspected':'Mark placed';
+  $('assembly-inspect').hidden=target==='inspected';
+  $('assembly-inspect').textContent=line.items.every(i=>statusOf(asm.progress,i.reference)==='inspected')?'Undo inspected':'Mark inspected';
+  for(const item of line.items){
+    const entry=entryOf(asm.progress,item.reference),row=document.createElement('button');row.type='button';row.className='assembly-ref';row.classList.toggle('focused',item.reference===asm.focus);
+    const name=document.createElement('span');name.className='ref-name';name.textContent=`${item.designator}${item.side==='back'?' · back':''}`;
+    const status=document.createElement('span');status.className=`ref-status ${entry.status}`;status.textContent={todo:line.phase==='not-fitted'?'not checked':'to place',placed:'placed',inspected:line.phase==='not-fitted'?'left empty':'inspected'}[entry.status];
+    row.append(name);if(entry.problem){const p=document.createElement('span');p.className='ref-problem';p.textContent='rework';row.append(p);}row.append(status);
+    row.title=`${item.path}${entry.note?`\n${entry.note}`:''}\nClick to select · double-click to toggle ${target}`;
+    row.onclick=()=>pickAssemblyPart(item.reference);row.ondblclick=()=>setParts([item],statusOf(asm.progress,item.reference)==='todo'?target:'todo');
+    $('assembly-refs').append(row);
+  }
+  const item=asm.focus&&line.items.find(i=>i.reference===asm.focus);
+  if(item){const entry=entryOf(asm.progress,item.reference);$('assembly-part').hidden=false;$('assembly-part-title').textContent=`PART ${item.designator}`;
+    $('assembly-part-status').value=entry.status;$('assembly-problem').checked=entry.problem;if(document.activeElement!==$('assembly-note'))$('assembly-note').value=entry.note;}
+}
+function setParts(items,status){
+  for(const item of items){const now=statusOf(asm.progress,item.reference);
+    // Marking a line placed never downgrades parts already inspected.
+    updateEntry(asm.progress,item,{status:status==='placed'&&now==='inspected'?'inspected':status});}
+  saveAssembly();renderAssembly();requestDraw();
+}
+function nextLine(from,test){const lines=visibleLines(),start=lines.findIndex(l=>l.id===from);return lines.slice(start+1).find(test)||null;}
+function markCurrent(){
+  const line=currentLine();if(!line)return;
+  if(lineDone(line,asm.progress)){setParts(line.items,'todo');return;}
+  setParts(line.items,forward(line));
+  const next=nextLine(line.id,l=>!lineDone(l,asm.progress));if(next){asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  else if(asm.plan.lines.every(l=>lineDone(l,asm.progress)))message('Every line is done. Inspect the board before powering it.');
+}
+function inspectCurrent(){
+  const line=currentLine();if(!line)return;
+  if(line.items.every(i=>statusOf(asm.progress,i.reference)==='inspected')){setParts(line.items,'placed');return;}
+  setParts(line.items,'inspected');
+  const next=nextLine(line.id,l=>l.items.some(i=>statusOf(asm.progress,i.reference)!=='inspected'));if(next){asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+}
+function stepLine(delta){const lines=visibleLines();if(!lines.length)return;const index=lines.findIndex(l=>l.id===asm.current);
+  const next=lines[Math.min(lines.length-1,Math.max(0,index<0?0:index+delta))];asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+function zoomLine(){const line=currentLine();if(!line)return;const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);if(!boxes.length)return;
+  fit([Math.min(...boxes.map(b=>b[0]))-4,Math.min(...boxes.map(b=>b[1]))-4,Math.max(...boxes.map(b=>b[2]))+4,Math.max(...boxes.map(b=>b[3]))+4]);}
+function pickAssemblyPart(ref){
+  const line=lineOf(ref);if(!line){message(`${ref} is not in the assembly plan.`);return;}
+  asm.current=line.id;asm.focus=ref;saveAssembly();renderAssembly();requestDraw();
+}
+function updateFocused(change){const line=currentLine(),item=line?.items.find(i=>i.reference===asm.focus);if(!item)return;updateEntry(asm.progress,item,change);saveAssembly();renderAssembly();requestDraw();}
+$('assembly-mark').onclick=markCurrent;$('assembly-inspect').onclick=inspectCurrent;
+$('assembly-prev').onclick=()=>stepLine(-1);$('assembly-next').onclick=()=>stepLine(1);$('assembly-zoom').onclick=zoomLine;
+$('assembly-filter').onchange=()=>{asm.filter=$('assembly-filter').value;saveAssembly();renderAssembly();};
+$('assembly-part-status').onchange=()=>updateFocused({status:$('assembly-part-status').value});
+$('assembly-problem').onchange=()=>updateFocused({problem:$('assembly-problem').checked});
+$('assembly-note').oninput=()=>{const line=currentLine(),item=line?.items.find(i=>i.reference===asm.focus);if(!item)return;updateEntry(asm.progress,item,{note:$('assembly-note').value});saveAssembly();
+  // Keep typing in place: refresh only the counts and flags, not the note field.
+  renderAssembly();};
+$('assembly-to-layout').onclick=()=>{const line=currentLine(),item=line?.items.find(i=>i.reference===asm.focus);if(!item)return;const entry=entryOf(asm.progress,item.reference);
+  setMode('layout');select('components',item.reference);resetForm();$('category').value='other';
+  $('observation').value=`Assembly, ${item.designator} (${lineTitle(line)}): ${entry.note||'needs rework'}`;$('observation').focus();};
+$('assembly-reset').onclick=()=>{if(!asm.plan||!confirm('Clear the assembly progress of this board in this browser? Export it first to keep a copy.'))return;asm.progress=emptyProgress(state.scene);saveAssembly();renderAssembly();requestDraw();};
+$('export-assembly').onclick=guarded(()=>{if(!asm.plan)throw Error('Open a board first.');download(`${state.scene.board.name}.assembly.json`,JSON.stringify(makeProgress(state.scene,asm.sheet,asm.progress,asm.plan),null,2)+'\n');message('Assembly progress exported. Open it with the same board file to continue elsewhere.');});
+canvas.addEventListener('dblclick',e=>{if(mode!=='assembly'||!asm.plan)return;const found=hit(world(e));const item=found.component&&asm.plan.items.get(found.component.reference);if(!item)return;
+  const line=lineOf(item.reference);setParts([item],statusOf(asm.progress,item.reference)==='todo'?forward(line):'todo');});
+// Bench keys: Space marks the line and moves on, I inspects, J/K or arrows step, Z zooms, P flags rework.
+document.addEventListener('keydown',e=>{
+  if(mode!=='assembly'||!asm.plan||document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
+  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
+    p:()=>{if(asm.focus)updateFocused({problem:!entryOf(asm.progress,asm.focus).problem});else message('Click a part first to flag it for rework.');},Escape:()=>{asm.focus=null;renderAssembly();requestDraw();}};
+  if(actions[key]){e.preventDefault();actions[key]();}
+});
 // ---- Menus ------------------------------------------------------------------------------------
 function closeMenus(except){for(const list of document.querySelectorAll('.menu-list'))if(list!==except){list.hidden=true;list.previousElementSibling?.setAttribute('aria-expanded','false');}}
 for(const menu of document.querySelectorAll('.menu')){const trigger=menu.querySelector(':scope>button'),list=menu.querySelector('.menu-list');
@@ -762,9 +956,9 @@ document.addEventListener('keydown',e=>{
   if(document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='o'){e.preventDefault();$('any-file').click();return;}
   if(e.ctrlKey||e.metaKey||e.altKey)return;
-  const key=e.key.toLowerCase(),modes={e:'electrical',l:'layout',b:'both'};
+  const key=e.key.toLowerCase(),modes={e:'electrical',l:'layout',b:'both',a:'assembly'};
   if(modes[key]&&available(modes[key])){e.preventDefault();setMode(modes[key]);return;}
-  if(key==='s'){const inBoard=mode==='layout'||mode==='both'&&e.target.closest?.('#pcb-review');
+  if(key==='s'&&mode!=='assembly'){const inBoard=mode==='layout'||mode==='both'&&e.target.closest?.('#pcb-review');
     if(inBoard)showInSchematic();else{const sel=electrical.selection();if(sel)showOnBoard(sel.kind,sel.id);}e.preventDefault();}
 });
 // ---- The divider between schematic and board ----------------------------------------------------

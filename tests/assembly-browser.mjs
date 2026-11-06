@@ -1,0 +1,75 @@
+/* Assembly mode on the demo board: plan without and with a sheet, marking, persistence, export. */
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {mkdirSync,readFileSync} from 'node:fs';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.COPPER_PLAYWRIGHT_MODULE || 'playwright');
+const url=process.argv[2];assert(url && new URL(url).hostname==='127.0.0.1');
+const browser=await chromium.launch({headless:true,...(process.env.COPPER_BROWSER_EXECUTABLE?{executablePath:process.env.COPPER_BROWSER_EXECUTABLE}:{})});
+const page=await browser.newPage({viewport:{width:1520,height:1020}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+mkdirSync('test-results',{recursive:true});
+const lines=()=>page.locator('.assembly-line').evaluateAll(rows=>rows.map(r=>({title:r.querySelector('.line-title').textContent,count:r.querySelector('.line-count').textContent,current:r.classList.contains('current'),done:r.classList.contains('done')})));
+try {
+  await page.goto(url);
+  await page.evaluate(()=>localStorage.clear());await page.reload();
+  await page.waitForFunction(()=>document.querySelectorAll('.entity').length===4);
+  await page.keyboard.press('a');
+  await page.waitForFunction(()=>document.body.dataset.mode==='assembly');
+  assert(await page.locator('.assembly-list-panel').isVisible());
+  assert(!(await page.locator('.explorer').isVisible()),'the review explorer is hidden in assembly mode');
+  // From the board alone: SMD first (smallest body leads), through-hole last.
+  let plan=await lines();
+  assert.deepEqual(plan.map(l=>l.title),['100 nF','Sensor','Controller','Power in'],JSON.stringify(plan));
+  assert(plan[0].current);
+  assert.match(await page.locator('#assembly-source').textContent(),/board file only/);
+  await page.keyboard.press(' ');
+  plan=await lines();
+  assert(plan[0].done&&plan[1].current,JSON.stringify(plan));
+  assert.match(await page.locator('#assembly-progress-text').textContent(),/^1\/4 placed/);
+
+  // Opening the sheet asks before replacing board-only progress, then matches by CopperScript path.
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('#any-file').setInputFiles('examples/demo.assembly-sheet.json');
+  await page.waitForFunction(()=>document.querySelector('#assembly-source').textContent.includes('Sheet: Demo'));
+  assert.match(await page.locator('#assembly-progress-text').textContent(),/^0\/4 placed/);
+  assert.match(await page.locator('#assembly-current').textContent(),/DP-0402-104K/);
+  assert.match(await page.locator('#assembly-current').textContent(),/Pin 1ringed on the board/);
+  await page.locator('#assembly-mark').click();
+  // Pick U1 on the board itself and flag it.
+  await page.locator('#assembly-zoom').click();await page.locator('#fit').click();
+  const box=await page.locator('#board-canvas').boundingBox();
+  const zoom=Math.min((box.width-80)/50,(box.height-80)/35);
+  await page.mouse.click(box.x+box.width/2+(20-25)*zoom,box.y+(box.height-20)/2+(17-17.5)*zoom);
+  await page.waitForFunction(()=>document.querySelector('#assembly-part-title').textContent==='PART U1');
+  await page.locator('#assembly-problem').check();
+  await page.locator('#assembly-note').fill('Pin 3 bridged');
+  await page.locator('#assembly-filter').evaluate(s=>{s.value='problems';s.dispatchEvent(new Event('change'));});
+  plan=await lines();
+  assert.deepEqual(plan.map(l=>l.title),['Controller'],JSON.stringify(plan));
+  await page.locator('#assembly-filter').evaluate(s=>{s.value='all';s.dispatchEvent(new Event('change'));});
+  await page.screenshot({path:'test-results/assembly.png'});
+
+  // Progress survives a reload and exports with the sheet; a different board file is refused.
+  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.entity').length===4);
+  await page.keyboard.press('a');
+  await page.waitForFunction(()=>document.querySelector('#assembly-source').textContent.includes('Sheet: Demo'));
+  assert.match(await page.locator('#assembly-progress-text').textContent(),/^1\/4 placed .* 1 need rework$/);
+  const download=page.waitForEvent('download');await page.locator('#export-menu').click();await page.locator('#export-assembly').click();
+  const exported=JSON.parse(readFileSync(await (await download).path(),'utf8'));
+  assert.equal(exported.schema,'copper-review-assembly/v1');
+  assert.equal(exported.components.U1.note,'Pin 3 bridged');
+  assert.equal(exported.sheet.board,'Demo');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('#assembly-reset').click();
+  await page.waitForFunction(()=>document.querySelector('#assembly-progress-text').textContent.startsWith('0/4 placed'));
+  await page.locator('#any-file').setInputFiles({name:'progress.assembly.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exported))});
+  await page.waitForFunction(()=>document.querySelector('#assembly-progress-text').textContent.startsWith('1/4 placed'));
+  await page.locator('#any-file').setInputFiles({name:'other.assembly.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...exported,board:{...exported.board,sha256:'0'.repeat(64)}}))});
+  await page.waitForFunction(()=>document.querySelector('#message').textContent.includes('different board'));
+  // The layout review is untouched by assembly progress.
+  await page.keyboard.press('l');
+  assert(await page.locator('.explorer').isVisible());
+  assert.deepEqual(errors,[]);
+  console.log('assembly browser test passed');
+} finally {await browser.close();}
