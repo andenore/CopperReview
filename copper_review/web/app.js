@@ -415,7 +415,43 @@ function assemblyView(fn){
   const keep=state.layers;state.layers=[assemblySide()==='back'?'B.Cu':'F.Cu'];
   try{return fn();}finally{state.layers=keep;}
 }
-function draw(){assemblyView(drawBoard);drawMinimap();}
+function draw(){assemblyView(drawBoard);drawAssemblyBadges();drawMinimap();}
+/**
+ * Name and value of every part in the current line, as badges in screen space so they stay
+ * readable at any zoom and when the board is turned over. A part out of view keeps its badge
+ * at the edge of the view with an arrow towards it.
+ */
+function drawAssemblyBadges(){
+  const plan=assemblyDrawState(),line=currentLine();if(!plan||!line||!state.scene||canvas.hidden)return;
+  const dpr=devicePixelRatio||1;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.globalAlpha=1;ctx.setLineDash([]);
+  // Keep clear of the floating toolbar at the top and the status bar at the bottom.
+  const margin=10,ceiling=$('canvas-wrap').querySelector('.toolbar')?.getBoundingClientRect().height+16||56,bottom=state.height-30,placed=[];
+  // The focused part last, so its badge sits on top.
+  const items=[...line.items].sort((a,b)=>(a.reference===asm.focus)-(b.reference===asm.focus));
+  for(const item of items){
+    const c=state.scene.components.find(c=>c.reference===item.reference);if(!c)continue;
+    const b=c.bounds_mm,cx=mirrorX((b[0]+b[2])/2)*state.zoom+state.offset[0],top=b[1]*state.zoom+state.offset[1],under=b[3]*state.zoom+state.offset[1];
+    const focus=item.reference===asm.focus,done=statusOf(asm.progress,item.reference)!=='todo';
+    const value=item.value||item.mpn||'';
+    ctx.font=`700 ${focus?16:14}px Inter,Segoe UI,system-ui,sans-serif`;const refWidth=ctx.measureText(item.designator).width;
+    ctx.font=`500 ${focus?14:12}px Inter,Segoe UI,system-ui,sans-serif`;const valueWidth=value?ctx.measureText(value).width:0;
+    const height=focus?26:22,width=refWidth+(value?valueWidth+10:0)+18+(done?16:0);
+    // Above the part when there is room, else below it; clamped into the view.
+    let x=cx-width/2,y=top-height-8,arrow='';
+    if(y<ceiling)y=under+8;
+    if(cx<0)arrow='◀';else if(cx>state.width)arrow='▶';else if(under<0)arrow='▲';else if(top>bottom)arrow='▼';
+    x=Math.min(Math.max(x,margin),state.width-width-margin-(arrow?16:0));y=Math.min(Math.max(y,ceiling),bottom-height);
+    if(!arrow&&placed.some(r=>boxesOverlap(r,[x,y,x+width,y+height])))continue;
+    placed.push([x,y,x+width,y+height]);
+    ctx.fillStyle=focus?colors.outline:colors.board;ctx.strokeStyle=colors.outline;ctx.lineWidth=2;
+    ctx.beginPath();ctx.roundRect(x,y,width+(arrow?16:0),height,height/2);ctx.fill();ctx.stroke();
+    let tx=x+9;ctx.textBaseline='middle';ctx.textAlign='left';
+    if(arrow){ctx.font='700 12px Inter,Segoe UI,system-ui,sans-serif';ctx.fillStyle=focus?colors.board:colors.outline;ctx.fillText(arrow,tx,y+height/2+1);tx+=16;}
+    if(done){ctx.font='700 13px Inter,Segoe UI,system-ui,sans-serif';ctx.fillStyle=focus?colors.board:colors.done;ctx.fillText('✓',tx,y+height/2+1);tx+=16;}
+    ctx.font=`700 ${focus?16:14}px Inter,Segoe UI,system-ui,sans-serif`;ctx.fillStyle=focus?colors.board:colors.focus;ctx.fillText(item.designator,tx,y+height/2+1);
+    if(value){ctx.font=`500 ${focus?14:12}px Inter,Segoe UI,system-ui,sans-serif`;ctx.fillStyle=focus?colors.board:colors.label;ctx.fillText(value,tx+refWidth+10,y+height/2+1);}
+  }
+}
 function hit(point,forHover=false){return assemblyView(()=>hitBoard(point,forHover));}
 // The realistic look is chosen per mode: on for assembly, off for review unless switched.
 const REALISTIC_DEFAULTS={assembly:true};
@@ -442,7 +478,7 @@ function drawRealisticView(plan){
   for(const c of scene.components){
     if(c.side!==side&&!c.pads.some(p=>p.drill_mm.length))continue;
     const selected=plan?plan.role(c.reference)==='current':state.selection.components.includes(c.reference);
-    drawPartMarks(c,selected,plan);if(selected)labels.push([c,true]);
+    drawPartMarks(c,selected,plan);if(selected&&!plan)labels.push([c,true]);
   }
   drawReferenceLabels(labels);
 }
@@ -510,7 +546,7 @@ function drawBoard() {
       padLabels.push([c,p,selected]);
     }
     drawPartMarks(c,selected,plan);
-    if($('show-labels').checked && cVisible)referenceLabels.push([c,selected]);
+    if($('show-labels').checked && cVisible && !(plan&&selected))referenceLabels.push([c,selected]);
   }
   drawReferenceLabels(referenceLabels);
   for(const v of scene.vias) {
@@ -797,7 +833,7 @@ function drawMinimap(){
   if(!scene||!view3dCanvas.hidden||!state.width){minimap.hidden=true;return;}
   const b=scene.board.bounds_mm,v=viewBox();
   const whole=v[0]<=b[0]+.01&&v[1]<=b[1]+.01&&v[2]>=b[2]-.01&&v[3]>=b[3]-.01;minimap.hidden=whole;if(whole)return;
-  const bw=Math.max(1,b[2]-b[0]),bh=Math.max(1,b[3]-b[1]),scale=Math.min(170/bw,110/bh),pad=6,w=Math.round(bw*scale+pad*2),h=Math.round(bh*scale+pad*2),dpr=devicePixelRatio||1;
+  const bw=Math.max(1,b[2]-b[0]),bh=Math.max(1,b[3]-b[1]),maxW=Math.min(320,Math.max(180,state.width*.28)),maxH=Math.min(220,Math.max(120,(state.height-40)*.32)),scale=Math.min(maxW/bw,maxH/bh),pad=6,w=Math.round(bw*scale+pad*2),h=Math.round(bh*scale+pad*2),dpr=devicePixelRatio||1;
   if(minimap.width!==w*dpr||minimap.height!==h*dpr){minimap.width=w*dpr;minimap.height=h*dpr;minimap.style.width=`${w}px`;minimap.style.height=`${h}px`;}
   const m=minimap.getContext('2d');m.setTransform(dpr,0,0,dpr,0,0);m.clearRect(0,0,w,h);m.translate(pad,pad);m.scale(scale,scale);m.translate(-b[0],-b[1]);if(state.flipped){m.translate(b[0]+b[2],0);m.scale(-1,1);}
   const loops=boardOutline()||[[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]],shape=new Path2D();
@@ -983,7 +1019,10 @@ function renderAssemblyDetail(){
   for(const id of ['assembly-mark','assembly-inspect','assembly-prev','assembly-next','assembly-zoom','assembly-reset'])$(id).disabled=!line;
   $('assembly-refs').replaceChildren();$('assembly-part').hidden=true;
   if(!line){box.textContent=asm.plan?'Choose a line on the left.':'Open a board to plan its assembly.';return;}
-  const title=document.createElement('strong');title.textContent=lineTitle(line);box.append(title);
+  const title=document.createElement('strong');title.className='assembly-value';title.textContent=lineTitle(line);
+  const refs=document.createElement('div');refs.className='assembly-designators';
+  for(const item of line.items){const r=document.createElement('span');r.textContent=item.designator;r.classList.toggle('focused',item.reference===asm.focus);r.classList.toggle('done',statusOf(asm.progress,item.reference)!=='todo');refs.append(r);}
+  box.append(title,refs);if(line.mpn&&line.mpn!==title.textContent){const mpn=document.createElement('div');mpn.className='assembly-mpn';mpn.textContent=line.mpn;box.append(mpn);}
   const facts=document.createElement('dl'),fact=(name,value)=>{if(!value)return;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;if(value instanceof Node)dd.append(value);else dd.textContent=value;facts.append(dt,dd);};
   fact('Pass',`${phaseLabel(line.phase)} · ${phaseHint(line.phase)}`);
   fact('Quantity',String(line.items.length));fact('Parts',line.items.map(i=>i.designator).join(' '));
@@ -1091,7 +1130,7 @@ document.addEventListener('keydown',e=>{
   if(mode!=='assembly'||!asm.plan||document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
-  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,n:()=>stepPart(e.shiftKey?-1:1),x:markPart,v:toggleRealistic,t:()=>setFlipped(!state.flipped),j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
+  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,n:()=>stepPart(e.shiftKey?-1:1),x:markPart,v:toggleRealistic,t:()=>setFlipped(!state.flipped),j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),ArrowRight:()=>stepPart(1),ArrowLeft:()=>stepPart(-1),z:zoomLine,f:()=>$('fit').click(),
     p:()=>{if(asm.focus)updateFocused({problem:!entryOf(asm.progress,asm.focus).problem});else message('Click a part first to flag it for rework.');},Escape:()=>{asm.focus=null;renderAssembly();requestDraw();}};
   if(actions[key]){e.preventDefault();actions[key]();}
 });

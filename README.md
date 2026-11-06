@@ -205,13 +205,16 @@ modelled. Switch it off for the plain view, where placed parts turn green and
 copper is dimmed. The board turns over with the work: a back-side line is seen
 from the back, mirrored as it is on the bench, and a front-side line from the
 front. **Flip** (T) turns it over by hand.
-When zoomed in, a **minimap** in the corner shows the whole side, the current
+Each part of the current line carries a badge with its reference and value; the
+selected part's is filled, and a part out of view keeps its badge at the edge of
+the view with an arrow towards it. When zoomed in, a **minimap** in the corner
+(sized to the view) shows the whole side, the current
 line's parts and where the view is; click or drag in it to move the view.
 
 - **Space** marks the line placed and moves to the next open line, **I** marks it
   inspected, **J/K** or the arrows step (a line elsewhere on the board is brought
   into view), **Z** zooms to its parts, **F** fits the board.
-- **N** / **Shift+N** step through the parts of the current line, panning to each,
+- **→** / **←** (or **N** / **Shift+N**) step through the parts of the current line, panning to each,
   since identical parts can be spread over the board. **X** marks the selected part
   and moves to the next open one.
 - Click a part on the board or in the list to set its own status, flag it
