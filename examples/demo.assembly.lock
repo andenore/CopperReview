@@ -1,0 +1,58 @@
+{
+  "board": "Demo",
+  "schema": "copperscript-assembly-lock/v0.4",
+  "selections": [
+    {
+      "electrical_sha256": "b96781a2a9cd617aff5570a471226358ad4307bd0ee76169455605e87a634e71",
+      "footprint": "Demo:Capacitor",
+      "manufacturer": "Demo Passives",
+      "mpn": "DP-0402-104K",
+      "part": "CAPACITOR",
+      "populate": "consigned",
+      "reference": "control.C1",
+      "reviewed": true,
+      "source_url": null,
+      "supplier": null,
+      "supplier_part": null
+    },
+    {
+      "electrical_sha256": "52c511c32ebf90c0b0e348180bf4e65e9d80850ae83e0df6730f193346192dfd",
+      "footprint": "Demo:Controller",
+      "manufacturer": "Demo Semi",
+      "mpn": "DS-MCU-4",
+      "part": "CONTROLLER",
+      "populate": "consigned",
+      "reference": "control.U1",
+      "reviewed": true,
+      "source_url": null,
+      "supplier": null,
+      "supplier_part": null
+    },
+    {
+      "electrical_sha256": "af96e7f3e0c0c6040096a8217d398e30da9c256fd3340ef28be3f48e4203a1bb",
+      "footprint": "Demo:Connector",
+      "manufacturer": "Demo Connect",
+      "mpn": "DC-2P-254",
+      "part": "CONNECTOR",
+      "populate": "consigned",
+      "reference": "power.J1",
+      "reviewed": true,
+      "source_url": null,
+      "supplier": null,
+      "supplier_part": null
+    },
+    {
+      "electrical_sha256": "f89eb6a0d82211d70aea4682fdf61f01f5d988c42efb928898f0583e758d6028",
+      "footprint": "Demo:Sensor",
+      "manufacturer": "Demo Semi",
+      "mpn": "DS-SENS-4",
+      "part": "SENSOR",
+      "populate": "consigned",
+      "reference": "sensing.U2",
+      "reviewed": false,
+      "source_url": null,
+      "supplier": null,
+      "supplier_part": null
+    }
+  ]
+}

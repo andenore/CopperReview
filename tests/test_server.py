@@ -98,6 +98,7 @@ class ProjectServerTests(unittest.TestCase):
         (root / "board.copper").write_text("board Bench { }")
         (root / "src" / "part.copper").write_text("module Part { }")
         (root / "copper.mod").write_text("module example/bench\n")
+        (root / "assembly.lock").write_text('{"schema": "copperscript-assembly-lock/v0.4", "board": "Bench", "selections": []}\n')
         (root / "notes.txt").write_text("not served")
         (root / ".git" / "hidden.copper").write_text("module Hidden { }")
         (Path(self.dir.name) / "outside.copper").write_text("module Outside { }")
@@ -120,10 +121,12 @@ class ProjectServerTests(unittest.TestCase):
         with self.get("/api/project") as response:
             project = json.load(response)
         self.assertEqual(project["name"], "Bench")
-        self.assertEqual(sorted(f["path"] for f in project["files"]), ["board.copper", "copper.mod", "src/part.copper"])
+        self.assertEqual(sorted(f["path"] for f in project["files"]), ["assembly.lock", "board.copper", "copper.mod", "src/part.copper"])
         (self.root / "board.copper").write_text("board Bench { component R: RESISTOR; }")
         with self.get("/api/project/file?path=board.copper") as response:
             self.assertIn(b"RESISTOR", response.read())
+        with self.get("/api/project/file?path=assembly.lock") as response:
+            self.assertIn(b"copperscript-assembly-lock", response.read())
         with self.get("/api/project/file?path=src/part.copper") as response:
             self.assertTrue(response.read())
         for path in ["notes.txt", "../outside.copper", ".git/hidden.copper", "src/../../outside.copper", "",

@@ -86,7 +86,8 @@ assets before using its source compiler button. Packaged distributions include
 
 **Open → Project folder…** picks a project folder on this computer and compiles it with the
 same browser compiler and project transport as GitHub projects. Only `.copper`
-sources and `copper.mod` / `copper.lock` are read (`.git`, `.copper-cache`,
+sources, `copper.mod` / `copper.lock` and `assembly.lock` (for the Assembly mode, not
+the compiler) are read (`.git`, `.copper-cache`,
 `node_modules` and `target` are skipped); nothing from the folder is uploaded. The
 nearest `copper.mod` above the chosen board marks the project root. Dependencies
 pinned in `copper.lock` are downloaded from their GitHub commit and must match the

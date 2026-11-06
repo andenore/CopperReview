@@ -1,0 +1,80 @@
+{
+  "schema": "copperscript.assembly-sheet/v1",
+  "board": "Demo",
+  "lock": {
+    "schema": "copperscript-assembly-lock/v0.4",
+    "sha256": "14fb44c147bd523161e46a00f4a279cbab6bbb09da037506ec76973e88f9e61f"
+  },
+  "summary": {
+    "component_count": 4,
+    "supplier_assembled_count": 0,
+    "hand_assemble_count": 4,
+    "not_fitted_count": 0
+  },
+  "components": [
+    {
+      "reference": "control.C1",
+      "designator": "control_C1",
+      "part": "CAPACITOR",
+      "value": "100 nF",
+      "manufacturer": "Demo Passives",
+      "mpn": "DP-0402-104K",
+      "footprint": "Demo:Capacitor",
+      "populate": "consigned",
+      "assembly": "hand-assemble",
+      "supplier": null,
+      "supplier_part": null,
+      "source_url": null,
+      "electrical_sha256": "b96781a2a9cd617aff5570a471226358ad4307bd0ee76169455605e87a634e71"
+    },
+    {
+      "reference": "control.U1",
+      "designator": "control_U1",
+      "part": "CONTROLLER",
+      "value": "Controller",
+      "manufacturer": "Demo Semi",
+      "mpn": "DS-MCU-4",
+      "footprint": "Demo:Controller",
+      "populate": "consigned",
+      "assembly": "hand-assemble",
+      "supplier": null,
+      "supplier_part": null,
+      "source_url": null,
+      "electrical_sha256": "52c511c32ebf90c0b0e348180bf4e65e9d80850ae83e0df6730f193346192dfd"
+    },
+    {
+      "reference": "power.J1",
+      "designator": "power_J1",
+      "part": "CONNECTOR",
+      "value": "Power in",
+      "manufacturer": "Demo Connect",
+      "mpn": "DC-2P-254",
+      "footprint": "Demo:Connector",
+      "populate": "consigned",
+      "assembly": "hand-assemble",
+      "supplier": null,
+      "supplier_part": null,
+      "source_url": null,
+      "electrical_sha256": "af96e7f3e0c0c6040096a8217d398e30da9c256fd3340ef28be3f48e4203a1bb"
+    },
+    {
+      "reference": "sensing.U2",
+      "designator": "sensing_U2",
+      "part": "SENSOR",
+      "value": "Sensor",
+      "manufacturer": "Demo Semi",
+      "mpn": "DS-SENS-4",
+      "footprint": "Demo:Sensor",
+      "populate": "consigned",
+      "assembly": "hand-assemble",
+      "supplier": null,
+      "supplier_part": null,
+      "source_url": null,
+      "electrical_sha256": "f89eb6a0d82211d70aea4682fdf61f01f5d988c42efb928898f0583e758d6028"
+    }
+  ],
+  "limits": [
+    "Placement, side and pads come from the board export the tracker opens, matched by reference.",
+    "Recording a component as placed or inspected is not assembly, electrical or manufacturing qualification."
+  ]
+}
