@@ -54,7 +54,7 @@ function setMode(next,{remember=true}={}){
   if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
   const changed=next!==mode;mode=next;document.body.dataset.mode=mode;applyPanels();
   electrical.show(mode==='electrical'||mode==='both');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
-  if(mode==='assembly'){setTool('component');renderAssembly();}updateRealisticButton();requestDraw();
+  if(mode==='assembly'){setTool('component');if(changed)asm.viewSide=null;renderAssembly();}updateRealisticButton();requestDraw();
   for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
     b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
   $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
@@ -274,14 +274,33 @@ function message(text,error=false) {
 }
 function guarded(action) {return async (...args)=>{try{await action(...args);}catch(e){message(e.message,true);}};}
 function requestDraw() {if(!frame)frame=requestAnimationFrame(()=>{frame=0;draw();});}
-function world(event) {const rect=canvas.getBoundingClientRect();return [(event.clientX-rect.left-state.offset[0])/state.zoom,(event.clientY-rect.top-state.offset[1])/state.zoom];}
+// Turned over, the board is seen from the back: mirrored left to right about its centre line.
+// Board coordinates stay native; only the mapping to the screen changes.
+const mirrorX=x=>state.flipped&&state.scene?state.scene.board.bounds_mm[0]+state.scene.board.bounds_mm[2]-x:x;
+function world(event) {const rect=canvas.getBoundingClientRect();return [mirrorX((event.clientX-rect.left-state.offset[0])/state.zoom),(event.clientY-rect.top-state.offset[1])/state.zoom];}
+/** The board area in view, in board millimetres. */
+function viewBox(){const a=mirrorX(-state.offset[0]/state.zoom),b=mirrorX((state.width-state.offset[0])/state.zoom);return [Math.min(a,b),-state.offset[1]/state.zoom,Math.max(a,b),(state.height-20-state.offset[1])/state.zoom];}
+/** Centre the view on a board point at the current zoom. */
+function centerView(x,y){state.offset=[state.width/2-mirrorX(x)*state.zoom,(state.height-20)/2-y*state.zoom];}
+/** Text drawn in board space stays readable when the board is turned over. */
+function upright(x,y,draw){
+  if(!state.flipped){draw(x,y);return;}
+  ctx.save();ctx.translate(x,y);ctx.scale(-1,1);const align=ctx.textAlign;ctx.textAlign=align==='left'?'right':align==='right'?'left':align;draw(0,0);ctx.textAlign=align;ctx.restore();
+}
+function setFlipped(on){
+  on=!!on;if(on===!!state.flipped)return;
+  const [x0,y0,x1,y1]=viewBox();state.flipped=on;if(state.scene)centerView((x0+x1)/2,(y0+y1)/2);
+  $('view-flip').setAttribute('aria-pressed',String(on));$('view-flip').classList.toggle('active',on);
+  if(view3d&&!view3dCanvas.hidden&&on!==(view3d.camera.pitch<0))view3d.flip();
+  requestDraw();
+}
 function screen(event) {const rect=canvas.getBoundingClientRect();return [event.clientX-rect.left,event.clientY-rect.top];}
 function fit(bounds=state.scene?.board.bounds_mm) {
   if(!bounds)return;
   const width=Math.max(2,bounds[2]-bounds[0]),height=Math.max(2,bounds[3]-bounds[1]);
   state.zoom=Math.min((state.width-80)/width,(state.height-80)/height);
   state.zoom=Math.max(.05,state.zoom);
-  state.offset=[state.width/2-(bounds[0]+bounds[2])/2*state.zoom,(state.height-20)/2-(bounds[1]+bounds[3])/2*state.zoom];
+  centerView((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2);
   state.fitted=bounds===state.scene?.board.bounds_mm;
   requestDraw();
 }
@@ -349,7 +368,7 @@ function drawPadLabel(component,pad,selected) {
   const [x,y]=pad.position_mm,small=Math.min(...pad.size_mm)*state.zoom;
   const hovered=pad.id===state.hoverPad,expanded=hovered || selected || isNetFocused(pad.net);
   ctx.save();ctx.globalAlpha=opacity(pad.net,selected && !state.hoverNet);ctx.textBaseline='middle';ctx.setLineDash([]);
-  if(small>=14){ctx.font=`${Math.min(11,small*.45)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle=colors.padText;ctx.textAlign='center';ctx.fillText(pad.number,x,y);}
+  if(small>=14){ctx.font=`${Math.min(11,small*.45)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle=colors.padText;ctx.textAlign='center';upright(x,y,(a,b)=>ctx.fillText(pad.number,a,b));}
   // Names stay upright and sit outside the pad. Small pads reveal them on hover
   // or component/net focus; overview labels wait until there is readable space.
   if(!(pad.pin_name || pad.net) || (!expanded && (small<8 || Math.max(...pad.size_mm)*state.zoom<24)) || (expanded && !hovered && small<5)){ctx.restore();return;}
@@ -360,8 +379,8 @@ function drawPadLabel(component,pad,selected) {
   ctx.font=`${10/state.zoom}px ui-monospace,Consolas,monospace`;
   if(Math.abs(dx)>=Math.abs(dy)){ctx.textAlign=dx<0?'right':'left';tx=dx<0?Math.min(...xs)-gap:Math.max(...xs)+gap;}
   else {ctx.textAlign='center';ty=dy<0?Math.min(...ys)-gap-5/state.zoom:Math.max(...ys)+gap+5/state.zoom;}
-  const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle=colors.board;ctx.strokeText(label,tx,ty);
-  ctx.fillStyle=expanded?colors.focus:colors.label;ctx.fillText(label,tx,ty);ctx.restore();
+  const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle=colors.board;ctx.fillStyle=expanded?colors.focus:colors.label;
+  upright(tx,ty,(a,b)=>{ctx.strokeText(label,a,b);ctx.fillText(label,a,b);});ctx.restore();
 }
 // Reference labels never overlap: selected parts first, then larger bodies; the rest
 // wait until zooming in gives them room (the status bar counts them).
@@ -372,11 +391,11 @@ function drawReferenceLabels(items) {
   const placed=[];let hidden=0;
   for(const [c,selected] of items) {
     const x=c.position_mm[0],y=c.bounds_mm[1]-4/state.zoom;
-    const sx=x*state.zoom+state.offset[0],sy=y*state.zoom+state.offset[1],w=ctx.measureText(c.reference).width*state.zoom;
+    const sx=mirrorX(x)*state.zoom+state.offset[0],sy=y*state.zoom+state.offset[1],w=ctx.measureText(c.reference).width*state.zoom;
     const box=[sx-w/2-2,sy-13,sx+w/2+2,sy+1];
     if(box[2]<0 || box[0]>state.width || box[3]<0 || box[1]>state.height)continue;
     if(!selected && placed.some(b=>boxesOverlap(b,box))){hidden++;continue;}
-    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?colors.focus:colors.label;ctx.fillText(c.reference,x,y);
+    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?colors.focus:colors.label;upright(x,y,(a,b)=>ctx.fillText(c.reference,a,b));
   }
   state.hiddenLabels=hidden;canvas.dataset.hiddenLabels=String(hidden);canvas.dataset.shownLabels=String(placed.length);
 }
@@ -386,7 +405,7 @@ function drawIssues() {
   ctx.textAlign='left';ctx.textBaseline='bottom';
   for(const issue of state.issues.issues){if(!issue.window_mm)continue;const b=issue.window_mm,cited=citedIssueIds().includes(issue.id);
     ctx.globalAlpha=cited?1:.75;ctx.strokeStyle=cited?colors.cited:colors.issue;ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);
-    ctx.fillStyle=ctx.strokeStyle;ctx.fillText(issue.id,b[0],b[1]-2/state.zoom);}
+    ctx.fillStyle=ctx.strokeStyle;upright(b[0],b[1]-2/state.zoom,(x,y)=>ctx.fillText(issue.id,x,y));}
   ctx.setLineDash([]);ctx.globalAlpha=1;
 }
 function citedIssueIds(){return $('issue-ids').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);}
@@ -417,7 +436,7 @@ function drawPartMarks(c,selected,plan){
   if(one){ctx.save();ctx.globalAlpha=1;ctx.translate(...one.position_mm);ctx.strokeStyle=colors.issue;ctx.lineWidth=2/state.zoom;ctx.beginPath();ctx.arc(0,0,Math.max(...one.size_mm)/2+.3,0,Math.PI*2);ctx.stroke();ctx.restore();}
 }
 function drawRealisticView(plan){
-  const scene=state.scene,side=plan?assemblySide():state.layers.includes('F.Cu')||!state.layers.includes('B.Cu')?'front':'back';
+  const scene=state.scene,side=plan?assemblySide():state.flipped||!state.layers.includes('F.Cu')&&state.layers.includes('B.Cu')?'back':'front';
   drawRealistic(ctx,scene,{side,zoom:state.zoom,trackCopper:state.trackCopper,role:plan?plan.role:()=>null,outline:boardOutline()});
   const labels=[];
   for(const c of scene.components){
@@ -437,6 +456,7 @@ function drawBoard() {
     for(let y=((state.offset[1]%step)+step)%step;y<state.height;y+=step)ctx.fillRect(x,y,1,1);
   if(!state.scene)return;
   const scene=state.scene,padLabels=[],referenceLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
+  if(state.flipped){ctx.translate(scene.board.bounds_mm[0]+scene.board.bounds_mm[2],0);ctx.scale(-1,1);}
   // Assembly mode quiets the copper and shows each part as current, done, still to fit or not tracked.
   const plan=assemblyDrawState(),dim=plan?.18:1;
   if(realistic())drawRealisticView(plan);else{
@@ -513,7 +533,7 @@ function drawBoard() {
   if(!plan)for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?colors.regionDone:colors.region;ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle=colors.selectFill;ctx.strokeStyle=colors.selectLine;ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
-  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
+  $('zoom-status').textContent=`${state.flipped?'from back (mirrored) · ':''}${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
 function hitBoard(point,forHover=false) {
   if(!state.scene)return {};
@@ -692,7 +712,7 @@ function renderLayers() {
   }
 }
 function loadScene(scene) {
-  validateScene(scene);if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
+  validateScene(scene);state.flipped=false;$('view-flip').setAttribute('aria-pressed','false');$('view-flip').classList.remove('active');if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
   state.issueSource=null;let raw=null;
   try{raw=localStorage.getItem(storageKey());const saved=JSON.parse(raw || 'null');if(saved){validateReview({schema:REVIEW_SCHEMA,board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=refreshContexts(scene,saved.annotations);$('summary').value=saved.summary || '';$('stage').value=saved.stage;state.issueSource=saved.copperscript_issues || null;}}
   catch{
@@ -751,7 +771,7 @@ async function fetchBody(path,cache=bodyCache){
 }
 async function show3d(on){
   $('view-3d').setAttribute('aria-pressed',String(on));$('view-3d').classList.toggle('active',on);
-  canvas.hidden=on;view3dCanvas.hidden=!on;$('view-flip').hidden=!on;requestDraw();if(!on)return;
+  canvas.hidden=on;view3dCanvas.hidden=!on;requestDraw();if(!on)return;
   const scene=state.scene;
   if(!scene){message('Open a board first.',true);return show3d(false);}
   try{view3d||=createView3d(view3dCanvas);}catch(e){message(`3D view failed: ${e.message}`,true);return show3d(false);}
@@ -764,22 +784,22 @@ async function show3d(on){
   if(state.scene!==scene||view3dCanvas.hidden)return;
   const soup=buildSoup(scene,bodies,undefined,{textRects}),{drawn,approximate,missing}=soup.summary;
   if(!drawn){message(generateError||'This board has no footprint geometry to build 3D bodies from.',true);return show3d(false);}
-  view3d.setSoup(soup,scene.board.bounds_mm);
+  view3d.setSoup(soup,scene.board.bounds_mm);if(!!state.flipped!==(view3d.camera.pitch<0))view3d.flip();
   message(`3D: ${drawn} bodies${approximate?` (${approximate} generated by CopperScript, approximate)`:''}${missing?` · ${missing} without a body`:''}${generateError?` · ${generateError}`:''}${cache.stepProblem?` · STEP models not drawn: ${cache.stepProblem}`:''} · board thickness assumed 1.6 mm`);
 }
 $('view-3d').onclick=guarded(()=>show3d(view3dCanvas.hidden));
-$('view-flip').onclick=()=>view3d?.flip();
+$('view-flip').onclick=()=>setFlipped(!state.flipped);
 $('view-real').onclick=toggleRealistic;
 // ---- Minimap: where the zoomed view sits on the board; click or drag in it to move there ----------
 const minimap=$('minimap');let minimapFrame=null;
 function drawMinimap(){
   const scene=state.scene;
   if(!scene||!view3dCanvas.hidden||!state.width){minimap.hidden=true;return;}
-  const b=scene.board.bounds_mm,v=[-state.offset[0]/state.zoom,-state.offset[1]/state.zoom,(state.width-state.offset[0])/state.zoom,(state.height-20-state.offset[1])/state.zoom];
+  const b=scene.board.bounds_mm,v=viewBox();
   const whole=v[0]<=b[0]+.01&&v[1]<=b[1]+.01&&v[2]>=b[2]-.01&&v[3]>=b[3]-.01;minimap.hidden=whole;if(whole)return;
   const bw=Math.max(1,b[2]-b[0]),bh=Math.max(1,b[3]-b[1]),scale=Math.min(170/bw,110/bh),pad=6,w=Math.round(bw*scale+pad*2),h=Math.round(bh*scale+pad*2),dpr=devicePixelRatio||1;
   if(minimap.width!==w*dpr||minimap.height!==h*dpr){minimap.width=w*dpr;minimap.height=h*dpr;minimap.style.width=`${w}px`;minimap.style.height=`${h}px`;}
-  const m=minimap.getContext('2d');m.setTransform(dpr,0,0,dpr,0,0);m.clearRect(0,0,w,h);m.translate(pad,pad);m.scale(scale,scale);m.translate(-b[0],-b[1]);
+  const m=minimap.getContext('2d');m.setTransform(dpr,0,0,dpr,0,0);m.clearRect(0,0,w,h);m.translate(pad,pad);m.scale(scale,scale);m.translate(-b[0],-b[1]);if(state.flipped){m.translate(b[0]+b[2],0);m.scale(-1,1);}
   const loops=boardOutline()||[[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]],shape=new Path2D();
   for(const loop of loops){shape.moveTo(...loop[0]);for(const p of loop.slice(1))shape.lineTo(...p);shape.closePath();}
   m.fillStyle=realistic()?LOOK.mask:colors.board;m.fill(shape,'evenodd');m.strokeStyle=colors.edge;m.lineWidth=1/scale;m.stroke(shape);
@@ -797,15 +817,15 @@ function drawMinimap(){
 }
 function minimapMove(e){
   if(!minimapFrame)return;const r=minimap.getBoundingClientRect(),{pad,scale,b}=minimapFrame;
-  const x=(e.clientX-r.left-pad)/scale+b[0],y=(e.clientY-r.top-pad)/scale+b[1];
-  state.offset=[state.width/2-x*state.zoom,(state.height-20)/2-y*state.zoom];state.fitted=false;requestDraw();
+  const x=mirrorX((e.clientX-r.left-pad)/scale+b[0]),y=(e.clientY-r.top-pad)/scale+b[1];
+  centerView(x,y);state.fitted=false;requestDraw();
 }
 minimap.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();minimap.setPointerCapture(e.pointerId);minimapMove(e);});
 minimap.addEventListener('pointermove',e=>{if(minimap.hasPointerCapture(e.pointerId))minimapMove(e);});
 minimap.addEventListener('pointerup',e=>{if(minimap.hasPointerCapture(e.pointerId))minimap.releasePointerCapture(e.pointerId);});
 $('fit').onclick=()=>{if(!view3dCanvas.hidden&&view3d&&state.scene)view3d.fit(state.scene.board.bounds_mm);else fit();};$('clear').onclick=()=>{clearSelection();resetForm();};
 canvas.oncontextmenu=e=>e.preventDefault();
-canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();state.fitted=false;const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
+canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();state.fitted=false;const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-mirrorX(p[0])*z,s[1]-p[1]*z];requestDraw();},{passive:false});
 canvas.addEventListener('pointerdown',e=>{
   if(!state.scene || ![0,1,2].includes(e.button))return;e.preventDefault();canvas.focus();canvas.setPointerCapture(e.pointerId);
   clearHover();
@@ -826,7 +846,7 @@ canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercan
 canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
   if(mode==='electrical'||mode==='assembly'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
-  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='v')toggleRealistic();if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
+  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='v')toggleRealistic();if(e.key.toLowerCase()==='t')setFlipped(!state.flipped);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
 // A resize (panel folded, splitter, window) refits a fitted board and otherwise keeps the middle of the view in place.
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();if(!rect.width||!rect.height)return;const first=state.width===0;
   if(!first&&!state.fitted)state.offset=[state.offset[0]+(rect.width-state.width)/2,state.offset[1]+(rect.height-state.height)/2];state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if((first||state.fitted) && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
@@ -876,7 +896,7 @@ function planAssembly(sheet,saved){
   return reset;
 }
 function loadAssemblyState(){
-  Object.assign(asm,{sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[]});
+  Object.assign(asm,{sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[],viewSide:null});
   let raw=null;
   try{raw=localStorage.getItem(assemblyStorageKey());const saved=JSON.parse(raw||'null');
     if(saved?.sheet)validateSheet(saved.sheet);
@@ -951,7 +971,12 @@ function renderAssembly(){
   if(!asm.plan.lines.length){const p=document.createElement('p');p.className='quiet';p.textContent='Nothing to assemble: no part on this board has solderable pads.';list.append(p);}
   $('assembly-warnings').replaceChildren();for(const warning of asm.warnings){const li=document.createElement('li');li.textContent=warning;$('assembly-warnings').append(li);}
   $('assembly-warning-count').textContent=`(${asm.warnings.length})`;
-  renderAssemblyDetail();list.querySelector('.assembly-line.current')?.scrollIntoView({block:'nearest'});
+  renderAssemblyDetail();followAssemblySide();list.querySelector('.assembly-line.current')?.scrollIntoView({block:'nearest'});
+}
+// The view turns over with the work: a back-side pass is seen from the back, as on the bench.
+function followAssemblySide(){
+  if(mode!=='assembly'||!asm.plan)return;const side=assemblySide();
+  if(side!==asm.viewSide){asm.viewSide=side;setFlipped(side==='back');}
 }
 function renderAssemblyDetail(){
   const line=currentLine(),box=$('assembly-current');box.replaceChildren();
@@ -996,7 +1021,7 @@ function setParts(items,status){
 function goLine(id){
   asm.current=id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();
   const line=currentLine();if(!line||!state.scene)return;
-  const v=[-state.offset[0]/state.zoom,-state.offset[1]/state.zoom,(state.width-state.offset[0])/state.zoom,(state.height-20-state.offset[1])/state.zoom];
+  const v=viewBox();
   const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);
   if(boxes.length&&!boxes.some(b=>boxesOverlap(b,v)))centerOnPart(line.items[0].reference);
 }
@@ -1027,7 +1052,7 @@ function centerOnPart(ref){
   const c=state.scene?.components.find(c=>c.reference===ref);if(!c)return;
   const b=c.bounds_mm,fitZoom=Math.min((state.width-80)/(b[2]-b[0]+10),(state.height-80)/(b[3]-b[1]+10));
   if(state.zoom<fitZoom*.5)state.zoom=Math.max(.05,fitZoom);
-  state.offset=[state.width/2-(b[0]+b[2])/2*state.zoom,(state.height-20)/2-(b[1]+b[3])/2*state.zoom];state.fitted=false;requestDraw();
+  centerView((b[0]+b[2])/2,(b[1]+b[3])/2);state.fitted=false;requestDraw();
 }
 /** Step through the parts of the current line, which may be spread over the board. */
 function stepPart(delta){
@@ -1066,7 +1091,7 @@ document.addEventListener('keydown',e=>{
   if(mode!=='assembly'||!asm.plan||document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
-  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,n:()=>stepPart(e.shiftKey?-1:1),x:markPart,v:toggleRealistic,j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
+  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,n:()=>stepPart(e.shiftKey?-1:1),x:markPart,v:toggleRealistic,t:()=>setFlipped(!state.flipped),j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
     p:()=>{if(asm.focus)updateFocused({problem:!entryOf(asm.progress,asm.focus).problem});else message('Click a part first to flag it for rework.');},Escape:()=>{asm.focus=null;renderAssembly();requestDraw();}};
   if(actions[key]){e.preventDefault();actions[key]();}
 });
