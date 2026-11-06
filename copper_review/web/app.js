@@ -9,6 +9,7 @@ import {chipify} from './chips.js';
 import {createView3d} from './view3d.js';
 import {parseVrml,buildSoup,loadBodies,modelKind} from './model3d.js';
 import {drawText,textRects} from './silk-text.js';
+import {drawRealistic,outlineLoops,pasteRecorded,LOOK} from './board-look.js';
 import {readStep} from './steps.js';
 import {generateBodies} from './bodies.js';
 import {buildAssembly,validateSheet,sheetFromLock,isAssemblyLock,reconcileProgress,emptyProgress,updateEntry,entryOf,statusOf,lineDone,summarize,validateProgress,makeProgress,pinOne,phaseLabel,phaseHint,ASSEMBLY_SHEET_SCHEMA,ASSEMBLY_PROGRESS_SCHEMA} from './assembly.js';
@@ -53,7 +54,7 @@ function setMode(next,{remember=true}={}){
   if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
   const changed=next!==mode;mode=next;document.body.dataset.mode=mode;applyPanels();
   electrical.show(mode==='electrical'||mode==='both');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
-  if(mode==='assembly'){setTool('component');renderAssembly();}requestDraw();
+  if(mode==='assembly'){setTool('component');if(changed)asm.viewSide=null;renderAssembly();}updateRealisticButton();requestDraw();
   for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
     b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
   $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
@@ -273,14 +274,33 @@ function message(text,error=false) {
 }
 function guarded(action) {return async (...args)=>{try{await action(...args);}catch(e){message(e.message,true);}};}
 function requestDraw() {if(!frame)frame=requestAnimationFrame(()=>{frame=0;draw();});}
-function world(event) {const rect=canvas.getBoundingClientRect();return [(event.clientX-rect.left-state.offset[0])/state.zoom,(event.clientY-rect.top-state.offset[1])/state.zoom];}
+// Turned over, the board is seen from the back: mirrored left to right about its centre line.
+// Board coordinates stay native; only the mapping to the screen changes.
+const mirrorX=x=>state.flipped&&state.scene?state.scene.board.bounds_mm[0]+state.scene.board.bounds_mm[2]-x:x;
+function world(event) {const rect=canvas.getBoundingClientRect();return [mirrorX((event.clientX-rect.left-state.offset[0])/state.zoom),(event.clientY-rect.top-state.offset[1])/state.zoom];}
+/** The board area in view, in board millimetres. */
+function viewBox(){const a=mirrorX(-state.offset[0]/state.zoom),b=mirrorX((state.width-state.offset[0])/state.zoom);return [Math.min(a,b),-state.offset[1]/state.zoom,Math.max(a,b),(state.height-20-state.offset[1])/state.zoom];}
+/** Centre the view on a board point at the current zoom. */
+function centerView(x,y){state.offset=[state.width/2-mirrorX(x)*state.zoom,(state.height-20)/2-y*state.zoom];}
+/** Text drawn in board space stays readable when the board is turned over. */
+function upright(x,y,draw){
+  if(!state.flipped){draw(x,y);return;}
+  ctx.save();ctx.translate(x,y);ctx.scale(-1,1);const align=ctx.textAlign;ctx.textAlign=align==='left'?'right':align==='right'?'left':align;draw(0,0);ctx.textAlign=align;ctx.restore();
+}
+function setFlipped(on){
+  on=!!on;if(on===!!state.flipped)return;
+  const [x0,y0,x1,y1]=viewBox();state.flipped=on;if(state.scene)centerView((x0+x1)/2,(y0+y1)/2);
+  $('view-flip').setAttribute('aria-pressed',String(on));$('view-flip').classList.toggle('active',on);
+  if(view3d&&!view3dCanvas.hidden&&on!==(view3d.camera.pitch<0))view3d.flip();
+  requestDraw();
+}
 function screen(event) {const rect=canvas.getBoundingClientRect();return [event.clientX-rect.left,event.clientY-rect.top];}
 function fit(bounds=state.scene?.board.bounds_mm) {
   if(!bounds)return;
   const width=Math.max(2,bounds[2]-bounds[0]),height=Math.max(2,bounds[3]-bounds[1]);
   state.zoom=Math.min((state.width-80)/width,(state.height-80)/height);
   state.zoom=Math.max(.05,state.zoom);
-  state.offset=[state.width/2-(bounds[0]+bounds[2])/2*state.zoom,(state.height-20)/2-(bounds[1]+bounds[3])/2*state.zoom];
+  centerView((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2);
   state.fitted=bounds===state.scene?.board.bounds_mm;
   requestDraw();
 }
@@ -348,7 +368,7 @@ function drawPadLabel(component,pad,selected) {
   const [x,y]=pad.position_mm,small=Math.min(...pad.size_mm)*state.zoom;
   const hovered=pad.id===state.hoverPad,expanded=hovered || selected || isNetFocused(pad.net);
   ctx.save();ctx.globalAlpha=opacity(pad.net,selected && !state.hoverNet);ctx.textBaseline='middle';ctx.setLineDash([]);
-  if(small>=14){ctx.font=`${Math.min(11,small*.45)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle=colors.padText;ctx.textAlign='center';ctx.fillText(pad.number,x,y);}
+  if(small>=14){ctx.font=`${Math.min(11,small*.45)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.fillStyle=colors.padText;ctx.textAlign='center';upright(x,y,(a,b)=>ctx.fillText(pad.number,a,b));}
   // Names stay upright and sit outside the pad. Small pads reveal them on hover
   // or component/net focus; overview labels wait until there is readable space.
   if(!(pad.pin_name || pad.net) || (!expanded && (small<8 || Math.max(...pad.size_mm)*state.zoom<24)) || (expanded && !hovered && small<5)){ctx.restore();return;}
@@ -359,8 +379,8 @@ function drawPadLabel(component,pad,selected) {
   ctx.font=`${10/state.zoom}px ui-monospace,Consolas,monospace`;
   if(Math.abs(dx)>=Math.abs(dy)){ctx.textAlign=dx<0?'right':'left';tx=dx<0?Math.min(...xs)-gap:Math.max(...xs)+gap;}
   else {ctx.textAlign='center';ty=dy<0?Math.min(...ys)-gap-5/state.zoom:Math.max(...ys)+gap+5/state.zoom;}
-  const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle=colors.board;ctx.strokeText(label,tx,ty);
-  ctx.fillStyle=expanded?colors.focus:colors.label;ctx.fillText(label,tx,ty);ctx.restore();
+  const label=padLabel(pad);ctx.lineWidth=3/state.zoom;ctx.strokeStyle=colors.board;ctx.fillStyle=expanded?colors.focus:colors.label;
+  upright(tx,ty,(a,b)=>{ctx.strokeText(label,a,b);ctx.fillText(label,a,b);});ctx.restore();
 }
 // Reference labels never overlap: selected parts first, then larger bodies; the rest
 // wait until zooming in gives them room (the status bar counts them).
@@ -371,11 +391,11 @@ function drawReferenceLabels(items) {
   const placed=[];let hidden=0;
   for(const [c,selected] of items) {
     const x=c.position_mm[0],y=c.bounds_mm[1]-4/state.zoom;
-    const sx=x*state.zoom+state.offset[0],sy=y*state.zoom+state.offset[1],w=ctx.measureText(c.reference).width*state.zoom;
+    const sx=mirrorX(x)*state.zoom+state.offset[0],sy=y*state.zoom+state.offset[1],w=ctx.measureText(c.reference).width*state.zoom;
     const box=[sx-w/2-2,sy-13,sx+w/2+2,sy+1];
     if(box[2]<0 || box[0]>state.width || box[3]<0 || box[1]>state.height)continue;
     if(!selected && placed.some(b=>boxesOverlap(b,box))){hidden++;continue;}
-    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?colors.focus:colors.label;ctx.fillText(c.reference,x,y);
+    placed.push(box);ctx.globalAlpha=selected?1:.85;ctx.fillStyle=selected?colors.focus:colors.label;upright(x,y,(a,b)=>ctx.fillText(c.reference,a,b));
   }
   state.hiddenLabels=hidden;canvas.dataset.hiddenLabels=String(hidden);canvas.dataset.shownLabels=String(placed.length);
 }
@@ -385,11 +405,48 @@ function drawIssues() {
   ctx.textAlign='left';ctx.textBaseline='bottom';
   for(const issue of state.issues.issues){if(!issue.window_mm)continue;const b=issue.window_mm,cited=citedIssueIds().includes(issue.id);
     ctx.globalAlpha=cited?1:.75;ctx.strokeStyle=cited?colors.cited:colors.issue;ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);
-    ctx.fillStyle=ctx.strokeStyle;ctx.fillText(issue.id,b[0],b[1]-2/state.zoom);}
+    ctx.fillStyle=ctx.strokeStyle;upright(b[0],b[1]-2/state.zoom,(x,y)=>ctx.fillText(issue.id,x,y));}
   ctx.setLineDash([]);ctx.globalAlpha=1;
 }
 function citedIssueIds(){return $('issue-ids').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);}
-function draw() {
+// Assembly shows one side: the current line's. Drawing and picking use that side's copper alone.
+function assemblyView(fn){
+  if(mode!=='assembly'||!asm.plan)return fn();
+  const keep=state.layers;state.layers=[assemblySide()==='back'?'B.Cu':'F.Cu'];
+  try{return fn();}finally{state.layers=keep;}
+}
+function draw(){assemblyView(drawBoard);drawMinimap();}
+function hit(point,forHover=false){return assemblyView(()=>hitBoard(point,forHover));}
+// The realistic look is chosen per mode: on for assembly, off for review unless switched.
+const REALISTIC_DEFAULTS={assembly:true};
+const realisticChoice=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:realistic'))||{};}catch{return {};}})();
+const realisticChosen=()=>realisticChoice[mode]??REALISTIC_DEFAULTS[mode]??false;
+const realistic=()=>realisticChosen()&&view3dCanvas.hidden;
+function updateRealisticButton(){const on=realisticChosen();$('view-real').setAttribute('aria-pressed',String(on));$('view-real').classList.toggle('active',on);}
+function toggleRealistic(){realisticChoice[mode]=!realisticChosen();try{localStorage.setItem('copper-review:realistic',JSON.stringify(realisticChoice));}catch{}updateRealisticButton();requestDraw();}
+let outlineCache={scene:null,loops:null};
+function boardOutline(){if(outlineCache.scene!==state.scene)outlineCache={scene:state.scene,loops:outlineLoops(state.scene.drawings)};return outlineCache.loops;}
+/** Outline, rework flag and pin 1 of a part; shared by both looks. */
+function drawPartMarks(c,selected,plan){
+  if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=(plan?.focus===c.reference?3:1.6)/state.zoom;ctx.setLineDash(plan?.focus===c.reference?[]:[5/state.zoom,3/state.zoom]);
+    const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
+  if(plan?.problem(c.reference)){ctx.globalAlpha=1;ctx.strokeStyle=colors.issue;ctx.lineWidth=1.6/state.zoom;const b=c.bounds_mm;ctx.strokeRect(b[0]-.5,b[1]-.5,b[2]-b[0]+1,b[3]-b[1]+1);}
+  // Pin 1 of the part being placed, from its pad numbering: orientation is the usual mistake.
+  const one=selected&&plan?pinOne(c):null;
+  if(one){ctx.save();ctx.globalAlpha=1;ctx.translate(...one.position_mm);ctx.strokeStyle=colors.issue;ctx.lineWidth=2/state.zoom;ctx.beginPath();ctx.arc(0,0,Math.max(...one.size_mm)/2+.3,0,Math.PI*2);ctx.stroke();ctx.restore();}
+}
+function drawRealisticView(plan){
+  const scene=state.scene,side=plan?assemblySide():state.flipped||!state.layers.includes('F.Cu')&&state.layers.includes('B.Cu')?'back':'front';
+  drawRealistic(ctx,scene,{side,zoom:state.zoom,trackCopper:state.trackCopper,role:plan?plan.role:()=>null,outline:boardOutline()});
+  const labels=[];
+  for(const c of scene.components){
+    if(c.side!==side&&!c.pads.some(p=>p.drill_mm.length))continue;
+    const selected=plan?plan.role(c.reference)==='current':state.selection.components.includes(c.reference);
+    drawPartMarks(c,selected,plan);if(selected)labels.push([c,true]);
+  }
+  drawReferenceLabels(labels);
+}
+function drawBoard() {
   const dpr=devicePixelRatio || 1;
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.globalAlpha=1;ctx.clearRect(0,0,state.width,state.height);
   // Screen-space grid uses engineering increments, avoiding dense dots at low zoom.
@@ -399,8 +456,10 @@ function draw() {
     for(let y=((state.offset[1]%step)+step)%step;y<state.height;y+=step)ctx.fillRect(x,y,1,1);
   if(!state.scene)return;
   const scene=state.scene,padLabels=[],referenceLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
+  if(state.flipped){ctx.translate(scene.board.bounds_mm[0]+scene.board.bounds_mm[2],0);ctx.scale(-1,1);}
   // Assembly mode quiets the copper and shows each part as current, done, still to fit or not tracked.
   const plan=assemblyDrawState(),dim=plan?.18:1;
+  if(realistic())drawRealisticView(plan);else{
   // Edge geometry (including inner cutouts) remains visible at all layer settings.
   for(const g of scene.drawings.filter(g=>g.layer==='Edge.Cuts')){ctx.globalAlpha=1;graphic(g,colors.edge);}
   if($('show-zones').checked)for(const z of scene.zones) {
@@ -450,12 +509,7 @@ function draw() {
       ctx.restore();
       padLabels.push([c,p,selected]);
     }
-    if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=(plan?.focus===c.reference?3:1.6)/state.zoom;ctx.setLineDash(plan?.focus===c.reference?[]:[5/state.zoom,3/state.zoom]);
-      const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
-    if(plan?.problem(c.reference)){ctx.globalAlpha=1;ctx.strokeStyle=colors.issue;ctx.lineWidth=1.6/state.zoom;const b=c.bounds_mm;ctx.strokeRect(b[0]-.5,b[1]-.5,b[2]-b[0]+1,b[3]-b[1]+1);}
-    // Pin 1 of the part being placed, from its pad numbering: orientation is the usual mistake.
-    const one=selected&&plan?pinOne(c):null;
-    if(one){ctx.save();ctx.globalAlpha=1;ctx.translate(...one.position_mm);ctx.strokeStyle=colors.issue;ctx.lineWidth=2/state.zoom;ctx.beginPath();ctx.arc(0,0,Math.max(...one.size_mm)/2+.3,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    drawPartMarks(c,selected,plan);
     if($('show-labels').checked && cVisible)referenceLabels.push([c,selected]);
   }
   drawReferenceLabels(referenceLabels);
@@ -474,13 +528,14 @@ function draw() {
     }ctx.setLineDash([]);
   }
   for(const args of padLabels)drawPadLabel(...args);
+  }
   ctx.globalAlpha=1;if(!plan)drawIssues();
   if(!plan)for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?colors.regionDone:colors.region;ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle=colors.selectFill;ctx.strokeStyle=colors.selectLine;ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
-  $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
+  $('zoom-status').textContent=`${state.flipped?'from back (mirrored) · ':''}${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
-function hit(point,forHover=false) {
+function hitBoard(point,forHover=false) {
   if(!state.scene)return {};
   const tol=5/state.zoom;
   for(const c of [...state.scene.components].reverse())for(const p of c.pads) {
@@ -657,7 +712,7 @@ function renderLayers() {
   }
 }
 function loadScene(scene) {
-  validateScene(scene);if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
+  validateScene(scene);state.flipped=false;$('view-flip').setAttribute('aria-pressed','false');$('view-flip').classList.remove('active');if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
   state.issueSource=null;let raw=null;
   try{raw=localStorage.getItem(storageKey());const saved=JSON.parse(raw || 'null');if(saved){validateReview({schema:REVIEW_SCHEMA,board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=refreshContexts(scene,saved.annotations);$('summary').value=saved.summary || '';$('stage').value=saved.stage;state.issueSource=saved.copperscript_issues || null;}}
   catch{
@@ -716,7 +771,7 @@ async function fetchBody(path,cache=bodyCache){
 }
 async function show3d(on){
   $('view-3d').setAttribute('aria-pressed',String(on));$('view-3d').classList.toggle('active',on);
-  canvas.hidden=on;view3dCanvas.hidden=!on;$('view-flip').hidden=!on;if(!on)return;
+  canvas.hidden=on;view3dCanvas.hidden=!on;requestDraw();if(!on)return;
   const scene=state.scene;
   if(!scene){message('Open a board first.',true);return show3d(false);}
   try{view3d||=createView3d(view3dCanvas);}catch(e){message(`3D view failed: ${e.message}`,true);return show3d(false);}
@@ -729,14 +784,48 @@ async function show3d(on){
   if(state.scene!==scene||view3dCanvas.hidden)return;
   const soup=buildSoup(scene,bodies,undefined,{textRects}),{drawn,approximate,missing}=soup.summary;
   if(!drawn){message(generateError||'This board has no footprint geometry to build 3D bodies from.',true);return show3d(false);}
-  view3d.setSoup(soup,scene.board.bounds_mm);
+  view3d.setSoup(soup,scene.board.bounds_mm);if(!!state.flipped!==(view3d.camera.pitch<0))view3d.flip();
   message(`3D: ${drawn} bodies${approximate?` (${approximate} generated by CopperScript, approximate)`:''}${missing?` · ${missing} without a body`:''}${generateError?` · ${generateError}`:''}${cache.stepProblem?` · STEP models not drawn: ${cache.stepProblem}`:''} · board thickness assumed 1.6 mm`);
 }
 $('view-3d').onclick=guarded(()=>show3d(view3dCanvas.hidden));
-$('view-flip').onclick=()=>view3d?.flip();
+$('view-flip').onclick=()=>setFlipped(!state.flipped);
+$('view-real').onclick=toggleRealistic;
+// ---- Minimap: where the zoomed view sits on the board; click or drag in it to move there ----------
+const minimap=$('minimap');let minimapFrame=null;
+function drawMinimap(){
+  const scene=state.scene;
+  if(!scene||!view3dCanvas.hidden||!state.width){minimap.hidden=true;return;}
+  const b=scene.board.bounds_mm,v=viewBox();
+  const whole=v[0]<=b[0]+.01&&v[1]<=b[1]+.01&&v[2]>=b[2]-.01&&v[3]>=b[3]-.01;minimap.hidden=whole;if(whole)return;
+  const bw=Math.max(1,b[2]-b[0]),bh=Math.max(1,b[3]-b[1]),scale=Math.min(170/bw,110/bh),pad=6,w=Math.round(bw*scale+pad*2),h=Math.round(bh*scale+pad*2),dpr=devicePixelRatio||1;
+  if(minimap.width!==w*dpr||minimap.height!==h*dpr){minimap.width=w*dpr;minimap.height=h*dpr;minimap.style.width=`${w}px`;minimap.style.height=`${h}px`;}
+  const m=minimap.getContext('2d');m.setTransform(dpr,0,0,dpr,0,0);m.clearRect(0,0,w,h);m.translate(pad,pad);m.scale(scale,scale);m.translate(-b[0],-b[1]);if(state.flipped){m.translate(b[0]+b[2],0);m.scale(-1,1);}
+  const loops=boardOutline()||[[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]],shape=new Path2D();
+  for(const loop of loops){shape.moveTo(...loop[0]);for(const p of loop.slice(1))shape.lineTo(...p);shape.closePath();}
+  m.fillStyle=realistic()?LOOK.mask:colors.board;m.fill(shape,'evenodd');m.strokeStyle=colors.edge;m.lineWidth=1/scale;m.stroke(shape);
+  const plan=assemblyDrawState(),side=plan?assemblySide():null;
+  for(const c of scene.components){
+    if(side&&c.side!==side&&!c.pads.some(p=>p.drill_mm.length))continue;
+    const role=plan?plan.role(c.reference):state.selection.components.includes(c.reference)?'current':'todo';
+    if(role==='untracked')continue;
+    const cb=c.bounds_mm,grow=role==='current'?2.5/scale:0;
+    m.fillStyle=role==='current'?colors.outline:role==='done'?colors.done:colors.graphic;m.globalAlpha=role==='current'?1:.65;
+    m.fillRect(cb[0]-grow,cb[1]-grow,Math.max(cb[2]-cb[0],1/scale)+grow*2,Math.max(cb[3]-cb[1],1/scale)+grow*2);
+  }
+  m.globalAlpha=1;m.strokeStyle=colors.focus;m.lineWidth=1.5/scale;m.strokeRect(v[0],v[1],v[2]-v[0],v[3]-v[1]);
+  minimapFrame={pad,scale,b};
+}
+function minimapMove(e){
+  if(!minimapFrame)return;const r=minimap.getBoundingClientRect(),{pad,scale,b}=minimapFrame;
+  const x=mirrorX((e.clientX-r.left-pad)/scale+b[0]),y=(e.clientY-r.top-pad)/scale+b[1];
+  centerView(x,y);state.fitted=false;requestDraw();
+}
+minimap.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();minimap.setPointerCapture(e.pointerId);minimapMove(e);});
+minimap.addEventListener('pointermove',e=>{if(minimap.hasPointerCapture(e.pointerId))minimapMove(e);});
+minimap.addEventListener('pointerup',e=>{if(minimap.hasPointerCapture(e.pointerId))minimap.releasePointerCapture(e.pointerId);});
 $('fit').onclick=()=>{if(!view3dCanvas.hidden&&view3d&&state.scene)view3d.fit(state.scene.board.bounds_mm);else fit();};$('clear').onclick=()=>{clearSelection();resetForm();};
 canvas.oncontextmenu=e=>e.preventDefault();
-canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();state.fitted=false;const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
+canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();state.fitted=false;const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-mirrorX(p[0])*z,s[1]-p[1]*z];requestDraw();},{passive:false});
 canvas.addEventListener('pointerdown',e=>{
   if(!state.scene || ![0,1,2].includes(e.button))return;e.preventDefault();canvas.focus();canvas.setPointerCapture(e.pointerId);
   clearHover();
@@ -757,7 +846,7 @@ canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercan
 canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
   if(mode==='electrical'||mode==='assembly'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
-  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
+  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='v')toggleRealistic();if(e.key.toLowerCase()==='t')setFlipped(!state.flipped);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
 // A resize (panel folded, splitter, window) refits a fitted board and otherwise keeps the middle of the view in place.
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();if(!rect.width||!rect.height)return;const first=state.width===0;
   if(!first&&!state.fitted)state.offset=[state.offset[0]+(rect.width-state.width)/2,state.offset[1]+(rect.height-state.height)/2];state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if((first||state.fitted) && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
@@ -772,6 +861,8 @@ const currentLine=()=>asm.plan?.lines.find(l=>l.id===asm.current)||null;
 const lineOf=ref=>asm.plan?.lines.find(l=>l.items.some(i=>i.reference===ref))||null;
 const shortFootprint=f=>String(f||'').split(/[/:]/).pop().replace(/\.kicad_mod$/,'');
 const forward=line=>line.phase==='not-fitted'||line.phase==='supplier'?'inspected':'placed';
+/** The side being assembled: the current line's (through-hole parts go in from their own side). */
+const assemblySide=()=>currentLine()?.side||'front';
 function assemblyDrawState(){
   if(mode!=='assembly'||!asm.plan)return null;
   const line=currentLine(),current=new Set(line?line.items.map(i=>i.reference):[]);
@@ -799,12 +890,13 @@ function planAssembly(sheet,saved){
   if(plan.unmatched.length)warnings.push(`${plan.unmatched.length} sheet part(s) are not on this board: ${list(plan.unmatched)}.`);
   if(plan.untracked.length)warnings.push(sheet?`${plan.untracked.length} board footprint(s) are not in the sheet (not assembled, or not in the lock): ${list(plan.untracked)}.`:`${plan.untracked.length} footprint(s) without solderable pads are not listed: ${list(plan.untracked)}.`);
   if(reset.length)warnings.push(`Progress cleared for ${reset.length} part(s) whose part identity changed: ${list(reset)}.`);
+  if(!pasteRecorded(state.scene))warnings.push('This board scene records no paste layers (an older export), so the realistic view assumes paste on every SMD pad.');
   asm.warnings=warnings;
   if(!currentLine())asm.current=(plan.lines.find(l=>!lineDone(l,progress))||plan.lines[0])?.id||null;
   return reset;
 }
 function loadAssemblyState(){
-  Object.assign(asm,{sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[]});
+  Object.assign(asm,{sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[],viewSide:null});
   let raw=null;
   try{raw=localStorage.getItem(assemblyStorageKey());const saved=JSON.parse(raw||'null');
     if(saved?.sheet)validateSheet(saved.sheet);
@@ -873,13 +965,18 @@ function renderAssembly(){
     button.append(check,body,count);
     if(line.items.some(i=>entryOf(asm.progress,i.reference).problem)){const flag=document.createElement('span');flag.className='line-problem';flag.textContent='!';flag.title='A part needs rework';button.append(flag);}
     button.title=`${lineTitle(line)}${complete?' · done':''}`;
-    button.onclick=()=>{asm.current=line.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();};
+    button.onclick=()=>{goLine(line.id);};
     list.append(button);
   }
   if(!asm.plan.lines.length){const p=document.createElement('p');p.className='quiet';p.textContent='Nothing to assemble: no part on this board has solderable pads.';list.append(p);}
   $('assembly-warnings').replaceChildren();for(const warning of asm.warnings){const li=document.createElement('li');li.textContent=warning;$('assembly-warnings').append(li);}
   $('assembly-warning-count').textContent=`(${asm.warnings.length})`;
-  renderAssemblyDetail();list.querySelector('.assembly-line.current')?.scrollIntoView({block:'nearest'});
+  renderAssemblyDetail();followAssemblySide();list.querySelector('.assembly-line.current')?.scrollIntoView({block:'nearest'});
+}
+// The view turns over with the work: a back-side pass is seen from the back, as on the bench.
+function followAssemblySide(){
+  if(mode!=='assembly'||!asm.plan)return;const side=assemblySide();
+  if(side!==asm.viewSide){asm.viewSide=side;setFlipped(side==='back');}
 }
 function renderAssemblyDetail(){
   const line=currentLine(),box=$('assembly-current');box.replaceChildren();
@@ -907,7 +1004,7 @@ function renderAssemblyDetail(){
     const status=document.createElement('span');status.className=`ref-status ${entry.status}`;status.textContent={todo:line.phase==='not-fitted'?'not checked':'to place',placed:'placed',inspected:line.phase==='not-fitted'?'left empty':'inspected'}[entry.status];
     row.append(name);if(entry.problem){const p=document.createElement('span');p.className='ref-problem';p.textContent='rework';row.append(p);}row.append(status);
     row.title=`${item.path}${entry.note?`\n${entry.note}`:''}\nClick to select · double-click to toggle ${target}`;
-    row.onclick=()=>pickAssemblyPart(item.reference);row.ondblclick=()=>setParts([item],statusOf(asm.progress,item.reference)==='todo'?target:'todo');
+    row.onclick=()=>{pickAssemblyPart(item.reference);centerOnPart(item.reference);};row.ondblclick=()=>setParts([item],statusOf(asm.progress,item.reference)==='todo'?target:'todo');
     $('assembly-refs').append(row);
   }
   const item=asm.focus&&line.items.find(i=>i.reference===asm.focus);
@@ -920,30 +1017,61 @@ function setParts(items,status){
     updateEntry(asm.progress,item,{status:status==='placed'&&now==='inspected'?'inspected':status});}
   saveAssembly();renderAssembly();requestDraw();
 }
+/** Make a line current; if none of its parts is in view (another side, or zoomed elsewhere), go to its first. */
+function goLine(id){
+  asm.current=id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();
+  const line=currentLine();if(!line||!state.scene)return;
+  const v=viewBox();
+  const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);
+  if(boxes.length&&!boxes.some(b=>boxesOverlap(b,v)))centerOnPart(line.items[0].reference);
+}
 function nextLine(from,test){const lines=visibleLines(),start=lines.findIndex(l=>l.id===from);return lines.slice(start+1).find(test)||null;}
 function markCurrent(){
   const line=currentLine();if(!line)return;
   if(lineDone(line,asm.progress)){setParts(line.items,'todo');return;}
   setParts(line.items,forward(line));
-  const next=nextLine(line.id,l=>!lineDone(l,asm.progress));if(next){asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  const next=nextLine(line.id,l=>!lineDone(l,asm.progress));if(next){goLine(next.id);}
   else if(asm.plan.lines.every(l=>lineDone(l,asm.progress)))message('Every line is done. Inspect the board before powering it.');
 }
 function inspectCurrent(){
   const line=currentLine();if(!line)return;
   if(line.items.every(i=>statusOf(asm.progress,i.reference)==='inspected')){setParts(line.items,'placed');return;}
   setParts(line.items,'inspected');
-  const next=nextLine(line.id,l=>l.items.some(i=>statusOf(asm.progress,i.reference)!=='inspected'));if(next){asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  const next=nextLine(line.id,l=>l.items.some(i=>statusOf(asm.progress,i.reference)!=='inspected'));if(next){goLine(next.id);}
 }
 function stepLine(delta){const lines=visibleLines();if(!lines.length)return;const index=lines.findIndex(l=>l.id===asm.current);
-  const next=lines[Math.min(lines.length-1,Math.max(0,index<0?0:index+delta))];asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  const next=lines[Math.min(lines.length-1,Math.max(0,index<0?0:index+delta))];goLine(next.id);}
 function zoomLine(){const line=currentLine();if(!line)return;const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);if(!boxes.length)return;
   fit([Math.min(...boxes.map(b=>b[0]))-4,Math.min(...boxes.map(b=>b[1]))-4,Math.max(...boxes.map(b=>b[2]))+4,Math.max(...boxes.map(b=>b[3]))+4]);}
 function pickAssemblyPart(ref){
   const line=lineOf(ref);if(!line){message(`${ref} is not in the assembly plan.`);return;}
   asm.current=line.id;asm.focus=ref;saveAssembly();renderAssembly();requestDraw();
 }
+/** Bring a part into view: keep the zoom when it is close enough, else zoom in on the part. */
+function centerOnPart(ref){
+  const c=state.scene?.components.find(c=>c.reference===ref);if(!c)return;
+  const b=c.bounds_mm,fitZoom=Math.min((state.width-80)/(b[2]-b[0]+10),(state.height-80)/(b[3]-b[1]+10));
+  if(state.zoom<fitZoom*.5)state.zoom=Math.max(.05,fitZoom);
+  centerView((b[0]+b[2])/2,(b[1]+b[3])/2);state.fitted=false;requestDraw();
+}
+/** Step through the parts of the current line, which may be spread over the board. */
+function stepPart(delta){
+  const line=currentLine();if(!line)return;const items=line.items,index=items.findIndex(i=>i.reference===asm.focus);
+  const next=items[index<0?(delta>0?0:items.length-1):(index+delta+items.length)%items.length];
+  asm.focus=next.reference;saveAssembly();renderAssembly();centerOnPart(next.reference);
+}
+/** Mark the focused part (or the line's first open one) and move to the next open part. */
+function markPart(){
+  const line=currentLine();if(!line)return;const target=forward(line),open=i=>statusOf(asm.progress,i.reference)==='todo';
+  let item=line.items.find(i=>i.reference===asm.focus);
+  if(!item){item=line.items.find(open);if(!item){message('Every part of this line is marked. Use Space to undo the line.');return;}}
+  setParts([item],open(item)?target:'todo');
+  const next=line.items.find(open);
+  if(next){asm.focus=next.reference;saveAssembly();renderAssembly();centerOnPart(next.reference);}
+  else{const after=nextLine(line.id,l=>!lineDone(l,asm.progress));if(after&&lineDone(line,asm.progress)){goLine(after.id);}}
+}
 function updateFocused(change){const line=currentLine(),item=line?.items.find(i=>i.reference===asm.focus);if(!item)return;updateEntry(asm.progress,item,change);saveAssembly();renderAssembly();requestDraw();}
-$('assembly-mark').onclick=markCurrent;$('assembly-inspect').onclick=inspectCurrent;
+$('assembly-mark').onclick=markCurrent;$('assembly-part-prev').onclick=()=>stepPart(-1);$('assembly-part-next').onclick=()=>stepPart(1);$('assembly-part-mark').onclick=markPart;$('assembly-inspect').onclick=inspectCurrent;
 $('assembly-prev').onclick=()=>stepLine(-1);$('assembly-next').onclick=()=>stepLine(1);$('assembly-zoom').onclick=zoomLine;
 $('assembly-filter').onchange=()=>{asm.filter=$('assembly-filter').value;saveAssembly();renderAssembly();};
 $('assembly-part-status').onchange=()=>updateFocused({status:$('assembly-part-status').value});
@@ -963,7 +1091,7 @@ document.addEventListener('keydown',e=>{
   if(mode!=='assembly'||!asm.plan||document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
-  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
+  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,n:()=>stepPart(e.shiftKey?-1:1),x:markPart,v:toggleRealistic,t:()=>setFlipped(!state.flipped),j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
     p:()=>{if(asm.focus)updateFocused({problem:!entryOf(asm.progress,asm.focus).problem});else message('Click a part first to flag it for rework.');},Escape:()=>{asm.focus=null;renderAssembly();requestDraw();}};
   if(actions[key]){e.preventDefault();actions[key]();}
 });

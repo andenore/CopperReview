@@ -186,6 +186,16 @@ class ImportTests(unittest.TestCase):
         self.assertEqual([c["reference"] for c in legacy["components"]], ["FP1", "FP2"])
         self.assertTrue(all("native_reference" not in c for c in legacy["components"]))
 
+    def test_pads_record_paste_and_mask_layers_per_side(self):
+        board = b"""(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (footprint "X" (layer "F.Cu") (at 0 0) (property "Reference" "U1")
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu" "F.Paste" "F.Mask"))
+            (pad "2" smd rect (at 2 0) (size 1 1) (layers "F.Cu" "F.Mask"))
+            (pad "3" thru_hole circle (at 4 0) (size 2 2) (drill 1) (layers "*.Cu" "*.Mask"))))"""
+        pads = import_pcb(board, "x")["components"][0]["pads"]
+        self.assertEqual([p["paste_layers"] for p in pads], [["F.Paste"], [], []])
+        self.assertEqual([p["mask_layers"] for p in pads], [["F.Mask"], ["F.Mask"], ["F.Mask", "B.Mask"]])
+
     def test_example_scene_is_what_the_importer_produces(self):
         import json
         expected = json.loads((ROOT / "examples/demo.scene.json").read_text(encoding="utf-8"))

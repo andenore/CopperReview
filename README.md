@@ -192,11 +192,28 @@ missing from the board and board footprints missing from the lock are listed und
 The plan lists one line per identical part on one side, in passes: SMD on the
 side with fewer hand-placed parts first, then the other side, then through-hole,
 then assembler-fitted and not-fitted parts. Within a pass, small bodies come
-first. The current line's parts are highlighted with pin 1 (the pad numbered 1
-or A1) ringed; placed parts turn green and copper is dimmed.
+first. Only the side being assembled is drawn (the current line's side; through-hole
+parts go in from their own side), with through-hole pads and drills still shown.
+The current line's parts are outlined with pin 1 (the pad numbered 1 or A1) ringed.
+
+The **Realistic** look (V, on by default here) draws that side as the board
+looks: solder mask over raised copper, exposed pads, white silkscreen and grey
+paste on every stencil aperture. Fitted parts get solder on their pads and a body
+with a shadow (the fabrication outline, else the span of the pads). It is a
+picture, not a check: mask expansion, paste reduction and body heights are not
+modelled. Switch it off for the plain view, where placed parts turn green and
+copper is dimmed. The board turns over with the work: a back-side line is seen
+from the back, mirrored as it is on the bench, and a front-side line from the
+front. **Flip** (T) turns it over by hand.
+When zoomed in, a **minimap** in the corner shows the whole side, the current
+line's parts and where the view is; click or drag in it to move the view.
 
 - **Space** marks the line placed and moves to the next open line, **I** marks it
-  inspected, **J/K** or the arrows step, **Z** zooms to its parts, **F** fits the board.
+  inspected, **J/K** or the arrows step (a line elsewhere on the board is brought
+  into view), **Z** zooms to its parts, **F** fits the board.
+- **N** / **Shift+N** step through the parts of the current line, panning to each,
+  since identical parts can be spread over the board. **X** marks the selected part
+  and moves to the next open one.
 - Click a part on the board or in the list to set its own status, flag it
   **Needs rework** (P) and add a note; **Add as layout note** carries the note
   into the layout review. Double-click toggles a single part.
@@ -263,7 +280,15 @@ cannot generate bodies.
 ## Viewing and storage
 
 - Wheel: zoom under the pointer. Right/middle-drag: pan. **Fit board**: overview.
-- Keyboard: C component, N net, R region, F fit, Escape clear (outside form fields).
+- Keyboard: C component, N net, R region, F fit, V realistic look, T flip, Escape clear (outside form fields).
+- **Flip** (T) turns the board over: it is seen from the back, mirrored left to right about
+  its centre line, with labels kept readable; the realistic look then shows the back side.
+  Coordinates, notes and exports stay in the native front-view frame; the status bar says
+  "from back (mirrored)" while it is on.
+- **Realistic** draws the visible side as the board looks (mask, silkscreen, metal pads and
+  fitted bodies); the choice is remembered per mode. The minimap appears when zoomed in.
+- Pads keep their paste and mask layers (`paste_layers`, `mask_layers`, per side). Scenes
+  exported before these fields existed assume paste on every outer SMD pad.
 - Reference labels never overlap: selected parts and larger bodies win, and the
   status bar counts labels waiting for more zoom.
 - Toggle copper layers, reference labels, logical net guides, fills/zone intent,
@@ -328,6 +353,7 @@ node tests/browser.mjs "http://127.0.0.1:PORT/#token=TOKEN"
 The test verifies component/net/region annotations, geometry exports, edit/delete,
 review import, persistence, layer controls, and search. Artifacts go to ignored
 `test-results/`.
+`node tests/flip-browser.mjs URL` checks picking and side-following on a flipped board.
 `node tests/assembly-browser.mjs URL` checks assembly mode: planning with and without
 the demo sheet, marking, rework notes, persistence, progress export and import.
 `node tests/viewer-regressions.mjs "http://127.0.0.1:PORT/#token=TOKEN"` additionally

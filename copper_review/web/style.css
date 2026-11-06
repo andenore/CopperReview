@@ -211,3 +211,6 @@ body[data-mode=assembly] #pcb-review>.explorer,body[data-mode=assembly] #pcb-rev
 @media(max-width:900px){body[data-mode=assembly] #pcb-review>.assembly-detail-panel{grid-column:1/-1;border-top:1px solid var(--border)}}
 @media(max-width:560px){body[data-mode=assembly] #pcb-review>.assembly-list-panel{max-height:340px}}
 @media(max-width:900px){.workspace>#pcb-review{flex:none;height:auto}}
+.minimap{position:absolute;right:12px;bottom:34px;border:1px solid var(--border);border-radius:6px;background:var(--panel);box-shadow:0 4px 16px var(--shadow);cursor:crosshair;z-index:2;touch-action:none}
+.assembly-part-nav{margin-bottom:8px}.assembly-part-nav button{flex:1;padding:6px;font-size:12px}
+#view-real[aria-pressed="true"],#view-flip[aria-pressed="true"]{border-color:var(--selected-border);background:var(--selected-bg);color:var(--copper)}

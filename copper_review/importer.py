@@ -318,6 +318,10 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
             pad_layers = layers[:] if "*.Cu" in raw_layers else [l for l in raw_layers if l.endswith(".Cu")]
             if pad[2] == "np_thru_hole":
                 pad_layers = []
+            # Paste (stencil apertures) and mask openings per side; "*.Paste" / "*.Mask" mean both sides.
+            def side_layers(kind):
+                found = [f"{side}.{kind}" for side in ("F", "B") if f"{side}.{kind}" in raw_layers or f"*.{kind}" in raw_layers]
+                return found
             drill = first(pad, "drill", ["drill"])[1:]
             drill = [number(v) for v in drill if isinstance(v, str) and v not in {"oval"}]
             if len(drill) == 1:
@@ -326,7 +330,7 @@ def import_pcb(data: bytes, filename: str, *, stage="unknown", source=None):
                 "pin_name": first(pad, "pinfunction", ["pinfunction", ""])[1],
                 "position_mm": transform([number(pa[1]), number(pa[2])]), "size_mm": size,
                 "rotation_deg": number(pa[3]) if len(pa) > 3 else 0, "shape": pad[3], "kind": pad[2],
-                "layers": pad_layers, "drill_mm": drill[:2],
+                "layers": pad_layers, "paste_layers": side_layers("Paste"), "mask_layers": side_layers("Mask"), "drill_mm": drill[:2],
                 "roundrect_ratio": number(first(pad, "roundrect_rratio", ["ratio", "0.25"])[1])})
             local_pads.append({"number": pad[1], "x_mm": number(pa[1]), "y_mm": number(pa[2]), "w_mm": size[0], "h_mm": size[1],
                                "rotation_deg": (number(pa[3]) if len(pa) > 3 else 0) - angle,
