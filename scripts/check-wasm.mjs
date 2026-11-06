@@ -31,3 +31,12 @@ assert(resolved?.electrical_ir,JSON.stringify(resolved));const project=electrica
 prepared.snapshot.files['dependency/github.com/url-test/parts/pkg/unit.copper']+=' ';
 const changed=JSON.parse(review_project(JSON.stringify(prepared.snapshot)));assert.equal(changed.electrical_ir,null);assert(changed.check.diagnostics.some(d=>d.message.includes('checksum mismatch')));
 console.log('PASS: actual WASM project import planning, transitive local/remote/relative packages, locked source bytes and tamper rejection');
+
+// A project that also requires KiCad's 3D library (locked per model file as sparse-git) still compiles.
+const models='github.com/KiCad/kicad-packages3D',step={path:'Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step',size:4,sha256:createHash('sha256').update('STEP').digest('hex')};
+const modelled=structuredClone(prepared.snapshot);modelled.files['dependency/github.com/url-test/parts/pkg/unit.copper']=fixture.sources['pkg/unit.copper'];
+modelled.manifest+=`require ${models} 10.0.8\nreplace ${models} => gitlab.com/kicad/libraries/kicad-packages3D 10.0.8\n`;
+const lock=JSON.parse(modelled.lock);lock.modules.push({module:models,version:'10.0.8',source:'replace:sparse-git:https://gitlab.com/kicad/libraries/kicad-packages3D.git@10.0.8',checksum:'sha256:'+createHash('sha256').update(`${step.path}\0${step.size}\0${step.sha256}\0`).digest('hex'),files:[step]});
+lock.modules.sort((a,b)=>a.module<b.module?-1:a.module>b.module?1:0);modelled.lock=JSON.stringify(lock);
+const withModels=JSON.parse(review_project(JSON.stringify(modelled)));assert(withModels.electrical_ir,JSON.stringify(withModels.check?.diagnostics));
+console.log('PASS: actual WASM project with a required kicad-packages3D (sparse lock entry)');
