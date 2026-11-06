@@ -9,6 +9,7 @@ import {chipify} from './chips.js';
 import {createView3d} from './view3d.js';
 import {parseVrml,buildSoup,loadBodies,modelKind} from './model3d.js';
 import {drawText,textRects} from './silk-text.js';
+import {drawRealistic,outlineLoops,pasteRecorded,LOOK} from './board-look.js';
 import {readStep} from './steps.js';
 import {generateBodies} from './bodies.js';
 import {buildAssembly,validateSheet,sheetFromLock,isAssemblyLock,reconcileProgress,emptyProgress,updateEntry,entryOf,statusOf,lineDone,summarize,validateProgress,makeProgress,pinOne,phaseLabel,phaseHint,ASSEMBLY_SHEET_SCHEMA,ASSEMBLY_PROGRESS_SCHEMA} from './assembly.js';
@@ -53,7 +54,7 @@ function setMode(next,{remember=true}={}){
   if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
   const changed=next!==mode;mode=next;document.body.dataset.mode=mode;applyPanels();
   electrical.show(mode==='electrical'||mode==='both');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
-  if(mode==='assembly'){setTool('component');renderAssembly();}requestDraw();
+  if(mode==='assembly'){setTool('component');renderAssembly();}updateRealisticButton();requestDraw();
   for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
     b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
   $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
@@ -389,7 +390,44 @@ function drawIssues() {
   ctx.setLineDash([]);ctx.globalAlpha=1;
 }
 function citedIssueIds(){return $('issue-ids').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);}
-function draw() {
+// Assembly shows one side: the current line's. Drawing and picking use that side's copper alone.
+function assemblyView(fn){
+  if(mode!=='assembly'||!asm.plan)return fn();
+  const keep=state.layers;state.layers=[assemblySide()==='back'?'B.Cu':'F.Cu'];
+  try{return fn();}finally{state.layers=keep;}
+}
+function draw(){assemblyView(drawBoard);drawMinimap();}
+function hit(point,forHover=false){return assemblyView(()=>hitBoard(point,forHover));}
+// The realistic look is chosen per mode: on for assembly, off for review unless switched.
+const REALISTIC_DEFAULTS={assembly:true};
+const realisticChoice=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:realistic'))||{};}catch{return {};}})();
+const realisticChosen=()=>realisticChoice[mode]??REALISTIC_DEFAULTS[mode]??false;
+const realistic=()=>realisticChosen()&&view3dCanvas.hidden;
+function updateRealisticButton(){const on=realisticChosen();$('view-real').setAttribute('aria-pressed',String(on));$('view-real').classList.toggle('active',on);}
+function toggleRealistic(){realisticChoice[mode]=!realisticChosen();try{localStorage.setItem('copper-review:realistic',JSON.stringify(realisticChoice));}catch{}updateRealisticButton();requestDraw();}
+let outlineCache={scene:null,loops:null};
+function boardOutline(){if(outlineCache.scene!==state.scene)outlineCache={scene:state.scene,loops:outlineLoops(state.scene.drawings)};return outlineCache.loops;}
+/** Outline, rework flag and pin 1 of a part; shared by both looks. */
+function drawPartMarks(c,selected,plan){
+  if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=(plan?.focus===c.reference?3:1.6)/state.zoom;ctx.setLineDash(plan?.focus===c.reference?[]:[5/state.zoom,3/state.zoom]);
+    const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
+  if(plan?.problem(c.reference)){ctx.globalAlpha=1;ctx.strokeStyle=colors.issue;ctx.lineWidth=1.6/state.zoom;const b=c.bounds_mm;ctx.strokeRect(b[0]-.5,b[1]-.5,b[2]-b[0]+1,b[3]-b[1]+1);}
+  // Pin 1 of the part being placed, from its pad numbering: orientation is the usual mistake.
+  const one=selected&&plan?pinOne(c):null;
+  if(one){ctx.save();ctx.globalAlpha=1;ctx.translate(...one.position_mm);ctx.strokeStyle=colors.issue;ctx.lineWidth=2/state.zoom;ctx.beginPath();ctx.arc(0,0,Math.max(...one.size_mm)/2+.3,0,Math.PI*2);ctx.stroke();ctx.restore();}
+}
+function drawRealisticView(plan){
+  const scene=state.scene,side=plan?assemblySide():state.layers.includes('F.Cu')||!state.layers.includes('B.Cu')?'front':'back';
+  drawRealistic(ctx,scene,{side,zoom:state.zoom,trackCopper:state.trackCopper,role:plan?plan.role:()=>null,outline:boardOutline()});
+  const labels=[];
+  for(const c of scene.components){
+    if(c.side!==side&&!c.pads.some(p=>p.drill_mm.length))continue;
+    const selected=plan?plan.role(c.reference)==='current':state.selection.components.includes(c.reference);
+    drawPartMarks(c,selected,plan);if(selected)labels.push([c,true]);
+  }
+  drawReferenceLabels(labels);
+}
+function drawBoard() {
   const dpr=devicePixelRatio || 1;
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.globalAlpha=1;ctx.clearRect(0,0,state.width,state.height);
   // Screen-space grid uses engineering increments, avoiding dense dots at low zoom.
@@ -401,6 +439,7 @@ function draw() {
   const scene=state.scene,padLabels=[],referenceLabels=[];ctx.translate(...state.offset);ctx.scale(state.zoom,state.zoom);
   // Assembly mode quiets the copper and shows each part as current, done, still to fit or not tracked.
   const plan=assemblyDrawState(),dim=plan?.18:1;
+  if(realistic())drawRealisticView(plan);else{
   // Edge geometry (including inner cutouts) remains visible at all layer settings.
   for(const g of scene.drawings.filter(g=>g.layer==='Edge.Cuts')){ctx.globalAlpha=1;graphic(g,colors.edge);}
   if($('show-zones').checked)for(const z of scene.zones) {
@@ -450,12 +489,7 @@ function draw() {
       ctx.restore();
       padLabels.push([c,p,selected]);
     }
-    if(selected){ctx.globalAlpha=1;ctx.strokeStyle=colors.outline;ctx.lineWidth=(plan?.focus===c.reference?3:1.6)/state.zoom;ctx.setLineDash(plan?.focus===c.reference?[]:[5/state.zoom,3/state.zoom]);
-      const b=c.bounds_mm;ctx.strokeRect(b[0]-.3,b[1]-.3,b[2]-b[0]+.6,b[3]-b[1]+.6);ctx.setLineDash([]);}
-    if(plan?.problem(c.reference)){ctx.globalAlpha=1;ctx.strokeStyle=colors.issue;ctx.lineWidth=1.6/state.zoom;const b=c.bounds_mm;ctx.strokeRect(b[0]-.5,b[1]-.5,b[2]-b[0]+1,b[3]-b[1]+1);}
-    // Pin 1 of the part being placed, from its pad numbering: orientation is the usual mistake.
-    const one=selected&&plan?pinOne(c):null;
-    if(one){ctx.save();ctx.globalAlpha=1;ctx.translate(...one.position_mm);ctx.strokeStyle=colors.issue;ctx.lineWidth=2/state.zoom;ctx.beginPath();ctx.arc(0,0,Math.max(...one.size_mm)/2+.3,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    drawPartMarks(c,selected,plan);
     if($('show-labels').checked && cVisible)referenceLabels.push([c,selected]);
   }
   drawReferenceLabels(referenceLabels);
@@ -474,13 +508,14 @@ function draw() {
     }ctx.setLineDash([]);
   }
   for(const args of padLabels)drawPadLabel(...args);
+  }
   ctx.globalAlpha=1;if(!plan)drawIssues();
   if(!plan)for(const a of state.annotations){if(!a.selection.region)continue;const b=a.selection.region;ctx.strokeStyle=a.status==='resolved'?colors.regionDone:colors.region;ctx.lineWidth=1/state.zoom;ctx.setLineDash([3/state.zoom,4/state.zoom]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   ctx.setLineDash([]);
   if(state.selection.region){const b=state.selection.region;ctx.fillStyle=colors.selectFill;ctx.strokeStyle=colors.selectLine;ctx.lineWidth=1.5/state.zoom;ctx.fillRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);ctx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);}
   $('zoom-status').textContent=`${state.zoom.toFixed(1)} px/mm · grid ${spacing} mm${state.hiddenLabels?` · ${state.hiddenLabels} labels hidden (zoom in)`:''}`;
 }
-function hit(point,forHover=false) {
+function hitBoard(point,forHover=false) {
   if(!state.scene)return {};
   const tol=5/state.zoom;
   for(const c of [...state.scene.components].reverse())for(const p of c.pads) {
@@ -716,7 +751,7 @@ async function fetchBody(path,cache=bodyCache){
 }
 async function show3d(on){
   $('view-3d').setAttribute('aria-pressed',String(on));$('view-3d').classList.toggle('active',on);
-  canvas.hidden=on;view3dCanvas.hidden=!on;$('view-flip').hidden=!on;if(!on)return;
+  canvas.hidden=on;view3dCanvas.hidden=!on;$('view-flip').hidden=!on;requestDraw();if(!on)return;
   const scene=state.scene;
   if(!scene){message('Open a board first.',true);return show3d(false);}
   try{view3d||=createView3d(view3dCanvas);}catch(e){message(`3D view failed: ${e.message}`,true);return show3d(false);}
@@ -734,6 +769,40 @@ async function show3d(on){
 }
 $('view-3d').onclick=guarded(()=>show3d(view3dCanvas.hidden));
 $('view-flip').onclick=()=>view3d?.flip();
+$('view-real').onclick=toggleRealistic;
+// ---- Minimap: where the zoomed view sits on the board; click or drag in it to move there ----------
+const minimap=$('minimap');let minimapFrame=null;
+function drawMinimap(){
+  const scene=state.scene;
+  if(!scene||!view3dCanvas.hidden||!state.width){minimap.hidden=true;return;}
+  const b=scene.board.bounds_mm,v=[-state.offset[0]/state.zoom,-state.offset[1]/state.zoom,(state.width-state.offset[0])/state.zoom,(state.height-20-state.offset[1])/state.zoom];
+  const whole=v[0]<=b[0]+.01&&v[1]<=b[1]+.01&&v[2]>=b[2]-.01&&v[3]>=b[3]-.01;minimap.hidden=whole;if(whole)return;
+  const bw=Math.max(1,b[2]-b[0]),bh=Math.max(1,b[3]-b[1]),scale=Math.min(170/bw,110/bh),pad=6,w=Math.round(bw*scale+pad*2),h=Math.round(bh*scale+pad*2),dpr=devicePixelRatio||1;
+  if(minimap.width!==w*dpr||minimap.height!==h*dpr){minimap.width=w*dpr;minimap.height=h*dpr;minimap.style.width=`${w}px`;minimap.style.height=`${h}px`;}
+  const m=minimap.getContext('2d');m.setTransform(dpr,0,0,dpr,0,0);m.clearRect(0,0,w,h);m.translate(pad,pad);m.scale(scale,scale);m.translate(-b[0],-b[1]);
+  const loops=boardOutline()||[[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]],shape=new Path2D();
+  for(const loop of loops){shape.moveTo(...loop[0]);for(const p of loop.slice(1))shape.lineTo(...p);shape.closePath();}
+  m.fillStyle=realistic()?LOOK.mask:colors.board;m.fill(shape,'evenodd');m.strokeStyle=colors.edge;m.lineWidth=1/scale;m.stroke(shape);
+  const plan=assemblyDrawState(),side=plan?assemblySide():null;
+  for(const c of scene.components){
+    if(side&&c.side!==side&&!c.pads.some(p=>p.drill_mm.length))continue;
+    const role=plan?plan.role(c.reference):state.selection.components.includes(c.reference)?'current':'todo';
+    if(role==='untracked')continue;
+    const cb=c.bounds_mm,grow=role==='current'?2.5/scale:0;
+    m.fillStyle=role==='current'?colors.outline:role==='done'?colors.done:colors.graphic;m.globalAlpha=role==='current'?1:.65;
+    m.fillRect(cb[0]-grow,cb[1]-grow,Math.max(cb[2]-cb[0],1/scale)+grow*2,Math.max(cb[3]-cb[1],1/scale)+grow*2);
+  }
+  m.globalAlpha=1;m.strokeStyle=colors.focus;m.lineWidth=1.5/scale;m.strokeRect(v[0],v[1],v[2]-v[0],v[3]-v[1]);
+  minimapFrame={pad,scale,b};
+}
+function minimapMove(e){
+  if(!minimapFrame)return;const r=minimap.getBoundingClientRect(),{pad,scale,b}=minimapFrame;
+  const x=(e.clientX-r.left-pad)/scale+b[0],y=(e.clientY-r.top-pad)/scale+b[1];
+  state.offset=[state.width/2-x*state.zoom,(state.height-20)/2-y*state.zoom];state.fitted=false;requestDraw();
+}
+minimap.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();minimap.setPointerCapture(e.pointerId);minimapMove(e);});
+minimap.addEventListener('pointermove',e=>{if(minimap.hasPointerCapture(e.pointerId))minimapMove(e);});
+minimap.addEventListener('pointerup',e=>{if(minimap.hasPointerCapture(e.pointerId))minimap.releasePointerCapture(e.pointerId);});
 $('fit').onclick=()=>{if(!view3dCanvas.hidden&&view3d&&state.scene)view3d.fit(state.scene.board.bounds_mm);else fit();};$('clear').onclick=()=>{clearSelection();resetForm();};
 canvas.oncontextmenu=e=>e.preventDefault();
 canvas.addEventListener('wheel',e=>{if(!state.scene)return;e.preventDefault();state.fitted=false;const p=world(e),s=screen(e),z=Math.max(.05,Math.min(2500,state.zoom*Math.exp(-e.deltaY*.0015)));state.zoom=z;state.offset=[s[0]-p[0]*z,s[1]-p[1]*z];requestDraw();},{passive:false});
@@ -757,7 +826,7 @@ canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercan
 canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
   if(mode==='electrical'||mode==='assembly'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
-  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
+  const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='v')toggleRealistic();if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();}});
 // A resize (panel folded, splitter, window) refits a fitted board and otherwise keeps the middle of the view in place.
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();if(!rect.width||!rect.height)return;const first=state.width===0;
   if(!first&&!state.fitted)state.offset=[state.offset[0]+(rect.width-state.width)/2,state.offset[1]+(rect.height-state.height)/2];state.width=rect.width;state.height=rect.height;canvas.width=rect.width*(devicePixelRatio || 1);canvas.height=rect.height*(devicePixelRatio || 1);if((first||state.fitted) && state.scene)fit();else requestDraw();}).observe(canvas.parentElement);
@@ -772,6 +841,8 @@ const currentLine=()=>asm.plan?.lines.find(l=>l.id===asm.current)||null;
 const lineOf=ref=>asm.plan?.lines.find(l=>l.items.some(i=>i.reference===ref))||null;
 const shortFootprint=f=>String(f||'').split(/[/:]/).pop().replace(/\.kicad_mod$/,'');
 const forward=line=>line.phase==='not-fitted'||line.phase==='supplier'?'inspected':'placed';
+/** The side being assembled: the current line's (through-hole parts go in from their own side). */
+const assemblySide=()=>currentLine()?.side||'front';
 function assemblyDrawState(){
   if(mode!=='assembly'||!asm.plan)return null;
   const line=currentLine(),current=new Set(line?line.items.map(i=>i.reference):[]);
@@ -799,6 +870,7 @@ function planAssembly(sheet,saved){
   if(plan.unmatched.length)warnings.push(`${plan.unmatched.length} sheet part(s) are not on this board: ${list(plan.unmatched)}.`);
   if(plan.untracked.length)warnings.push(sheet?`${plan.untracked.length} board footprint(s) are not in the sheet (not assembled, or not in the lock): ${list(plan.untracked)}.`:`${plan.untracked.length} footprint(s) without solderable pads are not listed: ${list(plan.untracked)}.`);
   if(reset.length)warnings.push(`Progress cleared for ${reset.length} part(s) whose part identity changed: ${list(reset)}.`);
+  if(!pasteRecorded(state.scene))warnings.push('This board scene records no paste layers (an older export), so the realistic view assumes paste on every SMD pad.');
   asm.warnings=warnings;
   if(!currentLine())asm.current=(plan.lines.find(l=>!lineDone(l,progress))||plan.lines[0])?.id||null;
   return reset;
@@ -873,7 +945,7 @@ function renderAssembly(){
     button.append(check,body,count);
     if(line.items.some(i=>entryOf(asm.progress,i.reference).problem)){const flag=document.createElement('span');flag.className='line-problem';flag.textContent='!';flag.title='A part needs rework';button.append(flag);}
     button.title=`${lineTitle(line)}${complete?' · done':''}`;
-    button.onclick=()=>{asm.current=line.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();};
+    button.onclick=()=>{goLine(line.id);};
     list.append(button);
   }
   if(!asm.plan.lines.length){const p=document.createElement('p');p.className='quiet';p.textContent='Nothing to assemble: no part on this board has solderable pads.';list.append(p);}
@@ -907,7 +979,7 @@ function renderAssemblyDetail(){
     const status=document.createElement('span');status.className=`ref-status ${entry.status}`;status.textContent={todo:line.phase==='not-fitted'?'not checked':'to place',placed:'placed',inspected:line.phase==='not-fitted'?'left empty':'inspected'}[entry.status];
     row.append(name);if(entry.problem){const p=document.createElement('span');p.className='ref-problem';p.textContent='rework';row.append(p);}row.append(status);
     row.title=`${item.path}${entry.note?`\n${entry.note}`:''}\nClick to select · double-click to toggle ${target}`;
-    row.onclick=()=>pickAssemblyPart(item.reference);row.ondblclick=()=>setParts([item],statusOf(asm.progress,item.reference)==='todo'?target:'todo');
+    row.onclick=()=>{pickAssemblyPart(item.reference);centerOnPart(item.reference);};row.ondblclick=()=>setParts([item],statusOf(asm.progress,item.reference)==='todo'?target:'todo');
     $('assembly-refs').append(row);
   }
   const item=asm.focus&&line.items.find(i=>i.reference===asm.focus);
@@ -920,30 +992,61 @@ function setParts(items,status){
     updateEntry(asm.progress,item,{status:status==='placed'&&now==='inspected'?'inspected':status});}
   saveAssembly();renderAssembly();requestDraw();
 }
+/** Make a line current; if none of its parts is in view (another side, or zoomed elsewhere), go to its first. */
+function goLine(id){
+  asm.current=id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();
+  const line=currentLine();if(!line||!state.scene)return;
+  const v=[-state.offset[0]/state.zoom,-state.offset[1]/state.zoom,(state.width-state.offset[0])/state.zoom,(state.height-20-state.offset[1])/state.zoom];
+  const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);
+  if(boxes.length&&!boxes.some(b=>boxesOverlap(b,v)))centerOnPart(line.items[0].reference);
+}
 function nextLine(from,test){const lines=visibleLines(),start=lines.findIndex(l=>l.id===from);return lines.slice(start+1).find(test)||null;}
 function markCurrent(){
   const line=currentLine();if(!line)return;
   if(lineDone(line,asm.progress)){setParts(line.items,'todo');return;}
   setParts(line.items,forward(line));
-  const next=nextLine(line.id,l=>!lineDone(l,asm.progress));if(next){asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  const next=nextLine(line.id,l=>!lineDone(l,asm.progress));if(next){goLine(next.id);}
   else if(asm.plan.lines.every(l=>lineDone(l,asm.progress)))message('Every line is done. Inspect the board before powering it.');
 }
 function inspectCurrent(){
   const line=currentLine();if(!line)return;
   if(line.items.every(i=>statusOf(asm.progress,i.reference)==='inspected')){setParts(line.items,'placed');return;}
   setParts(line.items,'inspected');
-  const next=nextLine(line.id,l=>l.items.some(i=>statusOf(asm.progress,i.reference)!=='inspected'));if(next){asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  const next=nextLine(line.id,l=>l.items.some(i=>statusOf(asm.progress,i.reference)!=='inspected'));if(next){goLine(next.id);}
 }
 function stepLine(delta){const lines=visibleLines();if(!lines.length)return;const index=lines.findIndex(l=>l.id===asm.current);
-  const next=lines[Math.min(lines.length-1,Math.max(0,index<0?0:index+delta))];asm.current=next.id;asm.focus=null;saveAssembly();renderAssembly();requestDraw();}
+  const next=lines[Math.min(lines.length-1,Math.max(0,index<0?0:index+delta))];goLine(next.id);}
 function zoomLine(){const line=currentLine();if(!line)return;const boxes=line.items.map(i=>state.scene.components.find(c=>c.reference===i.reference)?.bounds_mm).filter(Boolean);if(!boxes.length)return;
   fit([Math.min(...boxes.map(b=>b[0]))-4,Math.min(...boxes.map(b=>b[1]))-4,Math.max(...boxes.map(b=>b[2]))+4,Math.max(...boxes.map(b=>b[3]))+4]);}
 function pickAssemblyPart(ref){
   const line=lineOf(ref);if(!line){message(`${ref} is not in the assembly plan.`);return;}
   asm.current=line.id;asm.focus=ref;saveAssembly();renderAssembly();requestDraw();
 }
+/** Bring a part into view: keep the zoom when it is close enough, else zoom in on the part. */
+function centerOnPart(ref){
+  const c=state.scene?.components.find(c=>c.reference===ref);if(!c)return;
+  const b=c.bounds_mm,fitZoom=Math.min((state.width-80)/(b[2]-b[0]+10),(state.height-80)/(b[3]-b[1]+10));
+  if(state.zoom<fitZoom*.5)state.zoom=Math.max(.05,fitZoom);
+  state.offset=[state.width/2-(b[0]+b[2])/2*state.zoom,(state.height-20)/2-(b[1]+b[3])/2*state.zoom];state.fitted=false;requestDraw();
+}
+/** Step through the parts of the current line, which may be spread over the board. */
+function stepPart(delta){
+  const line=currentLine();if(!line)return;const items=line.items,index=items.findIndex(i=>i.reference===asm.focus);
+  const next=items[index<0?(delta>0?0:items.length-1):(index+delta+items.length)%items.length];
+  asm.focus=next.reference;saveAssembly();renderAssembly();centerOnPart(next.reference);
+}
+/** Mark the focused part (or the line's first open one) and move to the next open part. */
+function markPart(){
+  const line=currentLine();if(!line)return;const target=forward(line),open=i=>statusOf(asm.progress,i.reference)==='todo';
+  let item=line.items.find(i=>i.reference===asm.focus);
+  if(!item){item=line.items.find(open);if(!item){message('Every part of this line is marked. Use Space to undo the line.');return;}}
+  setParts([item],open(item)?target:'todo');
+  const next=line.items.find(open);
+  if(next){asm.focus=next.reference;saveAssembly();renderAssembly();centerOnPart(next.reference);}
+  else{const after=nextLine(line.id,l=>!lineDone(l,asm.progress));if(after&&lineDone(line,asm.progress)){goLine(after.id);}}
+}
 function updateFocused(change){const line=currentLine(),item=line?.items.find(i=>i.reference===asm.focus);if(!item)return;updateEntry(asm.progress,item,change);saveAssembly();renderAssembly();requestDraw();}
-$('assembly-mark').onclick=markCurrent;$('assembly-inspect').onclick=inspectCurrent;
+$('assembly-mark').onclick=markCurrent;$('assembly-part-prev').onclick=()=>stepPart(-1);$('assembly-part-next').onclick=()=>stepPart(1);$('assembly-part-mark').onclick=markPart;$('assembly-inspect').onclick=inspectCurrent;
 $('assembly-prev').onclick=()=>stepLine(-1);$('assembly-next').onclick=()=>stepLine(1);$('assembly-zoom').onclick=zoomLine;
 $('assembly-filter').onchange=()=>{asm.filter=$('assembly-filter').value;saveAssembly();renderAssembly();};
 $('assembly-part-status').onchange=()=>updateFocused({status:$('assembly-part-status').value});
@@ -963,7 +1066,7 @@ document.addEventListener('keydown',e=>{
   if(mode!=='assembly'||!asm.plan||document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
-  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
+  const key=e.key.length===1?e.key.toLowerCase():e.key,actions={' ':markCurrent,i:inspectCurrent,n:()=>stepPart(e.shiftKey?-1:1),x:markPart,v:toggleRealistic,j:()=>stepLine(1),ArrowDown:()=>stepLine(1),k:()=>stepLine(-1),ArrowUp:()=>stepLine(-1),z:zoomLine,f:()=>$('fit').click(),
     p:()=>{if(asm.focus)updateFocused({problem:!entryOf(asm.progress,asm.focus).problem});else message('Click a part first to flag it for rework.');},Escape:()=>{asm.focus=null;renderAssembly();requestDraw();}};
   if(actions[key]){e.preventDefault();actions[key]();}
 });

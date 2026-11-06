@@ -8,7 +8,7 @@
   "board": {
     "name": "demo",
     "filename": "demo.kicad_pcb",
-    "sha256": "285a6e8932e10561bf8de9fca3783682b5eaeeff9734ebdfd5e18b9f5101b4f9",
+    "sha256": "61266919f7d8b42f5619ffcd40a8a1bd47b076dfa2a02816b343596454f4d41f",
     "stage": "partially_routed",
     "stage_evidence": "reviewer-declared; not connectivity validation",
     "source": null,

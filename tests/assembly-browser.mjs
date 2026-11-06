@@ -49,6 +49,24 @@ try {
   assert.deepEqual(plan.map(l=>l.title),['Controller'],JSON.stringify(plan));
   await page.locator('#assembly-filter').evaluate(s=>{s.value='all';s.dispatchEvent(new Event('change'));});
   await page.screenshot({path:'test-results/assembly.png'});
+  // The realistic look is on by default here and toggles with V; the choice is remembered per mode.
+  assert.equal(await page.locator('#view-real').getAttribute('aria-pressed'),'true');
+  await page.evaluate(()=>document.activeElement.blur());await page.keyboard.press('v');
+  assert.equal(await page.locator('#view-real').getAttribute('aria-pressed'),'false');
+  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('copper-review:realistic')).assembly),false);
+  await page.keyboard.press('v');
+  // The minimap shows only when zoomed in, and clicking it moves the view.
+  assert(await page.locator('#minimap').isHidden(),'no minimap at full-board fit');
+  await page.locator('#assembly-zoom').click();
+  await page.waitForFunction(()=>!document.querySelector('#minimap').hidden);
+  const before=await page.locator('#zoom-status').textContent(),mini=await page.locator('#minimap').boundingBox();
+  await page.mouse.click(mini.x+mini.width*.15,mini.y+mini.height*.8);
+  assert.equal(await page.locator('#zoom-status').textContent(),before,'the minimap pans without zooming');
+  await page.screenshot({path:'test-results/assembly-zoomed.png'});
+  // N cycles the parts of the current line (one part here, so it stays on U1).
+  await page.keyboard.press('Escape');await page.keyboard.press('n');
+  await page.waitForFunction(()=>document.querySelector('#assembly-part-title').textContent==='PART U1');
+  await page.locator('#fit').click();
 
   // Progress survives a reload and exports with the sheet; a different board file is refused.
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.entity').length===4);
