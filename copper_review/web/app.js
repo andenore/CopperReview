@@ -360,7 +360,7 @@ function padPath(p) {
   ctx.beginPath();
   if(p.shape==='circle')ctx.ellipse(0,0,w/2,h/2,0,0,Math.PI*2);
   else if(p.shape==='oval')ctx.roundRect(-w/2,-h/2,w,h,Math.min(w,h)/2);
-  else if(p.shape==='roundrect')ctx.roundRect(-w/2,-h/2,w,h,Math.min(w,h)*p.roundrect_ratio);
+  else if(p.shape==='roundrect')ctx.roundRect(-w/2,-h/2,w,h,Math.min(w,h)*Math.min(.5,Math.max(0,p.roundrect_ratio??.25)));
   else ctx.rect(-w/2,-h/2,w,h);
 }
 function drawPadLabel(component,pad,selected) {

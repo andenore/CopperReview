@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {outlineLoops,pasteSides,pasteRecorded,bodyBox} from '../copper_review/web/board-look.js';
+import {outlineLoops,pasteSides,pasteRecorded,bodyBox,padOutline} from '../copper_review/web/board-look.js';
 const scene=JSON.parse(readFileSync(new URL('../examples/demo.scene.json',import.meta.url)));
 
 test('the outline keeps closed shapes and chains open runs in either direction',()=>{
@@ -34,4 +34,19 @@ test('a body comes from the fabrication outline in the footprint frame, else fro
   const c1=bodyBox(scene.components.find(c=>c.reference==='C1'));
   assert(c1&&c1.w>c1.h,'pads-only body spans the pads along the part');
   assert.equal(bodyBox({position_mm:[0,0],rotation_deg:0,side:'front',pads:[],graphics:[]}),null);
+});
+
+test('pad outlines never get a negative size or corner radius', () => {
+  // The paste inset shrinks a pad by 6 % of its smaller side; a 0.05 corner ratio used to give
+  // roundRect a negative radius, which throws and stops the realistic drawing.
+  const pad={shape:'roundrect',size_mm:[0.6,0.4],roundrect_ratio:0.05};
+  const inset=padOutline(pad,-0.4*.06);
+  assert.equal(inset.radius,0);
+  assert.ok(Math.abs(inset.w-0.552)<1e-12&&Math.abs(inset.h-0.352)<1e-12);
+  assert.ok(Math.abs(padOutline(pad).radius-0.02)<1e-12);
+  // Growing keeps the radius within half the smaller side.
+  assert.equal(padOutline({shape:'roundrect',size_mm:[1,1],roundrect_ratio:0.5},0.05).radius,0.55);
+  assert.equal(padOutline({shape:'oval',size_mm:[1,2]},-0.1).radius,0.4);
+  // Shrinking past zero clamps the size instead of inverting it.
+  assert.deepEqual(padOutline({shape:'circle',size_mm:[0.1,0.1]},-0.2),{w:0,h:0,radius:0});
 });
