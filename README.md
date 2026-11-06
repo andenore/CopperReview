@@ -250,7 +250,23 @@ from the drawing alone.
 ## 3D view
 
 The **3D** button draws a body for every component (drag orbits, shift or
-right-drag pans, wheel zooms). Where each body comes from, in order:
+right-drag pans, wheel zooms). Views snap with numpad-style keys, as in common CAD
+tools (digit or numpad keys):
+
+| Key | View |
+| --- | --- |
+| **7** / **Shift+7** | top / bottom |
+| **1** / **Shift+1** | front (from the board's bottom edge) / back |
+| **3** / **Shift+3** | right / left |
+| **Home** | reset to the top view |
+| **5** or **O** | orthographic or perspective (also the **Ortho** button; remembered) |
+
+An indicator in the corner shows the board's axes as the camera sees them (X right,
+Y towards the board's top edge, Z out of the top side), the named view or "Free",
+and the projection; click an axis end to look from it. **Flip** turns the board
+over and stays in step with the 2D flip.
+
+Where each body comes from, in order:
 
 1. `copper-review BOARD.kicad_pcb` serves the `*.3dshapes/*.wrl` files beside the
    board. A CopperScript export writes one per footprint into
@@ -358,6 +374,8 @@ The test verifies component/net/region annotations, geometry exports, edit/delet
 review import, persistence, layer controls, and search. Artifacts go to ignored
 `test-results/`.
 `node tests/flip-browser.mjs URL` checks picking and side-following on a flipped board.
+`node tests/views3d-browser.mjs URL` checks the 3D view keys, projection and indicator
+(it needs the browser compiler, like the 3D view).
 `node tests/assembly-browser.mjs URL` checks assembly mode: planning with and without
 the demo sheet, marking, rework notes, persistence, progress export and import.
 `node tests/viewer-regressions.mjs "http://127.0.0.1:PORT/#token=TOKEN"` additionally

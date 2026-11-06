@@ -21,6 +21,28 @@ export function perspective(fov,aspect,near,far) {
   const f=1/Math.tan(fov/2),r=new Float32Array(16);
   r[0]=f/aspect;r[5]=f;r[10]=(far+near)/(near-far);r[11]=-1;r[14]=2*far*near/(near-far);return r;
 }
+/** Orthographic projection: `half` is half the visible height at any depth. */
+export function orthographic(half,aspect,near,far) {
+  const r=new Float32Array(16);
+  r[0]=1/(half*aspect);r[5]=1/half;r[10]=-2/(far-near);r[14]=-(far+near)/(far-near);r[15]=1;return r;
+}
+/** Straight down on the top side (a hair off vertical, so "up" on screen stays the board's top edge). */
+export const TOP_PITCH=Math.PI/2-.001;
+/**
+ * Named views as camera angles. World x is board x, world y is up the page (board y negated), z up
+ * out of the top side. Front looks from the board's bottom edge, right from its right edge.
+ */
+export const VIEWS={top:{yaw:0,pitch:TOP_PITCH},bottom:{yaw:0,pitch:-TOP_PITCH},front:{yaw:0,pitch:0},back:{yaw:Math.PI,pitch:0},right:{yaw:Math.PI/2,pitch:0},left:{yaw:-Math.PI/2,pitch:0}};
+/** The named view a camera is in, or null between views. */
+export function viewName({yaw,pitch}){
+  const turn=a=>Math.abs(Math.atan2(Math.sin(a),Math.cos(a)));
+  for(const [name,view] of Object.entries(VIEWS)){
+    if(Math.abs(pitch-view.pitch)>.02)continue;
+    if(Math.abs(view.pitch)>1.5||turn(yaw-view.yaw)<.02)return name;
+  }
+  return null;
+}
+const FOV=.7;
 export function lookAt(eye,target,up) {
   const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],norm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -54,18 +76,24 @@ export function createView3d(canvas) {
   gl.useProgram(program);
   const buffers={},attribute=name=>gl.getAttribLocation(program,name),uniform=name=>gl.getUniformLocation(program,name);
   const viewProjection=uniform('viewProjection'),eyeAt=uniform('eye'),keyAt=uniform('keyLight'),fillAt=uniform('fillLight');
-  let count=0,fills=[],camera={target:[0,0,0],distance:100,yaw:0,pitch:.9},radius=50,frame=0;
+  let count=0,fills=[],camera={target:[0,0,0],distance:100,yaw:0,pitch:.9},radius=50,frame=0,ortho=false,onDraw=null;
+  // Orthographic keeps the size perspective shows at the target, so switching does not jump; the eye
+  // stands well back so zooming in never clips the board.
+  const eyeOf=()=>ortho?cameraEye({...camera,distance:Math.max(camera.distance,radius*4)}):cameraEye(camera);
   const view=()=>{
-    const aspect=(canvas.clientWidth||canvas.width)/Math.max(1,canvas.clientHeight||canvas.height);
-    return multiply(perspective(.7,aspect,radius/50,radius*40),lookAt(cameraEye(camera),camera.target,[0,0,1]));
+    const aspect=(canvas.clientWidth||canvas.width)/Math.max(1,canvas.clientHeight||canvas.height),eye=eyeOf();
+    const projection=ortho?orthographic(camera.distance*Math.tan(FOV/2),aspect,radius/50,Math.hypot(...eye.map((x,i)=>x-camera.target[i]))+radius*4)
+      :perspective(FOV,aspect,radius/50,radius*40);
+    return multiply(projection,lookAt(eye,camera.target,[0,0,1]));
   };
   function draw() {
     frame=0;
     const width=Math.max(1,Math.floor(canvas.clientWidth*devicePixelRatio)),height=Math.max(1,Math.floor(canvas.clientHeight*devicePixelRatio));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
     gl.viewport(0,0,width,height);gl.clearColor(...background(),1);gl.enable(gl.DEPTH_TEST);gl.clearStencil(0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
+    onDraw?.(camera,ortho);
     if(!count)return;
-    const eye=cameraEye(camera),norm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
+    const eye=eyeOf(),norm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
     const back=norm(eye.map((x,i)=>x-camera.target[i])),right=norm([back[1],-back[0],0]);
     const up=[right[1]*back[2]-right[2]*back[1],right[2]*back[0]-right[0]*back[2],right[0]*back[1]-right[1]*back[0]];
     const toward=(u,r)=>norm(back.map((x,i)=>x+u*up[i]+r*right[i]));
@@ -98,9 +126,9 @@ export function createView3d(canvas) {
     const location=attribute(name==='fill'?'position':name);
     gl.bindBuffer(gl.ARRAY_BUFFER,buffers[name]);gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,3,gl.FLOAT,false,0,0);
   }
-  function fit(bounds) {
+  function fit(bounds,{pitch,yaw=0}={}) {
     const [x0,y0,x1,y1]=bounds;
-    camera={target:[(x0+x1)/2,-(y0+y1)/2,0],yaw:0,pitch:camera.pitch<0?-.9:.9,distance:1}; // stays on the side in view
+    camera={target:[(x0+x1)/2,-(y0+y1)/2,0],yaw,pitch:pitch??(camera.pitch<0?-.9:.9),distance:1}; // stays on the side in view
     radius=Math.max(10,Math.hypot(x1-x0,y1-y0)/2);
     // The closest distance that keeps every corner of the board (and a few millimetres of parts) on screen.
     const corners=[];for(const x of [x0,x1])for(const y of [-y0,-y1])for(const z of [-6,6])corners.push([x,y,z]);
@@ -134,6 +162,11 @@ export function createView3d(canvas) {
     },
     /** Turn the board over: the same angle from the other side. */
     flip(){camera={...camera,pitch:-camera.pitch};request();},
+    /** Look at the whole board from a named view (top, bottom, front, back, left, right). */
+    view(name,bounds){fit(bounds,VIEWS[name]);},
+    /** Called after every frame drawn, with the camera, so an indicator can follow it. */
+    set onDraw(callback){onDraw=callback;},
+    get orthographic(){return ortho;},set orthographic(on){ortho=!!on;request();},
     fit,draw:request,
     get camera(){return camera;},set camera(value){camera={...camera,...value};request();},
   };
