@@ -67,6 +67,13 @@ try {
   await page.waitForFunction(()=>document.querySelector('#assembly-progress-text').textContent.startsWith('1/4 placed'));
   await page.locator('#any-file').setInputFiles({name:'other.assembly.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...exported,board:{...exported.board,sha256:'0'.repeat(64)}}))});
   await page.waitForFunction(()=>document.querySelector('#message').textContent.includes('different board'));
+  // The assembly.lock itself opens like the sheet it would write; progress carries over.
+  await page.locator('#any-file').setInputFiles('examples/demo.assembly.lock');
+  await page.waitForFunction(()=>document.querySelector('#assembly-source').textContent.startsWith('assembly.lock: Demo'));
+  assert.match(await page.locator('#assembly-progress-text').textContent(),/^1\/4 placed/);
+  const limits=await page.locator('#assembly-warnings').textContent();
+  assert.match(limits,/copper assembly check has not run here/);
+  assert.match(limits,/1 selection\(s\) not yet reviewed in the lock: sensing\.U2/);
   // The layout review is untouched by assembly progress.
   await page.keyboard.press('l');
   assert(await page.locator('.explorer').isVisible());

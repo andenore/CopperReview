@@ -8,7 +8,7 @@
 <div class="header-actions"><button id="compiler-cancel" hidden>Cancel compilation</button>
 <div class="menu"><button id="open-menu" class="primary" aria-haspopup="menu" aria-expanded="false">Open</button>
 <div id="open-list" class="menu-list" role="menu" hidden>
-<button id="open-file" role="menuitem">File…<small>Board, IR, .copper, scene, review, issue list or assembly sheet · Ctrl+O</small></button>
+<button id="open-file" role="menuitem">File…<small>Board, IR, .copper, scene, review, issue list or assembly.lock · Ctrl+O</small></button>
 <button id="open-folder" role="menuitem">Project folder…<small>Compiles locally in this browser</small></button>
 <button id="open-url" role="menuitem">From URL or GitHub…</button>
 <button id="compiler-example" role="menuitem">Example circuit</button>
@@ -110,6 +110,6 @@
   <label class="field">Board source<select id="folder-boards" size="8" aria-label="Board source files in the folder"></select></label>
   <button id="folder-open" type="button" class="primary">Compile selected board</button>
 </dialog>
-<input id="any-file" type="file" accept=".kicad_pcb,.json,.copper" multiple hidden><input id="folder-files" type="file" webkitdirectory multiple hidden>
+<input id="any-file" type="file" accept=".kicad_pcb,.json,.copper,.lock" multiple hidden><input id="folder-files" type="file" webkitdirectory multiple hidden>
 <script type="module" src="./app.js"></script>
 </body></html>

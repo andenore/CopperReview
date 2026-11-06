@@ -1,5 +1,5 @@
 import {compileGithubProject,compileLocalProject,localBoardSources} from './project-compiler.js';
-import {randomId} from './hash.js';
+import {randomId,sha256} from './hash.js';
 import {discoverProject,downloadDesign,setGithubToken,hasGithubToken,checkGithubToken} from './projects.js';
 import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
@@ -11,7 +11,7 @@ import {parseVrml,buildSoup,loadBodies,modelKind} from './model3d.js';
 import {drawText,textRects} from './silk-text.js';
 import {readStep} from './steps.js';
 import {generateBodies} from './bodies.js';
-import {buildAssembly,validateSheet,reconcileProgress,emptyProgress,updateEntry,entryOf,statusOf,lineDone,summarize,validateProgress,makeProgress,pinOne,phaseLabel,phaseHint,ASSEMBLY_SHEET_SCHEMA,ASSEMBLY_PROGRESS_SCHEMA} from './assembly.js';
+import {buildAssembly,validateSheet,sheetFromLock,isAssemblyLock,reconcileProgress,emptyProgress,updateEntry,entryOf,statusOf,lineDone,summarize,validateProgress,makeProgress,pinOne,phaseLabel,phaseHint,ASSEMBLY_SHEET_SCHEMA,ASSEMBLY_PROGRESS_SCHEMA} from './assembly.js';
 for(const id of ['category','priority','note-status','assembly-part-status','assembly-filter'])chipify(document.getElementById(id));
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 const $ = id => document.getElementById(id);
@@ -184,17 +184,20 @@ $('project-open').onclick=()=>{const file=projectFiles[Number($('project-files')
 async function openFiles(list){
   const files=[...list];if(!files.length)return;
   const kinds=await Promise.all(files.map(async file=>{
-    if(!file.name.toLowerCase().endsWith('.json'))return {file,kind:'design'};
+    const lower=file.name.toLowerCase();if(!lower.endsWith('.json')&&!lower.endsWith('.lock'))return {file,kind:'design'};
     if(file.size>50*1024*1024)throw Error(`${file.name} exceeds 50 MiB.`);
-    let value;try{value=JSON.parse(await file.text());}catch{throw Error(`${file.name} is not valid JSON.`);}
-    const kind=value?.schema===ISSUES_SCHEMA?'issues':value?.schema===ASSEMBLY_SHEET_SCHEMA?'assembly-sheet':value?.schema===ASSEMBLY_PROGRESS_SCHEMA?'assembly-progress':READABLE_REVIEW_SCHEMAS.includes(value?.schema)?'layout-review':value?.schema==='copper-electrical-review/v1'?'electrical-review':'design';
+    const bytes=await file.arrayBuffer();
+    let value;try{value=JSON.parse(new TextDecoder().decode(bytes));}catch{throw Error(`${file.name} is not valid JSON.`);}
+    if(lower.endsWith('.lock')){if(!isAssemblyLock(value))throw Error(`${file.name} is not a CopperScript assembly.lock.`);return {file,kind:'assembly-lock',value,sha256:await sha256(bytes)};}
+    const kind=value?.schema===ISSUES_SCHEMA?'issues':value?.schema&&isAssemblyLock(value)?'assembly-lock':value?.schema===ASSEMBLY_SHEET_SCHEMA?'assembly-sheet':value?.schema===ASSEMBLY_PROGRESS_SCHEMA?'assembly-progress':READABLE_REVIEW_SCHEMAS.includes(value?.schema)?'layout-review':value?.schema==='copper-electrical-review/v1'?'electrical-review':'design';
     return {file,kind,value};
   }));
   for(const {file}of kinds.filter(k=>k.kind==='design'))await openDesignFile(file);
-  for(const {file,kind,value}of kinds.filter(k=>k.kind!=='design')){
+  for(const {file,kind,value,sha256:digest}of kinds.filter(k=>k.kind!=='design')){
     if(kind==='issues'){if(!state.scene)throw Error(`Open the board before the issue list ${file.name}.`);loadIssues(value);}
-    else if(kind==='assembly-sheet'||kind==='assembly-progress'){if(!state.scene)throw Error(`Open the board before the assembly ${kind==='assembly-sheet'?'sheet':'progress'} ${file.name}.`);
-      if(kind==='assembly-sheet'?loadAssemblySheet(value):loadAssemblyProgress(value))setMode('assembly');}
+    else if(kind.startsWith('assembly-')){const what={'assembly-sheet':'sheet','assembly-lock':'lock','assembly-progress':'progress'}[kind];
+      if(!state.scene)throw Error(`Open the board before the assembly ${what} ${file.name}.`);
+      if(kind==='assembly-progress'?loadAssemblyProgress(value):loadAssemblySheet(kind==='assembly-lock'?sheetFromLock(value,digest||await sha256(await file.arrayBuffer())):value))setMode('assembly');}
     else if(kind==='layout-review'){if(!state.scene)throw Error(`Open the board before the review ${file.name}.`);loadLayoutReview(value);setMode(mode==='electrical'?'layout':mode);}
     else{if(!electrical.hasModel())throw Error(`Open the schematic before the review ${file.name}.`);electrical.importReview(value);setMode(mode==='layout'?'electrical':mode);message(`Loaded electrical review ${file.name}`);}
   }
@@ -203,12 +206,13 @@ $('any-file').onchange=guarded(async e=>{const files=[...e.target.files];e.targe
 for(const id of ['open-file','empty-open'])$(id).onclick=()=>$('any-file').click();
 $('empty-folder').onclick=()=>$('folder-files').click();
 // A local project folder: only CopperScript sources and manifests are read; nothing is uploaded.
-let folderFiles=null,folderName='',folderRoot=null;
+let folderFiles=null,folderName='',folderRoot=null,folderLocks=new Map();
 $('open-folder').onclick=()=>$('folder-files').click();
 $('folder-files').onchange=guarded(async e=>{
   const picked=[...e.target.files];e.target.value='';if(!picked.length)return;
-  folderName=picked[0].webkitRelativePath.split('/')[0]||'folder';folderRoot=null;folderFiles=new Map();
-  for(const file of picked){const path=file.webkitRelativePath?file.webkitRelativePath.split('/').slice(1).join('/'):file.name;if(/(?:^|\/)(?:\.git|\.copper-cache|node_modules|target)\//.test(path))continue;if(path.endsWith('.copper')||/(?:^|\/)copper\.(?:mod|lock)$/.test(path))folderFiles.set(path,file);}
+  folderName=picked[0].webkitRelativePath.split('/')[0]||'folder';folderRoot=null;folderFiles=new Map();folderLocks=new Map();
+  for(const file of picked){const path=file.webkitRelativePath?file.webkitRelativePath.split('/').slice(1).join('/'):file.name;if(/(?:^|\/)(?:\.git|\.copper-cache|node_modules|target)\//.test(path))continue;
+    if(path.endsWith('.copper')||/(?:^|\/)copper\.(?:mod|lock)$/.test(path))folderFiles.set(path,file);else if(/(?:^|\/)assembly\.lock$/.test(path))folderLocks.set(path,file);}
   const boards=await localBoardSources(folderFiles);
   if(!boards.length)throw Error(`No board source in ${folderName}. Choose the folder that holds board.copper and copper.mod.`);
   if(boards.length===1){await openLocalBoard(boards[0]);return;}
@@ -216,6 +220,8 @@ $('folder-files').onchange=guarded(async e=>{
 });
 async function openLocalBoard(path){
   const revision=beginOpen(),file=folderFiles.get(path),bytes=await file.arrayBuffer();
+  // The lock needs only the board, so the Assembly mode has it even if compilation fails.
+  await readProjectLock(path);
   $('compiler-cancel').hidden=false;message(`Compiling ${folderName}/${path} with CopperScript WASM…`);
   let prepared;
   try{prepared=await compileLocalProject(folderFiles,path,new Uint8Array(bytes),{onProgress:text=>{if(revision===documentRevision)message(text);}});}
@@ -227,7 +233,8 @@ async function openLocalBoard(path){
 async function openServedProject(project){
   const files=new Map();message(`Reading ${project.files.length} project file(s) from ${project.name}…`);
   await Promise.all(project.files.map(async f=>{const response=await fetch(`./api/project/file?path=${encodeURIComponent(f.path)}`,{headers:{'X-Copper-Token':token},cache:'no-store'});if(!response.ok)throw Error(`Could not read ${f.path} from the server.`);files.set(f.path,new Blob([await response.arrayBuffer()]));}));
-  folderFiles=new Map([...files].sort(([a],[b])=>a.localeCompare(b)));folderName=project.name;folderRoot=project.root||null;
+  const lockFile=([path])=>/(?:^|\/)assembly\.lock$/.test(path);
+  folderFiles=new Map([...files].filter(f=>!lockFile(f)).sort(([a],[b])=>a.localeCompare(b)));folderLocks=new Map([...files].filter(lockFile));folderName=project.name;folderRoot=project.root||null;
   const boards=project.board?[project.board]:await localBoardSources(folderFiles);
   if(!boards.length)throw Error(`No board source in ${project.name}.`);
   if(boards.length===1){await openLocalBoard(boards[0]);return;}
@@ -758,6 +765,8 @@ new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();
 // The plan comes from the board (and the assembly sheet, when one is open); progress is what the
 // person at the bench reported, saved per board file in this browser.
 const asm={sheet:null,plan:null,progress:null,current:null,focus:null,filter:'all',warnings:[]};
+// The assembly.lock beside the board source of an opened project folder, read fresh on each compile.
+let projectLock=null;
 const assemblyStorageKey=()=>`copper-review:assembly:v1:${state.scene.board.sha256}`;
 const currentLine=()=>asm.plan?.lines.find(l=>l.id===asm.current)||null;
 const lineOf=ref=>asm.plan?.lines.find(l=>l.items.some(i=>i.reference===ref))||null;
@@ -779,7 +788,13 @@ function planAssembly(sheet,saved){
   const plan=buildAssembly(state.scene,sheet),{progress,reset}=reconcileProgress(saved,plan,state.scene),list=(refs,n=12)=>refs.slice(0,n).join(', ')+(refs.length>n?`, +${refs.length-n} more`:'');
   asm.sheet=sheet;asm.plan=plan;asm.progress=progress;asm.focus=null;
   const warnings=[];
-  if(sheet)warnings.push(`Assembly sheet for ${sheet.board} (lock ${String(sheet.lock?.sha256||'').slice(0,12)}). Parts match the board by CopperScript path, then designator; nothing proves the board was built from that source.`);
+  if(sheet)warnings.push(`${sheet.origin==='assembly.lock'?'assembly.lock':'Assembly sheet'} for ${sheet.board} (lock ${String(sheet.lock?.sha256||'').slice(0,12)}). Parts match the board by CopperScript path, then designator; nothing proves the board was built from that source.`);
+  if(sheet?.origin==='assembly.lock'){
+    warnings.push('Read straight from assembly.lock: copper assembly check has not run here, so selections out of date with the source are not detected. Values come from the board.');
+    const unreviewed=sheet.components.filter(c=>!c.reviewed).map(c=>c.reference);
+    if(unreviewed.length)warnings.push(`${unreviewed.length} selection(s) not yet reviewed in the lock: ${list(unreviewed)}.`);
+    if(sheet.components.some(c=>c.electrical_sha256===null))warnings.push(`Legacy lock (${sheet.lock.schema}): parts have no digest of their own, so progress is kept while the MPN and footprint are unchanged.`);
+  }
   else warnings.push('No assembly sheet: parts, values and footprints come from the board file, without MPNs or fit routes. Run copper assembly bom … --assembly-sheet and open the sheet for them.');
   if(plan.unmatched.length)warnings.push(`${plan.unmatched.length} sheet part(s) are not on this board: ${list(plan.unmatched)}.`);
   if(plan.untracked.length)warnings.push(sheet?`${plan.untracked.length} board footprint(s) are not in the sheet (not assembled, or not in the lock): ${list(plan.untracked)}.`:`${plan.untracked.length} footprint(s) without solderable pads are not listed: ${list(plan.untracked)}.`);
@@ -799,7 +814,22 @@ function loadAssemblyState(){
     try{if(raw)localStorage.setItem(`${assemblyStorageKey()}:unreadable:${new Date().toISOString()}`,raw);}catch{}
     if(raw)message('Saved assembly progress could not be read; it was kept under an ":unreadable" key. Open an exported progress file to recover.',true);
     try{planAssembly(null,null);}catch{asm.plan=null;}}
-  $('assembly-filter').value=asm.filter;renderAssembly();
+  $('assembly-filter').value=asm.filter;renderAssembly();applyProjectLock();
+}
+async function readProjectLock(boardPath){
+  const directory=boardPath.split('/').slice(0,-1).join('/'),file=folderLocks.get(directory?`${directory}/assembly.lock`:'assembly.lock');
+  projectLock=null;if(!file)return;
+  try{const bytes=await file.arrayBuffer(),value=JSON.parse(new TextDecoder().decode(bytes));projectLock={sheet:sheetFromLock(value,await sha256(bytes)),path:file.name};}
+  catch(error){message(`The project's assembly.lock could not be read: ${error.message}`,true);return;}
+  applyProjectLock();
+}
+/** Use the project's lock unless a sheet the reviewer opened is in use; a changed lock replaces the old one. */
+function applyProjectLock(){
+  if(!projectLock||!state.scene||!asm.plan)return;
+  const current=asm.sheet;
+  if(current&&(current.origin!=='assembly.lock'||current.lock?.sha256===projectLock.sheet.lock.sha256))return;
+  try{buildAssembly(state.scene,projectLock.sheet);}catch{return;} // the lock is for another board
+  loadAssemblySheet(projectLock.sheet);
 }
 function loadAssemblySheet(value){
   const sheet=validateSheet(value),recorded=Object.keys(asm.progress?.components||{}).length;
@@ -828,8 +858,8 @@ function renderAssembly(){
   $('assembly-progress-text').textContent=`${s.placed}/${s.to_place} placed · ${s.inspected}/${s.fitted} inspected · ${s.lines_done}/${s.lines} lines done${s.problems?` · ${s.problems} need rework`:''}`;
   $('assembly-bar-fill').style.width=`${(s.to_place?s.placed/s.to_place:s.fitted?s.inspected/s.fitted:0)*100}%`;
   const source=$('assembly-source');source.replaceChildren();
-  source.append(document.createTextNode(asm.sheet?`Sheet: ${asm.sheet.board} · ${asm.sheet.components.length} parts`:'From the board file only · no MPNs or fit routes'));
-  const open=document.createElement('button');open.type='button';open.textContent=asm.sheet?'Open another sheet…':'Open assembly sheet…';open.onclick=()=>$('any-file').click();source.append(document.createElement('br'),open);
+  source.append(document.createTextNode(asm.sheet?`${asm.sheet.origin==='assembly.lock'?'assembly.lock':'Sheet'}: ${asm.sheet.board} · ${asm.sheet.components.length} parts`:'From the board file only · no MPNs or fit routes'));
+  const open=document.createElement('button');open.type='button';open.textContent=asm.sheet?'Open another lock or sheet…':'Open assembly.lock…';open.title='assembly.lock, or a sheet from copper assembly bom --assembly-sheet';open.onclick=()=>$('any-file').click();source.append(document.createElement('br'),open);
   const list=$('assembly-lines');list.replaceChildren();let phase=null;
   for(const line of visibleLines()){
     if(line.phase!==phase){phase=line.phase;const head=document.createElement('div');head.className='assembly-phase';head.textContent=phaseLabel(phase);const hint=document.createElement('small');hint.textContent=phaseHint(phase);head.append(hint);list.append(head);}
@@ -861,6 +891,7 @@ function renderAssemblyDetail(){
   fact('Pass',`${phaseLabel(line.phase)} · ${phaseHint(line.phase)}`);
   fact('Quantity',String(line.items.length));fact('Parts',line.items.map(i=>i.designator).join(' '));
   fact('Footprint',shortFootprint(line.footprint));fact('Manufacturer',line.manufacturer);fact('MPN',line.mpn);
+  const unreviewed=line.items.filter(i=>i.reviewed===false).length;if(unreviewed)fact('Review',`${unreviewed} of ${line.items.length} not reviewed in the lock`);
   if(line.supplier||line.supplier_part){let value=[line.supplier,line.supplier_part].filter(Boolean).join(' ');
     if(/^https:\/\//.test(line.source_url)){const a=document.createElement('a');a.href=line.source_url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=value||'catalogue';value=a;}fact('Supplier',value);}
   const ones=line.items.filter(i=>pinOne(state.scene.components.find(c=>c.reference===i.reference)||{pads:[]})).length;

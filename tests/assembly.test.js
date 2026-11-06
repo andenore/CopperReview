@@ -105,3 +105,27 @@ test('pin 1 is the pad numbered 1 or A1, never a guess',()=>{
   assert.equal(pinOne({pads:[{number:'B2'},{number:'A1'}]}).number,'A1');
   assert.equal(pinOne({pads:[{number:'G'},{number:'S'}]}),null);
 });
+
+test('an assembly.lock reads as a sheet: path designators, routes, values from the board',async()=>{
+  const {sheetFromLock,kicadReference}=await import('../copper_review/web/assembly.js');
+  const lock=JSON.parse(readFileSync(new URL('../examples/demo.assembly.lock',import.meta.url)));
+  const fromLock=sheetFromLock(lock,digest(4));
+  assert.equal(fromLock.origin,'assembly.lock');
+  assert.equal(fromLock.components.find(c=>c.reference==='power.J1').designator,'power_J1');
+  const a=buildAssembly(scene,fromLock);
+  assert.equal(a.items.get('C1').value,'100 nF','the value comes from the board');
+  assert.equal(a.items.get('U2').reviewed,false);
+  // The lock and the sheet written from it name each part the same way, so progress carries over.
+  const fromSheet=buildAssembly(scene,validateSheet(JSON.parse(readFileSync(new URL('../examples/demo.assembly-sheet.json',import.meta.url)))));
+  for(const [ref,item]of a.items)assert.equal(item.identity,fromSheet.items.get(ref).identity,ref);
+  assert.equal(kicadReference('1.R'),'U_1_R');
+  const route=populate=>sheetFromLock({...lock,selections:[{...lock.selections[0],populate}]},digest(4)).components[0].assembly;
+  assert.deepEqual(['supplier','consigned','none'].map(route),['supplier-assembled','hand-assemble','do not fit']);
+  assert.throws(()=>route('maybe'),/populate must be/);
+  assert.throws(()=>sheetFromLock({...lock,selections:[{...lock.selections[0],electrical_sha256:undefined}]},digest(4)),/electrical_sha256 is missing/);
+  // Legacy locks: v0.1 means supplier-assembled, and parts carry no digest of their own.
+  const legacy=sheetFromLock({schema:'copperscript-assembly-lock/v0.1',board:'Demo',electrical_sha256:digest(5),selections:[{reference:'control.C1',part:'P',footprint:'F',manufacturer:'M',mpn:'X',reviewed:true}]},digest(4));
+  assert.equal(legacy.components[0].assembly,'supplier-assembled');
+  assert.equal(buildAssembly(scene,legacy).items.get('C1').identity,'sheet:legacy|X|F');
+  assert.throws(()=>sheetFromLock({schema:'other'},digest(4)),/Not a CopperScript assembly lock/);
+});

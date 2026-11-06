@@ -47,20 +47,22 @@ def static_asset(path):
 
 # A served project exposes only CopperScript sources and manifests, read fresh per request.
 PROJECT_SKIP = {".git", ".copper-cache", "node_modules", "target"}
+# assembly.lock is read by the Assembly mode, never by the compiler.
+PROJECT_MANIFESTS = ("copper.mod", "copper.lock", "assembly.lock")
 MAX_PROJECT_SOURCE = 512 * 1024
 MAX_PROJECT_MANIFEST = 8 * 1024 * 1024
 MAX_PROJECT_FILES = 2000
 
 
 def project_files(root):
-    """Folder-relative paths of .copper sources and copper.mod/copper.lock, without symlinks."""
+    """Folder-relative paths of .copper sources, copper.mod/copper.lock and assembly.lock, without symlinks."""
     root = Path(root).resolve()
     found = {}
     for directory, folders, names in os.walk(root):
         folders[:] = sorted(f for f in folders if f not in PROJECT_SKIP and not (Path(directory) / f).is_symlink())
         for name in sorted(names):
             path = Path(directory) / name
-            if path.is_symlink() or not (name.endswith(".copper") or name in ("copper.mod", "copper.lock")):
+            if path.is_symlink() or not (name.endswith(".copper") or name in PROJECT_MANIFESTS):
                 continue
             limit = MAX_PROJECT_SOURCE if name.endswith(".copper") else MAX_PROJECT_MANIFEST
             size = path.stat().st_size
@@ -79,7 +81,7 @@ def project_file(root, name):
     if not parts or any(part in ("", ".", "..") or part in PROJECT_SKIP for part in parts):
         return None
     leaf = parts[-1]
-    if not (leaf.endswith(".copper") or leaf in ("copper.mod", "copper.lock")):
+    if not (leaf.endswith(".copper") or leaf in PROJECT_MANIFESTS):
         return None
     path = root
     for part in parts:

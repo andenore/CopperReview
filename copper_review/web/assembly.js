@@ -4,6 +4,8 @@
 
 export const ASSEMBLY_SHEET_SCHEMA='copperscript.assembly-sheet/v1';
 export const ASSEMBLY_PROGRESS_SCHEMA='copper-review-assembly/v1';
+export const LOCK_SCHEMAS=['copperscript-assembly-lock/v0.4','copperscript-assembly-lock/v0.3','copperscript-assembly-lock/v0.2','copperscript-assembly-lock/v0.1'];
+export const isAssemblyLock=value=>LOCK_SCHEMAS.includes(value?.schema);
 export const ROUTES=['supplier-assembled','hand-assemble','do not fit'];
 export const STATUSES=['todo','placed','inspected'];
 
@@ -20,6 +22,36 @@ const DIGEST=/^[0-9a-f]{64}$/;
 const text=value=>typeof value==='string'&&value.trim()?value:null;
 const naturally=(a,b)=>a.localeCompare(b,'en',{numeric:true,sensitivity:'base'})||(a<b?-1:a>b?1:0);
 
+/**
+ * Read an `assembly.lock` as a sheet. The lock names each part by its CopperScript path, with its
+ * identity, populate mode and (from v0.4) the digest it was reviewed against; the value comes from
+ * the board. Unlike `copper assembly bom --assembly-sheet`, nothing here runs the assembly check:
+ * unreviewed selections are listed, and selections gone stale against the source cannot be seen.
+ */
+export function sheetFromLock(lock,sha256){
+  if(!isAssemblyLock(lock))throw Error(`Not a CopperScript assembly lock (expected ${LOCK_SCHEMAS[0]}).`);
+  if(!Array.isArray(lock.selections))throw Error('Assembly lock has no selections list.');
+  const legacy=lock.schema!==LOCK_SCHEMAS[0],route={supplier:'supplier-assembled',consigned:'hand-assemble',none:'do not fit'};
+  const components=lock.selections.map((s,index)=>{
+    const where=`Assembly lock selection ${index+1}${typeof s?.reference==='string'?` (${s.reference})`:''}`;
+    if(!text(s?.reference))throw Error(`${where}: reference must be a nonempty string.`);
+    // v0.1 predates populate: every selection was supplier-assembled.
+    const populate=s.populate??(lock.schema===LOCK_SCHEMAS[3]?'supplier':undefined);
+    if(!route[populate])throw Error(`${where}: populate must be supplier, consigned or none.`);
+    const digest=s.electrical_sha256??null;
+    if(digest!==null&&!DIGEST.test(digest))throw Error(`${where}: electrical_sha256 must be a SHA-256 hex digest.`);
+    if(digest===null&&!legacy)throw Error(`${where}: electrical_sha256 is missing.`);
+    return {reference:s.reference,designator:kicadReference(s.reference),part:s.part??null,value:null,manufacturer:s.manufacturer??null,mpn:s.mpn??null,footprint:s.footprint??null,
+      populate,assembly:route[populate],supplier:s.supplier??null,supplier_part:s.supplier_part??null,source_url:s.source_url??null,electrical_sha256:digest,reviewed:s.reviewed===true};
+  });
+  return validateSheet({schema:ASSEMBLY_SHEET_SCHEMA,origin:'assembly.lock',board:text(lock.board)||'',lock:{schema:lock.schema,sha256},components});
+}
+/** CopperScript's board designator for a reference (`kicad_reference`): `power.J1` → `power_J1`. */
+export function kicadReference(reference){
+  const safe=reference.replace(/[^A-Za-z0-9_]/g,'_');
+  return /^\p{L}/u.test(safe)?safe:`U_${safe}`;
+}
+
 /** Check a `copperscript.assembly-sheet/v1` document; errors name the failing entry and field. */
 export function validateSheet(value){
   if(value?.schema!==ASSEMBLY_SHEET_SCHEMA)throw Error(`Not a CopperScript assembly sheet (expected ${ASSEMBLY_SHEET_SCHEMA}).`);
@@ -30,7 +62,8 @@ export function validateSheet(value){
     for(const field of ['reference','designator'])if(!text(c?.[field]))throw Error(`${where}: ${field} must be a nonempty string.`);
     if(seen.has(c.reference))throw Error(`${where}: reference is listed twice.`);seen.add(c.reference);
     if(!ROUTES.includes(c.assembly))throw Error(`${where}: assembly must be one of ${ROUTES.join(', ')}.`);
-    if(!DIGEST.test(c.electrical_sha256||''))throw Error(`${where}: electrical_sha256 must be a SHA-256 hex digest.`);
+    // A legacy lock (before v0.4) binds the whole board, not each part, so its parts carry no digest.
+    if(!(value.origin==='assembly.lock'&&c.electrical_sha256===null)&&!DIGEST.test(c.electrical_sha256||''))throw Error(`${where}: electrical_sha256 must be a SHA-256 hex digest.`);
     for(const field of ['value','manufacturer','mpn','footprint','supplier','supplier_part','source_url'])
       if(c[field]!==null&&c[field]!==undefined&&typeof c[field]!=='string')throw Error(`${where}: ${field} must be a string or null.`);
   }
@@ -55,12 +88,14 @@ export function buildAssembly(scene,sheet=null){
     const route=entry?.assembly||'hand-assemble';
     // Shown by the board's own reference, the one on the silkscreen; the sheet's designator is kept.
     const item={reference:c.reference,designator:c.reference,sheet_designator:entry?.designator||null,path:entry?.reference||c.source_path||c.reference,
-      value:entry?(entry.value??''):(c.value||''),footprint:entry?(entry.footprint??c.footprint??''):(c.footprint||''),
+      value:entry?.value??c.value??'',footprint:entry?(entry.footprint??c.footprint??''):(c.footprint||''),
       manufacturer:entry?.manufacturer||'',mpn:entry?.mpn||'',supplier:entry?.supplier||'',supplier_part:entry?.supplier_part||'',source_url:entry?.source_url||'',
       route,side:c.side==='back'?'back':'front',through_hole:throughHole(c),size:area(c.bounds_mm)};
     // Progress stays with a part only while it is the same part: the reviewed selection when a
     // sheet names it, else what the board says it is.
-    item.identity=entry?`sheet:${entry.electrical_sha256}|${item.mpn}|${item.footprint}`:`board:${item.value}|${item.footprint}`;
+    // A sheet and the lock it was written from give the same identity, so either can replace the other.
+    item.identity=entry?`sheet:${entry.electrical_sha256??'legacy'}|${item.mpn}|${item.footprint}`:`board:${item.value}|${item.footprint}`;
+    item.reviewed=entry?entry.reviewed!==false:null;
     item.phase=route==='do not fit'?'not-fitted':route==='supplier-assembled'?'supplier':item.through_hole?'through-hole':`smd-${item.side}`;
     items.push(item);};
   if(sheet){

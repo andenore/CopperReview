@@ -104,8 +104,8 @@ npm run fetch:wasm   # once: download the published browser compiler
 uv run copper-review --project ../BysseControl-32 --port 8769
 ```
 
-The server lists and serves only the folder's `.copper` sources and
-`copper.mod` / `copper.lock` (skipping `.git`, `.copper-cache`, `node_modules`,
+The server lists and serves only the folder's `.copper` sources,
+`copper.mod` / `copper.lock` and `assembly.lock` (skipping `.git`, `.copper-cache`, `node_modules`,
 `target` and symlinks), read fresh on every request and only with the session
 token. The page compiles them on load, so **reload after editing to recompile**.
 Dependencies pinned in `copper.lock` are downloaded from GitHub and checked against
@@ -163,21 +163,31 @@ references, CopperScript paths, and net names are retained in both.
 
 **Assembly** (A) tracks a manual build of the open board, part by part. It works
 from the board export alone (parts grouped by value and footprint), but is meant
-to be used with the assembly sheet CopperScript writes from the reviewed
-`assembly.lock`:
+to be used with the project's `assembly.lock`, which adds manufacturer, MPN,
+supplier and how each part reaches the board: fitted by hand, by the assembler
+(inspect only) or not fitted (confirm the footprint is empty). Values come from
+the board.
+
+- With `--project` (or **Open → Project folder…**), the `assembly.lock` beside the
+  board source is picked up automatically and read fresh on every reload.
+- Otherwise open the board, then `assembly.lock` (**Open → File…**, or drop both).
+
+The lock is read as it is: `copper assembly check` does not run in the browser,
+so unreviewed selections are listed but selections out of date with the source
+are not detected. For a checked input, CopperScript writes the same content as a
+sheet that is only produced when the check passes, and it opens the same way:
 
 ```sh
 copper assembly bom board.copper --locked --offline --lock assembly.lock -o build/bom.csv \
     --assembly-sheet build/assembly-sheet.json
 ```
 
-Open the board, then the sheet (**Open → File…**, or drop both). The sheet adds
-manufacturer, MPN, supplier and how each part reaches the board: fitted by hand,
-by the assembler (inspect only) or not fitted (confirm the footprint is empty).
-Parts match the board by CopperScript path, then designator; sheet parts missing
-from the board and board footprints missing from the sheet are listed under
+A lock and the sheet written from it name each part the same way, so either can
+replace the other without losing progress; a sheet you open is not replaced by the
+project's lock. Parts match the board by CopperScript path, then designator; parts
+missing from the board and board footprints missing from the lock are listed under
 **Assembly details & limits**. Try it with `examples/demo.kicad_pcb` and
-`examples/demo.assembly-sheet.json`.
+`examples/demo.assembly.lock` (or `examples/demo.assembly-sheet.json`).
 
 The plan lists one line per identical part on one side, in passes: SMD on the
 side with fewer hand-placed parts first, then the other side, then through-hole,
