@@ -213,8 +213,9 @@ body[data-mode=assembly] #pcb-review>.explorer,body[data-mode=assembly] #pcb-rev
 @media(max-width:900px){.workspace>#pcb-review{flex:none;height:auto}}
 .minimap{position:absolute;right:12px;bottom:34px;border:1px solid var(--border);border-radius:6px;background:var(--panel);box-shadow:0 4px 16px var(--shadow);cursor:crosshair;z-index:2;touch-action:none}
 .assembly-part-nav{margin-bottom:8px}.assembly-part-nav button{flex:1;padding:6px;font-size:12px}
-#view-real[aria-pressed="true"],#view-flip[aria-pressed="true"]{border-color:var(--selected-border);background:var(--selected-bg);color:var(--copper)}
+#view-real[aria-pressed="true"],#view-flip[aria-pressed="true"],#view-ortho[aria-pressed="true"]{border-color:var(--selected-border);background:var(--selected-bg);color:var(--copper)}
 .assembly-current .assembly-value{font-size:24px;line-height:1.2;letter-spacing:-.4px;color:var(--copper);overflow-wrap:anywhere}
 .assembly-designators{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 4px}.assembly-designators span{font:700 14px ui-monospace,Consolas,monospace;padding:2px 7px;border-radius:5px;border:1px solid var(--selected-border);background:var(--selected-bg-soft);color:var(--text)}
 .assembly-designators span.done{border-color:var(--mint);color:var(--mint)}.assembly-designators span.focused{background:var(--copper);border-color:var(--copper);color:var(--on-accent)}
 .assembly-mpn{font:600 13px ui-monospace,Consolas,monospace;color:var(--label);overflow-wrap:anywhere}
+.view-gizmo{position:absolute;right:12px;top:12px;z-index:2;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px var(--shadow)}
