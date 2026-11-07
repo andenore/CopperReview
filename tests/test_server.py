@@ -32,6 +32,15 @@ class ServerTests(unittest.TestCase):
         for blocked in ['/license.txt', '/manifest.json', '/occt/../app.js', '/other/x.js', '/occt/sub/x.js']:
             self.assertIsNone(static_asset(blocked), blocked)
 
+    def test_only_the_step_worker_may_evaluate_javascript(self):
+        # occt-import-js (the STEP reader) evaluates generated JavaScript inside its worker.
+        with self.request('/step-worker.js') as response:
+            self.assertIn("'unsafe-eval'", response.headers['Content-Security-Policy'])
+            self.assertIn("frame-ancestors 'none'", response.headers['Content-Security-Policy'])
+        for path in ['/', '/app.js', '/body-worker.js', '/compiler-worker.js']:
+            with self.request(path) as response:
+                self.assertNotIn("'unsafe-eval'", response.headers['Content-Security-Policy'], path)
+
     def test_static_and_token_access(self):
         with self.request('/') as response:
             self.assertIn(b'CopperReview',response.read())
