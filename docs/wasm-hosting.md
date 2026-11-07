@@ -168,9 +168,11 @@ Actions). Every push to `main` builds the WASM from the exact CopperScript commi
 pinned in `.copperscript-version`, runs `npm test`, checks the WASM against its
 manifest, builds `dist/` and deploys it. To change compilers, update that file.
 A manual run can try another commit through `compiler_ref`. No server, GitHub credentials or private project
-data are bundled. The current browser compiler (512 KiB standalone source limit)
-is `4969948eb5222708e1885841a4dc0cf47e06ee31` on `andenore/CopperScript`
-(`claude/raise-web-source-limit`).
+data are bundled. The current browser compiler is
+`842e1cddd58de7b7485f957e28cf31e2472e014e` on `andenore/CopperScript` `main`
+(generated QFN/DFN bodies with terminals and a pin-1 mark, a body file for
+every exported footprint, URL-sourced part models; 512 KiB standalone source
+limit).
 
 `andenore/CopperReviewPages` was the earlier hosting repository for the generated
 site while this source was private; it now redirects here.
