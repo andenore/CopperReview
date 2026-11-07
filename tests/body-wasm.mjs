@@ -18,4 +18,11 @@ assert.deepEqual(parts.map(p=>p.name),['body','leads']);
 const xs=[...parts[0].points].filter((_,i)=>i%3===0);
 assert.ok(Math.abs(Math.min(...xs)+1.95)<1e-5&&Math.abs(Math.max(...xs)-1.95)<1e-5,'body spans the 3.9 mm fabrication outline');
 assert.ok(JSON.parse(wasm.generate_body('{}')).error);
-console.log('ok: generate_body gives a leaded SOIC-8 body the viewer can parse');
+// TI's X2QFN-12 (1.6 mm body, pad centres 0.025 mm past it): a no-lead body with edge terminals and a pin-1 mark.
+const x2qfn={schema:'copperscript.body-input/v1',name:'Texas_X2QFN-12_1.6x1.6mm_P0.4mm',fab_mm:[-.8,-.8,.8,.8],
+  pads:[...[-.2,.2].flatMap((y,i)=>[{number:String(i+1),x_mm:-.725,y_mm:y,w_mm:.85,h_mm:.2,kind:'smd'},{number:String(8-i),x_mm:.725,y_mm:y,w_mm:.85,h_mm:.2,kind:'smd'}]),
+        ...[-.6,-.2,.2,.6].flatMap((x,i)=>[{number:String(3+i),x_mm:x,y_mm:.825,w_mm:.2,h_mm:.65,kind:'smd'},{number:String(12-i),x_mm:x,y_mm:-.825,w_mm:.2,h_mm:.65,kind:'smd'}])]};
+const qfn=JSON.parse(wasm.generate_body(JSON.stringify(x2qfn)));
+assert.equal(qfn.kind,'no_lead');
+assert.deepEqual(parseVrml(qfn.wrl).parts.map(p=>p.name),['body','terminals','pin1']);
+console.log('ok: generate_body gives a leaded SOIC-8 and a no-lead X2QFN-12 the viewer can parse');
