@@ -42,22 +42,29 @@ export function parseVrml(text) {
   return {parts:result,unsupported,unit:WRL_UNIT_MM};
 }
 
+/** sRGB from the linear RGB occt-import-js reports. OpenCascade converts a STEP file's colours, which are
+    sRGB like VRML's and the viewer's, to linear light; drawn unconverted they come out far too dark
+    (KiCad's SMA connector body, 0.298 grey in the file, arrives as 0.072 and looked black). */
+export function linearToSrgb(color) {
+  return color.map(c=>{const v=Math.min(1,Math.max(0,c));return v<=.0031308?v*12.92:v>=1?1:1.055*Math.pow(v,1/2.4)-.055;});
+}
+
 /** A STEP file read by occt-import-js (see step-worker.js) as a body in millimetres. Faces with their own
-    colour become separate parts; the rest take the mesh colour. */
+    colour become separate parts; the rest take the mesh colour. Colours are converted back to sRGB. */
 export function occtToBody(result) {
   const parts=[];let triangles=0;
   for(const mesh of result?.meshes||[]){
     const {position:points,index}=mesh,count=points.length/3;
     if(points.length%3||index.length%3)throw new Error('STEP mesh is not made of triangles');
     for(let i=0;i<index.length;i++)if(!(index[i]<count))throw new Error('STEP mesh index out of range');
-    const base=Array.isArray(mesh.color)&&mesh.color.length===3?mesh.color:[.72,.72,.74];
+    const base=Array.isArray(mesh.color)&&mesh.color.length===3?linearToSrgb(mesh.color):[.72,.72,.74];
     const faces=(mesh.faces||[]).filter(f=>Number.isInteger(f.first)&&Number.isInteger(f.last)&&f.first>=0&&f.last*3+2<index.length);
     triangles+=index.length/3;
     if(triangles>MAX_TRIANGLES)throw new Error('STEP model is too detailed to draw');
     if(faces.some(f=>f.color)){
       const groups=new Map();
       for(const f of faces){
-        const color=f.color||base,key=color.join(',');
+        const color=Array.isArray(f.color)&&f.color.length===3?linearToSrgb(f.color):base,key=color.join(',');
         if(!groups.has(key))groups.set(key,{color,ranges:[]});
         groups.get(key).ranges.push([f.first,f.last]);
       }

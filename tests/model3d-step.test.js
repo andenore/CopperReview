@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {parseVrml,occtToBody,candidates,buildSoup,modelPaths,loadBodies} from '../copper_review/web/model3d.js';
+import {parseVrml,occtToBody,linearToSrgb,candidates,buildSoup,modelPaths,loadBodies} from '../copper_review/web/model3d.js';
 
 const wrl=readFileSync(new URL('./fixtures/chip-0805.wrl',import.meta.url),'utf8');
 const extent=(positions,axis)=>{const v=[];for(let i=axis;i<positions.length;i+=3)v.push(positions[i]);return [Math.min(...v),Math.max(...v)];};
@@ -20,7 +20,9 @@ test('a STEP mesh becomes millimetre parts, split by face colour', () => {
   const body=occtToBody({meshes:[boxMesh()]});
   assert.equal(body.unit,1);
   assert.equal(body.parts.length,2,'the red face and the grey remainder');
-  assert.deepEqual(body.parts.map(p=>p.color),[[1,0,0],[.5,.5,.5]]);
+  // occt reports linear light; the parts carry sRGB like VRML bodies (linear 0.5 is sRGB 0.735).
+  assert.deepEqual(body.parts[0].color,[1,0,0]);
+  assert.ok(body.parts[1].color.every(c=>Math.abs(c-.7354)<1e-3),String(body.parts[1].color));
   assert.deepEqual(body.parts.map(p=>p.triangles.length/3),[2,10]);
   const uncoloured=occtToBody({meshes:[{...boxMesh(),faces:[],color:undefined}]});
   assert.equal(uncoloured.parts.length,1);
@@ -61,4 +63,13 @@ test('candidates list the models in file order, then the generated body once', (
   assert.deepEqual(modelPaths(stepScene()),['CopperScript.3dshapes/J1.wrl','CopperScript.3dshapes/abc_J1.step']);
   const sameFile=candidates({body_model:'${KIPRJMOD}/A.3dshapes/a.wrl',models:[{path:'${KIPRJMOD}/A.3dshapes/a.wrl'}]});
   assert.equal(sameFile.length,1);
+});
+
+test('STEP colours read back as the sRGB the file holds', () => {
+  // KiCad's SMA_Molex_73251-2200 body is COLOUR_RGB 0.298 and its gold 0.859 0.738 0.496;
+  // occt-import-js returns them as linear 0.0723 and 0.7087 0.5040 0.2104.
+  const near=(a,b)=>a.every((v,i)=>Math.abs(v-b[i])<2e-3);
+  assert.ok(near(linearToSrgb([.07225,.07225,.07225]),[.298,.298,.298]));
+  assert.ok(near(linearToSrgb([.70870,.50402,.21036]),[.859,.738,.496]));
+  assert.deepEqual(linearToSrgb([0,1,2]),[0,1,1]);
 });
