@@ -26,6 +26,15 @@ STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; char
                 ".wasm": "application/wasm", ".json": "application/json"}
 
 
+CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; "
+       "img-src 'self' blob:; connect-src 'self' https:; object-src 'none'; frame-ancestors 'none'")
+# The STEP reader (occt-import-js, Emscripten) evaluates generated JavaScript, which `script-src`
+# without 'unsafe-eval' refuses. A dedicated worker takes its policy from its own script's response,
+# so only that worker, which has no DOM and talks to the page by messages, is allowed to.
+STEP_WORKER = "step-worker.js"
+STEP_WORKER_CSP = CSP.replace("'wasm-unsafe-eval'", "'wasm-unsafe-eval' 'unsafe-eval'")
+
+
 def static_asset(path):
     """Map a request path to (file, type) under web/, web/wasm/ or web/occt/ (the STEP reader), or None."""
     if path == "/":
@@ -143,7 +152,7 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
     class Handler(BaseHTTPRequestHandler):
         scene = initial_scene
 
-        def send(self, status, payload, content_type="application/json; charset=utf-8"):
+        def send(self, status, payload, content_type="application/json; charset=utf-8", csp=CSP):
             if not isinstance(payload, bytes):
                 payload = json.dumps(payload, allow_nan=False).encode()
             self.send_response(status)
@@ -151,7 +160,7 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self' https:; object-src 'none'; frame-ancestors 'none'")
+            self.send_header("Content-Security-Policy", csp)
             self.end_headers()
             self.wfile.write(payload)
 
@@ -220,7 +229,7 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
             if not (WEB / name).is_file():
                 self.send(404, {"error": "Asset unavailable; run npm run fetch:wasm before compiling source"})
                 return
-            self.send(200, (WEB / name).read_bytes(), mime)
+            self.send(200, (WEB / name).read_bytes(), mime, STEP_WORKER_CSP if name == STEP_WORKER else CSP)
 
         def do_POST(self):
             if not self.allowed(auth=True):
