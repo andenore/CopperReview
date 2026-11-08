@@ -82,6 +82,18 @@ class ImportTests(unittest.TestCase):
         self.assertEqual((hole["kind"], hole["drill_mm"]), ("thru_hole", [1, 1]))
         self.assertNotIn("drill_mm", smd)
 
+    def test_a_connector_mark_reaches_the_body_input(self):
+        data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (footprint "JST" (layer "F.Cu") (at 1 2)
+            (property "Reference" "J1") (property "CopperScriptBodyKind" "connector")
+            (pad "1" smd rect (at 0 0) (size 1 3) (layers "F.Cu")))
+          (footprint "R" (layer "F.Cu") (at 3 4) (property "Reference" "R1")
+            (property "CopperScriptBodyKind" "something-else")
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))))'''
+        connector, other = import_pcb(data, "j.kicad_pcb")["components"]
+        self.assertEqual(connector["body_input"]["body_kind"], "connector")
+        self.assertNotIn("body_kind", other["body_input"])
+
     def test_through_hole_layers_and_blind_via_span(self):
         data = b'''(kicad_pcb (layers (0 "F.Cu" signal) (2 "In1.Cu" power) (4 "In2.Cu" power) (31 "B.Cu" signal))
           (via blind (at 1 2) (size .6) (drill .3) (layers "F.Cu" "In2.Cu") (net 0)))'''
