@@ -25,4 +25,12 @@ const x2qfn={schema:'copperscript.body-input/v1',name:'Texas_X2QFN-12_1.6x1.6mm_
 const qfn=JSON.parse(wasm.generate_body(JSON.stringify(x2qfn)));
 assert.equal(qfn.kind,'no_lead');
 assert.deepEqual(parseVrml(qfn.wrl).parts.map(p=>p.name),['body','terminals','pin1']);
-console.log('ok: generate_body gives a leaded SOIC-8 and a no-lead X2QFN-12 the viewer can parse');
+// A side-entry wire-to-board header marked as a connector: a nylon block at its height with contacts on the pads.
+const header={schema:'copperscript.body-input/v1',name:'JST_S3B-XH-SM4-TB',body_kind:'connector',height_mm:6,fab_mm:[-6.25,-4,6.25,3],
+  pads:[...[-2.5,0,2.5].map((x,i)=>({number:String(i+1),x_mm:x,y_mm:2.2,w_mm:1,h_mm:3.5,kind:'smd'})),
+        ...[-5.2,5.2].map(x=>({number:'MP',x_mm:x,y_mm:-2.5,w_mm:1.6,h_mm:3,kind:'smd'}))]};
+const connector=JSON.parse(wasm.generate_body(JSON.stringify(header)));
+assert.equal(connector.kind,'connector');
+assert.deepEqual(parseVrml(connector.wrl).parts.map(p=>p.name),['body','contacts']);
+assert.equal(JSON.parse(wasm.generate_body(JSON.stringify({...header,body_kind:undefined}))).kind,'no_lead');
+console.log('ok: generate_body gives a leaded SOIC-8, a no-lead X2QFN-12 and a connector the viewer can parse');

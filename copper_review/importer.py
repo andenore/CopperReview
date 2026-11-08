@@ -112,6 +112,8 @@ def body_input(fp, props, angle, pads):
             result["height_mm"] = height
     except ValueError:
         pass
+    if props.get("CopperScriptBodyKind") == "connector":
+        result["body_kind"] = "connector"
     return result
 
 
