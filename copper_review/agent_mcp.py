@@ -6,6 +6,8 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import sys
 import threading
+import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
@@ -75,6 +77,8 @@ TOOLS = [
 
 
 def call_tool(bridge, name, args):
+    if name == "_connection_ping" and args == {}:
+        return {"connected": True}
     spec = next((t for t in TOOLS if t["name"] == name), None)
     if spec is None or not isinstance(args, dict):
         raise ValueError("Unknown tool or invalid arguments")
@@ -117,7 +121,7 @@ class NoRedirect(HTTPRedirectHandler):
         raise ValueError("Review bridge redirects are not allowed")
 
 
-def connect(url, timeout=10):
+def connect(url, timeout=10, client=None):
     parsed = urlsplit(url)
     token = parse_qs(parsed.fragment).get("token", [""])[0]
     if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or not parsed.port or
@@ -127,7 +131,7 @@ def connect(url, timeout=10):
     opener = build_opener(ProxyHandler({}), NoRedirect())
 
     def call(name, arguments):
-        request = Request(endpoint, json.dumps({"name": name, "arguments": arguments}, allow_nan=False).encode(),
+        request = Request(endpoint, json.dumps({"name": name, "arguments": arguments, **({"client": client} if client else {})}, allow_nan=False).encode(),
                           {"Content-Type": "application/json", "X-Copper-Token": token})
         try:
             with opener.open(request, timeout=50 if name == "wait_for_question" else timeout) as response:
@@ -145,10 +149,15 @@ def connect(url, timeout=10):
 
 class DiscoveryClient:
     def __init__(self, url=None, project=None):
-        self.explicit = connect(url) if url else None
+        self.client = {"id": str(uuid.uuid4()), "name": "MCP host"}
+        self.explicit = connect(url, client=self.client) if url else None
         self.project = str(Path(project).resolve()) if project else None
         self.viewer_id = None
         self.connection = None
+
+    def identify(self, name):
+        if isinstance(name, str) and name.strip():
+            self.client["name"] = name[:100]
 
     def live(self):
         def probe(record):
@@ -174,7 +183,7 @@ class DiscoveryClient:
             if record is None:
                 raise ValueError("Viewer unavailable; call list_viewers again")
             self.viewer_id, self.project = record["id"], record["project"]
-            self.connection = connect(record["url"])
+            self.connection = connect(record["url"], client=self.client)
             return {k: record[k] for k in ("id", "label", "project")}
         if self.explicit:
             return self.explicit(name, arguments)
@@ -188,7 +197,7 @@ class DiscoveryClient:
                 raise ValueError("Several viewers are running; use list_viewers and select_viewer, or configure --project")
             record = records[0]
             self.viewer_id, self.project = record["id"], record["project"]
-            self.connection = connect(record["url"])
+            self.connection = connect(record["url"], client=self.client)
         try:
             return self.connection(name, arguments)
         except ValueError as exc:
@@ -302,6 +311,9 @@ class Protocol:
         if not isinstance(params, dict):
             response["error"] = {"code": -32602, "message": "Invalid params"}
         elif method == "initialize" and not self.initialized:
+            info = params.get("clientInfo", {})
+            if isinstance(info, dict) and hasattr(self.call, "identify"):
+                self.call.identify(info.get("name"))
             requested = params.get("protocolVersion")
             response["result"] = {"protocolVersion": requested if requested in PROTOCOLS else PROTOCOLS[0],
                                   "capabilities": {"tools": {}, "resources": {"subscribe": True}, "prompts": {}},
@@ -348,8 +360,12 @@ def main():
             sys.stdout.buffer.flush()
 
     def observe():
+        last_heartbeat = 0
         while not stopped.wait(1):
             try:
+                if protocol.ready and time.monotonic() - last_heartbeat >= 5:
+                    last_heartbeat = time.monotonic()
+                    protocol.call("_connection_ping", {})
                 protocol.poll_notifications(emit)
             except (OSError, ValueError, TypeError):
                 # A failed viewer lookup is retried on the next tick; no model work is started.

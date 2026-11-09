@@ -18,6 +18,55 @@ From this checkout:
 uv run copper-review path/to/board.kicad_pcb --agents
 ```
 
+Click **Connect agent** in the viewer's top bar. Choose your host:
+
+- **ChatGPT desktop / Codex**: copy the generated command and arguments into
+  Settings → MCP servers → Add server → STDIO, then save and restart the
+  connection. The dialog also supplies a TOML configuration.
+- **Claude Desktop**: download **copper-review.mcpb**, open it with Claude Desktop
+  or install it through Settings → Desktop app → Extensions → Advanced settings.
+  Keep the prefilled Python executable. The adapter is bundled; it needs the
+  Python 3.11+ interpreter already running your viewer, not a separate package
+  installation. On another computer, choose that computer's Python executable.
+  If a manual CopperReview entry already exists, disable it before installing
+  the extension to avoid duplicate connections.
+- **Claude Code**: copy the generated setup command and run it in the indicated
+  shell. Update an existing `copper-review` entry instead of adding a duplicate.
+- **Another MCP host**: use the generated command, argument array and environment
+  values. Merge the JSON with existing servers rather than replacing them.
+
+The dialog uses the running Python executable and an absolute launcher path.
+There is no dependency on `uv` or a particular working directory in the host.
+Keep this CopperReview installation available; regenerate the configuration if
+you move it. The downloaded extension includes its own adapter code, so only its
+configured Python runtime must remain available. Configurations and bundles
+contain no viewer token or board data. A custom `COPPER_REVIEW_REGISTRY` path,
+if set, is included so the adapter finds the same registry as the viewer.
+
+**Test connection** generates a short prompt to paste into your chat. The test
+passes only after the host fetches this tab's exact context after the test starts.
+A heartbeat or a read from another tab does not pass it. It expires after two
+minutes; changing selection means starting a new test. This proves context
+delivery, not model reasoning or an answer.
+
+The top-bar indicator distinguishes **Connect agent**, **Agent connected**, and
+**Selection read**. The dialog identifies the shared design, hash, selection and
+tab. Host names come from MCP initialization and are self-reported. A connected
+adapter sends a heartbeat every five seconds; after fifteen seconds without
+activity the indicator no longer reports it as connected. A live host can still
+have no active model turn; sidebar questions may remain queued in that case.
+
+These paths use local desktop hosts. Hosted web chats need a remote MCP transport
+or supported tunnel; the viewer's URL is not a remote MCP endpoint. The dialog
+links to the host's setup guidance. CopperReview does not create a tunnel or
+change host settings automatically.
+
+Host references: [OpenAI desktop MCP setup](https://learn.chatgpt.com/docs/extend/mcp),
+[Claude Desktop extensions](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop),
+[Claude Code MCP setup](https://code.claude.com/docs/en/mcp).
+
+### Manual setup
+
 Compiled electrical IR and `--project` work with the same option. Configure this
 stdio MCP server in your agent host (substitute this checkout's absolute path):
 
@@ -283,17 +332,33 @@ hash-keyed browser persistence.
 
 ## Verification
 
+Build the Claude Desktop extension with:
+
+```console
+python -m copper_review.agent_setup --bundle dist/copper-review.mcpb
+```
+
+An optional `--python` sets the installer's default interpreter path. The bundle
+contains only the adapter, discovery code, launcher, package initializer,
+manifest and short instructions. It uses MCPB manifest 0.3. To validate it,
+extract `manifest.json` and run the official `mcpb validate manifest.json`.
+No generated bundle or machine-specific paths need to be committed.
+
 Run `python -m unittest discover -s tests -v` and `npm test`. Python tests cover
 discovery and dead-process pruning, reconnecting, credential separation,
 mandatory claims, bounded waits, idle-session eviction, compact UTF-8 limits,
 immutable shared contexts, progress, cancellation, evidence resolution and the
 MCP/HTTP boundary. Host-chat tests cover tab selection, highlight expiry and
 acknowledgement, resource subscriptions and user-invoked prompts.
-JavaScript tests verify context caching and size fallback.
+JavaScript tests verify context caching, size fallback and connection-state
+display. Python tests also execute generated configurations and the extracted
+bundle from unrelated working directories and exercise connection proof,
+expiry, cross-tab isolation and credential restrictions.
 
 With Playwright available, run `node tests/questions-browser.mjs` for an actual
 automatically discovered MCP subprocess and browser Q&A. It first checks host
-chat with the sidebar unopened, notifications while MCP stdin is idle, prompt
+chat with the sidebar unopened, setup for ChatGPT/Claude, extension download,
+live connection proof, notifications while MCP stdin is idle, prompt
 discovery and acknowledged highlights without creating notes. It checks that answers
 do not create notes, selections remain usable, citations navigate, follow-ups
 retain context, cancellations reject late answers, revisions invalidate answers,

@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {matchesFeedback,matchesAnswer,describeSelection,prepareContext,createContextCache} from '../copper_review/web/agents.js';
+import {connectionSummary} from '../copper_review/web/agent-setup.js';
+
+test('connection display distinguishes reachability, current reads, stale context and disconnected hosts',()=>{
+  assert.equal(connectionSummary([]).state,'offline');
+  const host={name:'Host',connected:true,read_current:false};
+  assert.equal(connectionSummary([host]).state,'connected');
+  assert.equal(connectionSummary([{...host,read_current:true}]).state,'read');
+  assert.equal(connectionSummary([{...host,read_current:true}],false).state,'connected');
+  assert.equal(connectionSummary([{...host,connected:false,read_current:true}]).state,'offline');
+});
 
 test('unchanged polling never rebuilds context, including cached size failures',()=>{
   let revision=0,calls=0;

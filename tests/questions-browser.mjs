@@ -17,7 +17,9 @@ async function until(fn){for(let i=0;i<100;i++){const result=await fn();if(resul
 try{
   const url=await until(()=>output.match(/CopperReview: (http:\/\/[^\s]+)/)?.[1]);
   await until(()=>output.includes('discovers this viewer automatically'));
-  mcp=spawn(python,['-m','copper_review.agent_mcp'],{env,windowsHide:true,stdio:['pipe','pipe','pipe']});
+  const viewerUrl=new URL(url),viewerToken=new URLSearchParams(viewerUrl.hash.slice(1)).get('token');
+  const generated=await (await fetch(viewerUrl.origin+'/api/agents/setup',{headers:{'X-Copper-Token':viewerToken}})).json();
+  mcp=spawn(generated.config.command,generated.config.args,{env:{...env,...generated.config.env},windowsHide:true,stdio:['pipe','pipe','pipe']});
   const pending=new Map(),notifications=[];let nextId=0;
   createInterface({input:mcp.stdout}).on('line',line=>{const r=JSON.parse(line);if(r.method)notifications.push(r);const handler=pending.get(r.id);if(handler){pending.delete(r.id);handler(r);}});
   function rpc(method,params){return new Promise((resolve,reject)=>{const id=++nextId,timer=setTimeout(()=>{pending.delete(id);reject(Error(`MCP timeout: ${method}`));},12000);pending.set(id,r=>{clearTimeout(timer);resolve(r);});mcp.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');});}
@@ -30,6 +32,28 @@ try{
   // Host-side chat works before the viewer's question panel has ever opened.
   await until(async()=>(await tool('list_sessions')).some(s=>s.active&&s.documents.layout));
   assert.equal(await page.locator('#agent-panel').isVisible(),false);
+  await until(async()=>(await page.locator('#agent-connect').textContent())==='Agent connected');
+  await page.locator('#agent-connect').click();
+  await until(async()=>(await page.locator('#agent-command').inputValue())!=='');
+  assert.equal(await page.locator('#agent-command').inputValue(),generated.config.command);
+  assert.match(await page.locator('#agent-shared-design').textContent(),/demo/i);
+  await page.screenshot({path:'test-results/agent-setup-chatgpt.png'});
+  await page.locator('#agent-setup-client').selectOption('claude');
+  const bundleDownload=page.waitForEvent('download');await page.locator('#agent-extension-download').click();
+  await (await bundleDownload).saveAs('test-results/downloaded-copper-review.mcpb');
+  assert.equal(readFileSync('test-results/downloaded-copper-review.mcpb').subarray(0,2).toString(),'PK');
+  await page.locator('#agent-test').click();
+  await until(async()=>(await page.locator('#agent-test-prompt').inputValue())!=='');
+  assert.match(await page.locator('#agent-test-prompt').inputValue(),/get_current_selection/);
+  assert.match(await page.locator('#agent-test-result').textContent(),/Waiting/);
+  const proof=await tool('get_current_selection');
+  await until(async()=>/Passed: Browser test/.test(await page.locator('#agent-test-result').textContent()));
+  assert.match(await page.locator('#agent-test-prompt').inputValue(),new RegExp(proof.session_id));
+  await page.screenshot({path:'test-results/agent-setup-claude.png'});
+  await page.setViewportSize({width:700,height:900});await page.screenshot({path:'test-results/agent-setup-narrow.png'});
+  await page.setViewportSize({width:1600,height:1000});
+  await page.locator('#agent-setup-close').click();
+  assert.equal(await page.locator('#agent-connect').textContent(),'Selection read');
   const listed=await rpc('resources/list',{});assert.equal(listed.result.resources[0].uri,'copper-review://selection');
   const prompts=await rpc('prompts/list',{});assert(prompts.result.prompts.some(p=>p.name==='explain-selection'));
   const prompt=await rpc('prompts/get',{name:'explain-selection',arguments:{question:'What does this do?'}});
@@ -62,7 +86,7 @@ try{
   await page.unroute('**/api/agents/navigation?*');
   await rpc('resources/unsubscribe',{uri:'copper-review://selection'});
   await page.locator('.entity').filter({hasText:'U1'}).first().click();await page.locator('#agent-open').click();
-  await until(async()=>/No agent connected/.test(await page.locator('#agent-status').textContent()));
+  await until(async()=>/connected/.test(await page.locator('#agent-status').textContent()));
   const waiting=tool('wait_for_question',{agent:'Design helper',timeout_seconds:5});
   await page.locator('#agent-prompt').fill('What is U1, and which source instance is it?');await page.locator('#agent-send').click();
   const q=await waiting,doc=q.context.documents.layout;

@@ -16,7 +16,10 @@ A review tool for CopperScript designs with two halves that can be open at once:
 [Assembly tracking](#assembly-tracking).
 
 With the local CLI's **`--agents`** option, select something on the board and
-ask about it in your connected agent chat. Configure `copper-review-mcp` once;
+ask about it in your connected agent chat. Click **Connect agent** for generated
+ChatGPT/Claude settings, a downloadable Claude Desktop extension, and a live
+connection test. The indicator shows when a host has read the current selection.
+Configure `copper-review-mcp` once;
 it discovers the viewer and exposes `get_current_selection` and `show_on_board`.
 The agent can explain parts, connections, power or layout and highlight exact
 entities back in the viewer. This path needs no waiting agent loop or open sidebar.

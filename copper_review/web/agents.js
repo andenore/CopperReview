@@ -1,5 +1,6 @@
 /* Provider-neutral design Q&A. Models run in the user's agent host. */
 import {randomId} from './hash.js';
+import {createAgentSetup} from './agent-setup.js';
 
 export function matchesFeedback(feedback,documents){return documents[feedback.payload.target]?.sha256===feedback.payload.sha256;}
 export function matchesAnswer(answer,documents){return Object.entries(answer.payload.based_on).every(([target,hash])=>documents[target]?.sha256===hash);}
@@ -39,7 +40,12 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
       ...(body===undefined?{}:{body:typeof body==='string'?body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000)});
     const value=await response.json();if(!response.ok){const error=Error(value.error||'Agent connection unavailable');error.status=response.status;throw error;}return value;
   }
-  function status(text){$('agent-status').textContent=text;}
+  const setup=createAgentSetup({api,sync,sessionId,downloadExtension:async()=>{
+    const response=await fetch('./api/agents/extension',{headers:{'X-Copper-Token':token}});
+    if(!response.ok)throw Error('Could not download the extension. Check the local viewer connection.');
+    const url=URL.createObjectURL(await response.blob()),a=element('a');a.href=url;a.download='copper-review.mcpb';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }});
+  function status(text){if($('agent-status').textContent!==text)$('agent-status').textContent=text;}
   function followUp(r){parentId=r.id;$('agent-reply-context').hidden=false;$('agent-reply-label').textContent=`Follow-up: ${r.prompt}`;$('agent-prompt').focus();}
   function action(label,fn){const b=element('button',label);b.type='button';b.onclick=async()=>{try{await fn();}catch(error){status(error.message);}};return b;}
   function render(documents){
@@ -114,13 +120,16 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
       await api('/navigation',navigationResult);
     }
     records=values[0];presence=values[1].agents;render(contextState().documents);
+    setup.update(values[1],contextState(),lastContext===contextState().key);
     const answering=records.filter(r=>r.status==='answering').length,pending=records.filter(r=>r.status==='queued').length;
-    status(answering?`${answering} question(s) being answered`:presence.length?`${presence.map(a=>a.name).join(', ')} connected${pending?` · ${pending} waiting`:''}`:`No agent connected${pending?` · ${pending} question(s) waiting`:''}`);
+    const hosts=(values[1].connections||[]).filter(c=>c.connected).map(c=>c.name);
+    status(answering?`${answering} question(s) being answered`:presence.length?`${presence.map(a=>a.name).join(', ')} connected${pending?` · ${pending} waiting`:''}`:
+      hosts.length?`${hosts.join(', ')} connected${pending?` · ${pending} question(s) waiting for an active agent`:' · ask in your chat'}`:`No agent connected${pending?` · ${pending} question(s) waiting`:''}`);
   }
   async function poll(){
     if(!connected||busy)return;busy=true;
     try{await sync();await refresh();}
-    catch(error){if(blockedKey===contextState().key)status(error.message);else{lastContext='';status(`Connection: ${error.message} Retrying…`);}}
+    catch(error){setup.unavailable(error.message);if(blockedKey===contextState().key)status(error.message);else{lastContext='';status(`Connection: ${error.message} Retrying…`);}}
     finally{busy=false;if(connected)timer=setTimeout(poll,1000);}
   }
   async function send(){
@@ -147,7 +156,7 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
     const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'})),a=element('a');a.href=url;a.download='design-questions.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   for(const button of document.querySelectorAll('[data-agent-question]'))button.onclick=()=>{$('agent-prompt').value=button.dataset.agentQuestion;$('agent-prompt').focus();};
-  if(localServer)api('').then(value=>{$('agent-open').hidden=!value.enabled;if(value.enabled&&!connected){connected=true;poll();}}).catch(()=>{});
+  if(localServer)api('').then(value=>{$('agent-open').hidden=$('agent-connect').hidden=!value.enabled;if(value.enabled&&!connected){connected=true;poll();}}).catch(()=>{});
   window.addEventListener('pagehide',()=>{const wasConnected=connected;connected=false;clearTimeout(timer);if(wasConnected)fetch('./api/agents/detach',{
     method:'POST',headers:{'X-Copper-Token':token,'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId}),keepalive:true}).catch(()=>{});});
   window.addEventListener('pageshow',e=>{if(e.persisted&&localServer&&!$('agent-open').hidden){connected=true;lastContext='';poll();}});

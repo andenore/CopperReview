@@ -41,8 +41,8 @@ let agentCatalogScene=null,agentCatalog=null;
 let agentLayoutRevision=0;
 function agentContextState(){
   const documents={};
-  if(state.scene)documents.layout={sha256:state.scene.board.sha256};
-  if(electrical.hasModel())documents.electrical={sha256:electrical.input().sha256};
+  if(state.scene)documents.layout={sha256:state.scene.board.sha256,name:state.scene.board.name};
+  if(electrical.hasModel())documents.electrical={sha256:electrical.input().sha256,name:electrical.model().name};
   return {key:JSON.stringify([mode,documents,agentLayoutRevision,state.selection,state.layers,electrical.agentRevision()]),documents,
     selection:mode==='electrical'?electrical.selection():state.selection};
 }

@@ -70,6 +70,38 @@ class AgentBridge:
         self.sessions = {}
         self.requests = {}
         self.workers = {}
+        self.clients = {}
+
+    def client_activity(self, client, selected=None):
+        if client is None:
+            return
+        if not isinstance(client, dict):
+            raise ValueError("Invalid client metadata")
+        cid = str(uuid.UUID(text(client.get("id"), "client id", 100)))
+        name = text(client.get("name"), "client name", 100)
+        with self.lock:
+            if cid not in self.clients and len(self.clients) >= 16:
+                oldest = min(self.clients, key=lambda k: self.clients[k]["seen"])
+                del self.clients[oldest]
+                for session in self.sessions.values():
+                    session.get("client_reads", {}).pop(oldest, None)
+            self.clients[cid] = {"name": name, "seen": time.monotonic(), "last_seen_at": now()}
+            if selected and selected["session_id"] in self.sessions:
+                session = self.sessions[selected["session_id"]]
+                session.setdefault("client_reads", {})[cid] = {"revision": selected["revision"], "read_at": now()}
+                test = session.get("connection_test")
+                if test and test["status"] == "waiting" and time.monotonic() < test["until"] and test["revision"] == selected["revision"] == session["digest"].hex():
+                    test.update(status="passed", host=name)
+
+    def connection_test(self, sid):
+        with self.lock:
+            self._expire()
+            _, session = self._current_session(sid)
+            if not session["context"]["documents"]:
+                raise ValueError("Open a design before testing the connection")
+            session["connection_test"] = {"status": "waiting", "revision": session["digest"].hex(), "until": time.monotonic() + 120}
+            return {"status": "waiting", "prompt": 'Use CopperReview get_current_selection with session_id ' + json.dumps(sid) +
+                    '. Tell me what is selected and which design is open. Do not change the design.'}
 
     def _expire(self):
         expired = {sid for sid, s in self.sessions.items() if time.monotonic() - s["seen"] > SESSION_TTL}
@@ -277,9 +309,22 @@ class AgentBridge:
     def agent_status(self, sid):
         with self.lock:
             self._expire()
-            self._session(sid)
+            session = self._session(sid)
+            test = session.get("connection_test")
+            if test and test["status"] in ("waiting", "passed"):
+                if test["revision"] != session["digest"].hex():
+                    test["status"] = "selection_changed"
+                elif test["status"] == "waiting" and time.monotonic() >= test["until"]:
+                    test["status"] = "expired"
+            connections = []
+            for cid, client in self.clients.items():
+                read = session.get("client_reads", {}).get(cid, {})
+                connections.append({"name": client["name"], "connected": time.monotonic() - client["seen"] < 15,
+                                    "last_seen_at": client["last_seen_at"], "read_at": read.get("read_at"),
+                                    "read_current": read.get("revision") == session["digest"].hex()})
             active = {r["claimed_by"] for r in self.requests.values() if r["session_id"] == sid and r["status"] == "answering"}
-            return {"agents": [{"name": name, "state": "answering" if name in active else "waiting" if w["waiting"] else "idle"}
+            return {"connections": connections, "connection_test": {k: v for k, v in (test or {}).items() if k in ("status", "host")},
+                    "agents": [{"name": name, "state": "answering" if name in active else "waiting" if w["waiting"] else "idle"}
                                for name, w in self.workers.items() if (w["session_id"] in (None, sid)) and
                                (time.monotonic() - w["seen"] < 60 or name in active)]}
 

@@ -19,6 +19,7 @@ from .electrical import import_electrical
 from .agents import AgentBridge, MAX_CONTEXT
 from .agent_mcp import call_tool
 from .agent_discovery import advertise
+from .agent_setup import setup_config, extension_bundle
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 50 * 1024 * 1024
@@ -224,6 +225,12 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
             if path == "/api/agents":
                 self.send(200, {"enabled": bridge is not None})
                 return
+            if path in ("/api/agents/setup", "/api/agents/extension") and bridge:
+                if path.endswith("setup"):
+                    self.send(200, setup_config())
+                else:
+                    self.send(200, extension_bundle(), "application/octet-stream")
+                return
             if path in ("/api/agents/updates", "/api/agents/status", "/api/agents/navigation") and bridge:
                 try:
                     sid = parse_qs(urlsplit(self.path).query).get("session_id", [""])[0]
@@ -299,7 +306,12 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                     elif self.path == "/api/agents/requests":
                         result = bridge.enqueue(value.get("session_id"), value.get("prompt"), value.get("parent_id"), value.get("context"))
                     elif self.path == "/api/agents/tool":
+                        bridge.client_activity(value.get("client"))
                         result = call_tool(bridge, value.get("name"), value.get("arguments", {}))
+                        if value.get("name") == "get_current_selection":
+                            bridge.client_activity(value.get("client"), result)
+                    elif self.path == "/api/agents/connection-test":
+                        result = bridge.connection_test(value.get("session_id"))
                     elif self.path == "/api/agents/cancel":
                         result = bridge.cancel(value.get("session_id"), value.get("request_id"))
                     elif self.path == "/api/agents/detach":

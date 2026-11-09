@@ -5,7 +5,7 @@
 <header class="topbar"><div class="brand"><img class="logo" src="./copper-logo.svg" width="26" height="26" alt=""><strong>CopperReview</strong></div>
 <div class="board-heading"><strong id="board-name">Open a design to begin</strong><span id="project-origin" hidden></span><span id="board-meta"></span></div>
 <nav id="mode-switch" class="mode-switch" aria-label="Review mode"><button data-mode="electrical" title="Schematic, power and bus review (E)">Electrical</button><button data-mode="layout" title="Board placement and routing review (L)">Layout</button><button data-mode="both" title="Schematic and board side by side, linked (B)">Both</button><button data-mode="assembly" title="Track a manual build part by part (A)">Assembly</button></nav>
-<div class="header-actions"><button id="agent-open" title="Agent context sharing is enabled; ask in your connected chat or open this panel" aria-controls="agent-panel" aria-expanded="false" hidden>Ask about design</button><button id="compiler-cancel" hidden>Cancel compilation</button>
+<div class="header-actions"><button id="agent-connect" aria-haspopup="dialog" aria-controls="agent-setup" hidden>Connect agent</button><button id="agent-open" title="Agent context sharing is enabled; ask in your connected chat or open this panel" aria-controls="agent-panel" aria-expanded="false" hidden>Ask about design</button><button id="compiler-cancel" hidden>Cancel compilation</button>
 <div class="menu"><button id="open-menu" class="primary" aria-haspopup="menu" aria-expanded="false">Open</button>
 <div id="open-list" class="menu-list" role="menu" hidden>
 <button id="open-file" role="menuitem">File…<small>Board, IR, .copper, scene, review, issue list or assembly.lock · Ctrl+O</small></button>
@@ -112,6 +112,28 @@
   <button id="folder-open" type="button" class="primary">Compile selected board</button>
 </dialog>
 <input id="any-file" type="file" accept=".kicad_pcb,.json,.copper,.lock" multiple hidden><input id="folder-files" type="file" webkitdirectory multiple hidden>
+<dialog id="agent-setup" aria-labelledby="agent-setup-title">
+  <div class="agent-setup-heading"><div><h2 id="agent-setup-title">Connect your agent</h2><p class="quiet">Select on the board. Ask in your usual chat.</p></div><button id="agent-setup-close" type="button" aria-label="Close agent setup">Close</button></div>
+  <section class="agent-connection-card" aria-label="Shared context">
+    <p id="agent-connection-detail" role="status">Checking connection…</p>
+    <dl><dt>Design</dt><dd id="agent-shared-design">Loading…</dd><dt>Selection</dt><dd id="agent-shared-selection">Loading…</dd><dt>Tab</dt><dd id="agent-shared-tab"></dd></dl>
+    <p class="quiet">Design context is shared while this viewer is open with agents enabled. Host names are self-reported.</p>
+  </section>
+  <label class="field">Where do you chat?<select id="agent-setup-client"><option value="chatgpt">ChatGPT desktop / Codex</option><option value="claude">Claude Desktop</option><option value="claude-code">Claude Code</option><option value="other">Another MCP host</option></select></label>
+  <p id="agent-setup-instructions">Loading setup…</p>
+  <div id="agent-extension-controls" hidden><button id="agent-extension-download" type="button" class="primary">Download Claude extension</button><p class="quiet">Includes the adapter. Uses Python 3.11+ already running this viewer; no API key or port to copy.</p></div>
+  <div id="agent-manual-fields">
+    <label class="field">Command<input id="agent-command" readonly></label><button type="button" data-copy-field="agent-command">Copy command</button>
+    <label class="field">Arguments (one entry per JSON array item)<textarea id="agent-arguments" rows="2" readonly></textarea></label><button type="button" data-copy-field="agent-arguments">Copy arguments</button>
+    <details><summary>Environment</summary><textarea id="agent-environment" rows="2" readonly aria-label="MCP environment"></textarea></details>
+  </div>
+  <details id="agent-config-block"><summary id="agent-config-label">Manual configuration</summary><textarea id="agent-config" rows="7" readonly aria-label="Host configuration"></textarea><button type="button" data-copy-field="agent-config">Copy configuration</button><p class="quiet">Merge with existing settings; update an existing copper-review entry rather than duplicating it.</p></details>
+  <p id="agent-runtime" class="quiet"></p><p id="agent-setup-message" role="status"></p>
+  <section class="agent-test-card"><h3>Test with your chat</h3><p>After saving the configuration, restart its MCP connection. This test waits for your host to fetch the selected context.</p><button id="agent-test" type="button">Test connection</button>
+    <div id="agent-test-instructions" hidden><label class="field">Paste this in your chat<textarea id="agent-test-prompt" rows="3" readonly></textarea></label><button type="button" data-copy-field="agent-test-prompt">Copy test prompt</button></div><p id="agent-test-result" role="status"></p>
+  </section>
+  <details><summary>Using ChatGPT or Claude in a web browser?</summary><p>These settings are for local desktop hosts. Hosted web chats need a remote MCP connection or a supported tunnel; entering the viewer URL is not sufficient.</p><p><a href="https://developers.openai.com/api/docs/guides/secure-mcp-tunnels" target="_blank" rel="noreferrer">ChatGPT Secure MCP Tunnel instructions</a> · <a href="https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noreferrer">Claude remote connector instructions</a></p><p class="quiet">CopperReview does not configure a tunnel or expose your viewer to the internet.</p></details>
+</dialog>
 <aside id="agent-panel" aria-labelledby="agent-title" hidden>
   <div class="agent-heading"><h2 id="agent-title">Ask about design</h2><button id="agent-close" type="button" aria-label="Close design questions">×</button></div>
   <p id="agent-status" role="status" aria-live="polite">Connecting…</p>
