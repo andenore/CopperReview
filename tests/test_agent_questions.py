@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 import tempfile
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from urllib.request import Request, urlopen
 import unittest
 from unittest.mock import patch
 from http.server import ThreadingHTTPServer
@@ -135,6 +138,17 @@ class DiscoveryTests(unittest.TestCase):
         path = advertise(url, label, Path(self.directory.name) / project)
         return server, thread, path
 
+    def browser(self, server, path, body=None):
+        request = Request(f"http://127.0.0.1:{server.server_port}/api/agents" + path,
+                          None if body is None else json.dumps(body).encode(),
+                          {"X-Copper-Token": "browser-token", "Content-Type": "application/json"})
+        with urlopen(request, timeout=5) as response:
+            return json.load(response)
+
+    def tab(self, server, sid, used):
+        self.browser(server, "/context", {"session_id": sid, "context": context()})
+        self.browser(server, "/activity", {"session_id": sid, "last_used": used})
+
     def test_discovery_uses_protected_credentials_and_omits_them_from_tool_output(self):
         _, _, path = self.viewer()
         record = candidates()[0]
@@ -149,19 +163,23 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(visible[0]["label"], "board")
         self.assertNotIn("secret-token", json.dumps(visible))
 
-    def test_multiple_viewers_require_selection_and_restart_reconnects_to_same_project(self):
+    def test_explicit_viewer_survives_focus_changes_and_reconnects_after_restart(self):
         first, thread, old_path = self.viewer("A", "A")
-        self.viewer("B", "B")
+        second, _, _ = self.viewer("B", "B")
+        self.tab(first, "a-tab", time.time() - 10)
+        self.tab(second, "b-tab", time.time())
         client = DiscoveryClient()
-        with self.assertRaisesRegex(ValueError, "Several"):
-            client("list_sessions", {})
+        self.assertEqual(client("get_current_selection", {})["session_id"], "b-tab")
         choice = next(v for v in client("list_viewers", {}) if v["label"] == "A")
         client("select_viewer", {"viewer_id": choice["id"]})
-        self.assertEqual(client("list_sessions", {}), [])
+        self.assertEqual(client("get_current_selection", {})["session_id"], "a-tab")
+        client.discovery_until = time.monotonic() + 60
         first.shutdown(); first.server_close(); thread.join()
         self.servers.remove((first, thread))
         self.viewer("A restarted", "A")
-        # Every call resolves the explicit project again, ignoring stale records.
+        # A failed cached connection is not replayed; the next call rediscovers.
+        with self.assertRaisesRegex(ValueError, "Cannot reach"):
+            client("list_sessions", {})
         self.assertEqual(client("list_sessions", {}), [])
         self.assertTrue(old_path.exists())
 
@@ -172,13 +190,59 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(client("list_sessions", {}), [])
         self.assertIsNone(client.project)
         self.assertIsNone(client.viewer_id)
-        self.viewer("B", "B")
-        with self.assertRaisesRegex(ValueError, "Several"):
-            client("get_current_selection", {})
+        second, _, _ = self.viewer("B", "B")
+        self.tab(first, "a-tab", time.time() - 10)
+        self.tab(second, "b-tab", time.time())
+        client.invalidate_discovery()
+        self.assertEqual(client("get_current_selection", {})["session_id"], "b-tab")
         first.shutdown(); first.server_close(); thread.join()
         self.servers.remove((first, thread))
-        self.assertEqual(client("list_sessions", {}), [])
+        self.assertEqual(client("list_sessions", {})[0]["session_id"], "b-tab")
         self.assertIsNone(client.project)
+
+    def test_focus_routes_across_viewers_but_sessions_and_claims_keep_their_owner(self):
+        first, _, _ = self.viewer("A", "A")
+        second, _, _ = self.viewer("B", "B")
+        self.tab(first, "a-tab", 0)
+        client = DiscoveryClient()
+        self.assertEqual(client("get_current_selection", {})["session_id"], "a-tab")
+        self.tab(first, "a-tab", time.time() - 10)
+        self.tab(second, "b-tab", time.time() - 5)
+        client.invalidate_discovery()
+        client("_connection_ping", {})
+        for server, sid in [(first, "a-tab"), (second, "b-tab")]:
+            self.assertTrue(self.browser(server, "/status?session_id=" + sid)["connections"][0]["connected"])
+        selected = client("get_current_selection", {})
+        self.assertEqual(selected["session_id"], "b-tab")
+        self.assertEqual(selected["viewer"]["label"], "B")
+        self.assertNotIn("secret-token", json.dumps(selected))
+        question = self.browser(second, "/requests", {"session_id": "b-tab", "prompt": "Explain this"})
+        claim = client("wait_for_question", {"agent": "Helper", "timeout_seconds": 0})
+        self.assertEqual(claim["id"], question["request_id"])
+        self.tab(first, "a-tab", time.time())
+        client.invalidate_discovery()
+        self.assertEqual(client("get_current_selection", {})["session_id"], "a-tab")
+        self.assertEqual(client("get_current_selection", {"session_id": "b-tab"})["session_id"], "b-tab")
+        client("report_progress", {"request_id": claim["id"], "claim_id": claim["claim_id"], "agent": "Helper", "message": "Reading"})
+        self.assertEqual(client("get_request", {"request_id": claim["id"]})["progress"], "Reading")
+        client("publish_answer", answer(claim["id"], claim["claim_id"]))
+        self.assertEqual(self.browser(second, "/updates?session_id=b-tab")[0]["status"], "completed")
+
+    def test_discovery_cache_is_shared_expires_and_manual_refresh_bypasses_it(self):
+        record = {"id": "A", "url": "A"}
+        client = DiscoveryClient()
+        with patch("copper_review.agent_mcp.time.monotonic", return_value=10) as clock, patch(
+                "copper_review.agent_mcp.candidates", return_value=[record]) as registry, patch(
+                "copper_review.agent_mcp.connect", return_value=lambda name, args: []) as probe:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(lambda _: client.live(), range(8)))
+            self.assertEqual(registry.call_count, 1)
+            self.assertEqual(probe.call_count, 1)
+            clock.return_value = 12.1
+            client.live()
+            self.assertEqual(registry.call_count, 2)
+            client.live(force=True)
+            self.assertEqual(registry.call_count, 3)
 
     def test_version_warning_and_malformed_discovery_ids(self):
         import io
@@ -190,7 +254,7 @@ class DiscoveryTests(unittest.TestCase):
         client = DiscoveryClient()
         output = io.StringIO()
         with redirect_stderr(output):
-            client("_connection_ping", {})
+            client("list_sessions", {})
             client("list_sessions", {})
         self.assertEqual(output.getvalue().count("reinstall the extension"), 1)
         for invalid in [None, 123, {}, []]:
@@ -204,7 +268,7 @@ class DiscoveryTests(unittest.TestCase):
         records = [{"id": name, "project": name, "url": name, "label": name, "version": __version__} for name in ("A", "B")]
         entered, release = threading.Event(), threading.Event()
         results = []
-        def live():
+        def live(**kwargs):
             if threading.current_thread().name == "heartbeat-race":
                 entered.set()
                 if not release.wait(5):
@@ -220,7 +284,7 @@ class DiscoveryTests(unittest.TestCase):
             finally:
                 release.set()
                 worker.join(5)
-            self.assertEqual(results, ["A"])  # Already in flight when the user selected B.
+            self.assertEqual(results[0]["viewer_ids"], ["A"])  # Already in flight when the user selected B.
             self.assertEqual(client.project, "B")
             self.assertEqual(client("list_sessions", {}), "B")
 
@@ -230,9 +294,11 @@ class DiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No matching"):
             client("list_sessions", {})
         self.viewer("other", "other")
+        client.invalidate_discovery()
         with self.assertRaisesRegex(ValueError, "No matching"):
             client("list_sessions", {})
         self.viewer("selected", "selected")
+        client.invalidate_discovery()
         self.assertEqual(client("list_sessions", {}), [])
 
 

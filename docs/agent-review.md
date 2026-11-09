@@ -87,13 +87,18 @@ stdio MCP server in your agent host (substitute this checkout's absolute path):
 ```
 
 There is no port or token to copy. The adapter discovers local viewers, can start
-before the viewer, and resolves the running viewer on every call. Heartbeats
+before the viewer, and resolves the running viewer using a shared two-second
+discovery cache. Registry reads and viewer probes happen once per cache refresh;
+`list_viewers` and `select_viewer` explicitly refresh it. Connection failures
+invalidate the cache for the next call, without retrying the operation. Heartbeats
 and ordinary reads never pin a viewer. Only an explicit `select_viewer` or
 `--project` pins a project and reconnects to that project after a restart.
 A failed call during restart returns an error; the next call rediscovers the
-viewer. Mutating calls are never silently replayed. If several viewers are
-running, the agent uses `list_viewers` and `select_viewer`, or configure the
-adapter with `--project /absolute/path/to/board-project` to restrict discovery.
+viewer. Mutating calls are never silently replayed. With several viewers, the
+adapter follows the most recently used active tab across them. Heartbeats reach
+all eligible viewers, independently of which supplies the current context.
+Use `list_viewers/select_viewer` to override, or configure the adapter with
+`--project /absolute/path/to/board-project` to restrict discovery.
 This is the **board project's folder**, not the CopperReview tool checkout.
 
 The bridge is independent of model providers and agent hosts. Configuration
@@ -122,13 +127,19 @@ this fallback. The browser's CopperReview URL uses a different credential.
    `sha256` and an exact `selection` from that context. It can target either
    layout or electrical view. This only changes the visual selection.
 
-If several viewers are running, choose one using `list_viewers/select_viewer`.
-With several active tabs, the server chooses the one most recently focused or
-used. The result identifies the chosen `session_id`, `chosen_by` and `last_used`.
+With several viewers or tabs, the most recently focused or used active tab
+supplies the context. The result identifies the chosen `viewer` (ID, label,
+project and selection reason), `session_id`, `chosen_by` and `last_used`.
+Viewer activity may lag by the two-second discovery cache window.
 Activity is synchronized on the next poll; polling alone does not change it.
 Use `list_sessions/select_session` or pass `session_id` to override this choice.
 An explicitly chosen tab becoming idle produces an error instead of switching
 tabs. Copy the returned `session_id` into `show_on_board` to target that same tab.
+Explicit session IDs route back to their owning viewer. Requests read or claimed
+through this adapter also retain their viewer identity for progress and answers,
+so changing focus does not redirect an in-flight answer. These bounded request
+routes live only for the adapter process; after restarting it, select the
+original viewer before resuming a request.
 
 Highlights are queued and acknowledged by the browser. Use
 `get_navigation_status(session_id, command_id)` to distinguish applied, rejected
@@ -327,9 +338,11 @@ the location with `COPPER_REVIEW_REGISTRY`. Graceful shutdown removes its record
 discovery also prunes records whose process is known to have exited. Records
 with unknown process status are retained, and unreachable viewers are ignored.
 Discovery considers the 64 newest retained records.
-Records include the viewer package version. The adapter warns on stderr once
-per viewer/version mismatch (including older records with no version); update
-the adapter or reinstall the bundled extension after upgrading the viewer.
+Records include the viewer package version, and connections report the adapter
+version. Version mismatches appear in `get_current_selection.connection.warnings`
+and the Connect agent dialog, as well as the adapter log. Older adapters that do
+not report a version appear as unknown. Update the adapter or reinstall the
+bundled extension after upgrading the viewer.
 
 Limits remain explicit: eight browser sessions, 32 retained questions, 4 MiB per
 context, 32 citations/findings per answer, 32,000 answer characters and 3,000

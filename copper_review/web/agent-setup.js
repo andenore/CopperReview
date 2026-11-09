@@ -54,7 +54,8 @@ export function createAgentSetup({api,downloadExtension,sync,sessionId}){
   function update(value,state,synchronized){
     const summary=connectionSummary(value.connections||[],synchronized);
     $('agent-connect').dataset.state=summary.state;set('agent-connect',summary.label);$('agent-connect').title=summary.detail;
-    set('agent-connection-detail',summary.detail);
+    const warnings=[...new Set((value.connections||[]).filter(c=>c.connected).flatMap(c=>c.warnings||[]))];
+    set('agent-connection-detail',[summary.detail,...warnings].join(' '));
     const names=Object.entries(state.documents).map(([kind,d])=>`${d.name||kind} · ${d.sha256.slice(0,12)}`);
     set('agent-shared-design',names.join(' / ')||'No design open');
     set('agent-shared-selection',state.selection?.kind?`${state.selection.kind}: ${state.selection.id}`:

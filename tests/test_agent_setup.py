@@ -16,6 +16,7 @@ import zipfile
 
 from copper_review.agent_setup import setup_config, extension_bundle
 from copper_review.agents import AgentBridge
+from copper_review import __version__
 from copper_review.__main__ import make_handler
 import test_agents
 from test_agents import context
@@ -26,6 +27,15 @@ class ConnectionStateTests(unittest.TestCase):
         self.bridge = AgentBridge()
         self.bridge.context("tab", context())
         self.client = {"id": str(uuid.uuid4()), "name": "Example host"}
+
+    def test_version_warning_is_visible_in_browser_status(self):
+        self.bridge.client_activity({**self.client, "version": "old"})
+        status = self.bridge.agent_status("tab")["connections"][0]
+        self.assertEqual(status["adapter_version"], "old")
+        self.assertEqual(status["viewer_version"], __version__)
+        self.assertIn("reinstall the extension", status["warnings"][0])
+        self.bridge.client_activity({**self.client, "version": __version__})
+        self.assertEqual(self.bridge.agent_status("tab")["connections"][0]["warnings"], [])
 
     def test_heartbeat_does_not_count_as_a_read_and_stale_reads_are_visible(self):
         self.bridge.client_activity(self.client)
@@ -114,6 +124,17 @@ class SetupHTTPTests(unittest.TestCase):
     setUp = test_agents.AgentHTTPTests.setUp
     tearDown = test_agents.AgentHTTPTests.tearDown
     request = test_agents.AgentHTTPTests.request
+
+    def test_version_warning_reaches_the_agent_and_browser(self):
+        self.request("/api/agents/context", {"session_id": "tab", "context": context()})
+        selected = self.request("/api/agents/tool", {"name": "get_current_selection", "arguments": {},
+            "client": {"id": str(uuid.uuid4()), "name": "Older extension", "version": "old"}},
+            **{"X-Copper-Token": self.server.RequestHandlerClass.agent_token})
+        self.assertEqual(selected["connection"]["adapter_version"], "old")
+        warning = selected["connection"]["warnings"][0]
+        self.assertIn("reinstall the extension", warning)
+        status = self.request("/api/agents/status?session_id=tab")
+        self.assertEqual(status["connections"][0]["warnings"], [warning])
 
     def run_adapter(self, config, cwd):
         self.request("/api/agents/context", {"session_id": "tab", "context": context()})

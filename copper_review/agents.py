@@ -8,6 +8,15 @@ import re
 import threading
 import time
 import uuid
+from . import __version__
+
+
+def connection_versions(client):
+    version = client.get("version", "unknown") if client else "unknown"
+    text(version, "adapter version", 100)
+    return {"adapter_version": version, "viewer_version": __version__,
+            "warnings": [] if version == __version__ else [
+                f"CopperReview adapter {version} differs from viewer {__version__}; update the adapter or reinstall the extension."]}
 
 MAX_CONTEXT = 4 * 1024 * 1024
 MAX_REQUESTS = 32
@@ -79,13 +88,14 @@ class AgentBridge:
             raise ValueError("Invalid client metadata")
         cid = str(uuid.UUID(text(client.get("id"), "client id", 100)))
         name = text(client.get("name"), "client name", 100)
+        versions = connection_versions(client)
         with self.lock:
             if cid not in self.clients and len(self.clients) >= 16:
                 oldest = min(self.clients, key=lambda k: self.clients[k]["seen"])
                 del self.clients[oldest]
                 for session in self.sessions.values():
                     session.get("client_reads", {}).pop(oldest, None)
-            self.clients[cid] = {"name": name, "seen": time.monotonic(), "last_seen_at": now()}
+            self.clients[cid] = {"name": name, "seen": time.monotonic(), "last_seen_at": now(), **versions}
             if selected and selected["session_id"] in self.sessions:
                 session = self.sessions[selected["session_id"]]
                 session.setdefault("client_reads", {})[cid] = {"revision": selected["revision"], "read_at": now()}
@@ -329,6 +339,7 @@ class AgentBridge:
             for cid, client in self.clients.items():
                 read = session.get("client_reads", {}).get(cid, {})
                 connections.append({"name": client["name"], "connected": time.monotonic() - client["seen"] < 15,
+                                    "adapter_version": client["adapter_version"], "viewer_version": client["viewer_version"], "warnings": client["warnings"],
                                     "last_seen_at": client["last_seen_at"], "read_at": read.get("read_at"),
                                     "read_current": read.get("revision") == session["digest"].hex()})
             active = {r["claimed_by"] for r in self.requests.values() if r["session_id"] == sid and r["status"] == "answering"}

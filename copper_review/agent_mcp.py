@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
@@ -38,7 +39,7 @@ def tool(name, description, properties=None, required=()):
 
 STRING = {"type": "string"}
 TOOLS = [
-    tool("get_current_selection", "Read synchronized board/schematic context for questions in this chat, without a wait loop. Defaults to the most recently focused or used active tab; returns session_id and chosen_by. Pass session_id or select_session to override. Context includes exact hashes, revision, synchronization time and omissions.",
+    tool("get_current_selection", "Read synchronized board/schematic context for questions in this chat, without a wait loop. Defaults to the most recently used active tab across viewers (discovery cached for two seconds). Returns viewer, session_id, chosen_by and connection version warnings. Pass session_id or select_session to override. Context includes exact hashes, revision, synchronization time and omissions.",
          {"session_id": STRING}),
     tool("select_session", "Choose which active review tab tools and copper-review://selection refer to. Selection belongs to this MCP connection.",
          {"session_id": STRING}, ("session_id",)),
@@ -150,7 +151,7 @@ def connect(url, timeout=10, client=None):
 
 class DiscoveryClient:
     def __init__(self, url=None, project=None):
-        self.client = {"id": str(uuid.uuid4()), "name": "MCP host"}
+        self.client = {"id": str(uuid.uuid4()), "name": "MCP host", "version": __version__}
         self.explicit = url
         if url:
             connect(url)  # Validate before starting the protocol.
@@ -158,6 +159,10 @@ class DiscoveryClient:
         self.viewer_id = None
         self.lock = threading.RLock()
         self.warned_versions = set()
+        self.discovery_lock = threading.Lock()
+        self.discovery_until = 0
+        self.discovery_records = []
+        self.request_routes = OrderedDict()
 
     def identify(self, name):
         if isinstance(name, str) and name.strip():
@@ -174,15 +179,28 @@ class DiscoveryClient:
                 self.warned_versions.add(key)
             print(f"CopperReview adapter {__version__} differs from viewer {version}; update the adapter or reinstall the extension.", file=sys.stderr, flush=True)
 
-    def live(self):
+    def invalidate_discovery(self):
+        with self.discovery_lock:
+            self.discovery_until = 0
+
+    def live(self, force=False):
         def probe(record):
             try:
-                connect(record["url"], timeout=0.5)("list_sessions", {})
-                return record
+                sessions = connect(record["url"], timeout=0.5)("list_sessions", {})
+                active = [s for s in sessions if s.get("active")]
+                return {**record, "sessions": sessions, "active": bool(active),
+                        "last_used": max((s.get("last_used", 0) for s in active), default=0)}
             except ValueError:
                 return None
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            return [r for r in pool.map(probe, candidates()) if r]
+        # One refresh at a time, shared by tool calls and the observer thread.
+        with self.discovery_lock:
+            if not force and time.monotonic() < self.discovery_until:
+                return self.discovery_records
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                records = [r for r in pool.map(probe, candidates()) if r]
+            self.discovery_records = records
+            self.discovery_until = time.monotonic() + 2
+            return records
 
     def __call__(self, name, arguments):
         if not isinstance(arguments, dict):
@@ -190,11 +208,11 @@ class DiscoveryClient:
         if name == "list_viewers":
             if self.explicit:
                 return {"explicit_url": True, "message": "Connected through COPPER_REVIEW_URL; remove it to enable automatic discovery"}
-            return [{k: r.get(k) for k in ("id", "label", "project", "version")} for r in self.live()]
+            return [{k: r.get(k) for k in ("id", "label", "project", "version", "last_used")} for r in self.live(force=True)]
         if name == "select_viewer":
             if self.explicit:
                 raise ValueError("Remove COPPER_REVIEW_URL to select a discovered viewer")
-            record = next((r for r in self.live() if r["id"] == arguments.get("viewer_id")), None)
+            record = next((r for r in self.live(force=True) if r["id"] == arguments.get("viewer_id")), None)
             if record is None:
                 raise ValueError("Viewer unavailable; call list_viewers again")
             with self.lock:
@@ -203,6 +221,8 @@ class DiscoveryClient:
             return {k: record[k] for k in ("id", "label", "project")}
         with self.lock:
             client, project, viewer_id = dict(self.client), self.project, self.viewer_id
+            rid = arguments.get("request_id")
+            request_viewer = self.request_routes.get(rid) if isinstance(rid, str) else None
         if self.explicit:
             return connect(self.explicit, client=client)(name, arguments)
         records = self.live()
@@ -213,14 +233,70 @@ class DiscoveryClient:
             records = [chosen]
         if not records:
             raise ValueError("No matching CopperReview viewer is running; start it with --agents and open its browser viewer")
-        if len(records) != 1:
-            raise ValueError("Several viewers are running; use list_viewers and select_viewer, or configure --project")
-        record = records[0]
+        if name == "_connection_ping" and not project:
+            # Reachability is independent of which viewer currently supplies the context.
+            def heartbeat(record):
+                try:
+                    connect(record["url"], timeout=0.5, client=client)(name, arguments)
+                    return record["id"]
+                except ValueError:
+                    return None
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                connected = [rid for rid in pool.map(heartbeat, records) if rid]
+            if len(connected) != len(records):
+                self.invalidate_discovery()
+            if not connected:
+                raise ValueError("Cannot reach CopperReview; start the local server with --agents")
+            return {"connected": True, "viewer_ids": connected}
+        sid = arguments.get("session_id")
+        chosen_by = "explicit viewer/project" if project else "most recently used active tab"
+        if request_viewer:
+            records = [r for r in records if r["id"] == request_viewer]
+            chosen_by = "request owner"
+            if not records:
+                raise ValueError("Original viewer unavailable; this request cannot be resumed in another viewer")
+        if isinstance(sid, str):
+            matching = [r for r in records if any(s["session_id"] == sid for s in r.get("sessions", []))]
+            if not matching:
+                # A new tab may have appeared during the cache window.
+                refreshed = self.live(force=True)
+                if project:
+                    refreshed = [r for r in refreshed if os.path.normcase(r["project"]) == os.path.normcase(project)]
+                if chosen:
+                    refreshed = [r for r in refreshed if r["id"] == viewer_id]
+                if request_viewer:
+                    refreshed = [r for r in refreshed if r["id"] == request_viewer]
+                matching = [r for r in refreshed if any(s["session_id"] == sid for s in r.get("sessions", []))]
+                if not matching:
+                    raise ValueError("Review tab unavailable in discovered viewers; select its viewer or reopen the tab")
+            records = matching
+            chosen_by = "requested session"
+        record = max(records, key=lambda r: (r.get("active", False), r.get("last_used", 0), r["id"]))
         self.check_version(record)
-        # Resolve each call. Neither heartbeats nor reads implicitly pin a project.
-        # The network operation is outside the state lock; long mailbox waits cannot block heartbeats.
-        # Never replay an operation after a transport failure.
-        return connect(record["url"], client=client)(name, arguments)
+        try:
+            result = connect(record["url"], client=client)(name, arguments)
+        except ValueError as exc:
+            # Never replay writes. A later call rediscovers after a connection failure.
+            if str(exc).startswith(("Cannot reach CopperReview", "Invalid session token")):
+                self.invalidate_discovery()
+            raise
+        if name in ("wait_for_question", "get_request", "list_requests"):
+            requests = result if isinstance(result, list) else [result] if result else []
+            with self.lock:
+                for request in requests:
+                    self.request_routes[request["id"]] = record["id"]
+                    self.request_routes.move_to_end(request["id"])
+                while len(self.request_routes) > 256:
+                    self.request_routes.popitem(last=False)
+        if name == "get_current_selection":
+            result["viewer"] = {k: record.get(k) for k in ("id", "label", "project", "version")}
+            result["viewer"]["chosen_by"] = chosen_by
+            if "connection" not in result:
+                version = record.get("version", "unknown")
+                result["connection"] = {"adapter_version": __version__, "viewer_version": version,
+                    "warnings": [] if version == __version__ else [
+                        f"CopperReview adapter {__version__} differs from viewer {version}; update the adapter or reinstall the extension."]}
+        return result
 
 
 class Protocol:

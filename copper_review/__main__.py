@@ -16,7 +16,7 @@ import webbrowser
 
 from .importer import STAGES, import_pcb
 from .electrical import import_electrical
-from .agents import AgentBridge, MAX_CONTEXT
+from .agents import AgentBridge, MAX_CONTEXT, connection_versions
 from .agent_mcp import call_tool
 from .agent_discovery import advertise
 from .agent_setup import setup_config, extension_bundle
@@ -310,6 +310,7 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                         result = call_tool(bridge, value.get("name"), value.get("arguments", {}))
                         if value.get("name") == "get_current_selection":
                             bridge.client_activity(value.get("client"), result)
+                            result["connection"] = connection_versions(value.get("client"))
                     elif self.path == "/api/agents/connection-test":
                         result = bridge.connection_test(value.get("session_id"))
                     elif self.path == "/api/agents/activity":

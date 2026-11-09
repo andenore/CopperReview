@@ -48,6 +48,14 @@ try{
   assert.match(await page.locator('#agent-test-result').textContent(),/Waiting/);
   const proof=await tool('get_current_selection');
   await until(async()=>/Passed: Browser test/.test(await page.locator('#agent-test-result').textContent()));
+  await page.route('**/api/agents/status?*',async route=>{
+    const response=await route.fetch(),status=await response.json();
+    status.connections[0].warnings=['CopperReview adapter old differs from viewer current; update the adapter or reinstall the extension.'];
+    await route.fulfill({response,json:status});
+  });
+  await until(async()=>/reinstall the extension/.test(await page.locator('#agent-connection-detail').textContent()));
+  await page.unroute('**/api/agents/status?*');
+  await until(async()=>!/reinstall the extension/.test(await page.locator('#agent-connection-detail').textContent()));
   assert.match(await page.locator('#agent-test-prompt').inputValue(),new RegExp(proof.session_id));
   await page.screenshot({path:'test-results/agent-setup-claude.png'});
   await page.setViewportSize({width:700,height:900});await page.screenshot({path:'test-results/agent-setup-narrow.png'});
