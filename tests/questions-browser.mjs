@@ -18,8 +18,8 @@ try{
   const url=await until(()=>output.match(/CopperReview: (http:\/\/[^\s]+)/)?.[1]);
   await until(()=>output.includes('discovers this viewer automatically'));
   mcp=spawn(python,['-m','copper_review.agent_mcp'],{env,windowsHide:true,stdio:['pipe','pipe','pipe']});
-  const pending=new Map();let nextId=0;
-  createInterface({input:mcp.stdout}).on('line',line=>{const r=JSON.parse(line);const handler=pending.get(r.id);if(handler){pending.delete(r.id);handler(r);}});
+  const pending=new Map(),notifications=[];let nextId=0;
+  createInterface({input:mcp.stdout}).on('line',line=>{const r=JSON.parse(line);if(r.method)notifications.push(r);const handler=pending.get(r.id);if(handler){pending.delete(r.id);handler(r);}});
   function rpc(method,params){return new Promise((resolve,reject)=>{const id=++nextId,timer=setTimeout(()=>{pending.delete(id);reject(Error(`MCP timeout: ${method}`));},12000);pending.set(id,r=>{clearTimeout(timer);resolve(r);});mcp.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');});}
   await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'Browser test',version:'1'}});
   mcp.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
@@ -27,6 +27,40 @@ try{
   browser=await chromium.launch({headless:true,executablePath:process.env.COPPER_BROWSER_EXECUTABLE||undefined});
   const page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(url);await page.waitForFunction(()=>document.querySelectorAll('.entity').length===4);
+  // Host-side chat works before the viewer's question panel has ever opened.
+  await until(async()=>(await tool('list_sessions')).some(s=>s.active&&s.documents.layout));
+  assert.equal(await page.locator('#agent-panel').isVisible(),false);
+  const listed=await rpc('resources/list',{});assert.equal(listed.result.resources[0].uri,'copper-review://selection');
+  const prompts=await rpc('prompts/list',{});assert(prompts.result.prompts.some(p=>p.name==='explain-selection'));
+  const prompt=await rpc('prompts/get',{name:'explain-selection',arguments:{question:'What does this do?'}});
+  assert.match(prompt.result.messages[0].content.text,/get_current_selection/);
+  await rpc('resources/subscribe',{uri:'copper-review://selection'});
+  const beforeNotifications=notifications.length;
+  await page.locator('.entity').filter({hasText:'U2'}).first().click();
+  // No tool call is keeping the agent alive here: the adapter emits the update while stdin is idle.
+  await until(()=>notifications.length>beforeNotifications);
+  assert.equal(notifications.at(-1).method,'notifications/resources/updated');
+  const resource=await rpc('resources/read',{uri:'copper-review://selection'});
+  const selected=JSON.parse(resource.result.contents[0].text);
+  assert.deepEqual(selected.context.documents.layout.selection.components,['U2']);
+  assert.equal((await tool('list_requests')).length,0);
+  const highlight=await tool('show_on_board',{target:'layout',sha256:selected.context.documents.layout.sha256,
+    selection:{components:['U1'],nets:[],region:null}});
+  assert.equal(highlight.status,'queued');
+  await until(async()=>(await tool('get_navigation_status',{session_id:highlight.session_id,command_id:highlight.command_id})).status==='applied');
+  assert.match(await page.locator('#selection-detail').textContent(),/U1/);
+  assert.equal(await page.locator('#note-count').textContent(),'0');
+  // A response delayed past its deadline must not navigate a resumed browser tab.
+  await page.route('**/api/agents/navigation?*',async route=>{
+    const response=await route.fetch(),command=await response.json();
+    await route.fulfill({response,json:command?.status==='queued'?{...command,expires_at:0}:command});
+  });
+  const expiredHighlight=await tool('show_on_board',{target:'layout',sha256:selected.context.documents.layout.sha256,
+    selection:{components:['U2'],nets:[],region:null}});
+  await until(async()=>(await tool('get_navigation_status',{session_id:expiredHighlight.session_id,command_id:expiredHighlight.command_id})).status==='rejected');
+  assert.match(await page.locator('#selection-detail').textContent(),/U1/);
+  await page.unroute('**/api/agents/navigation?*');
+  await rpc('resources/unsubscribe',{uri:'copper-review://selection'});
   await page.locator('.entity').filter({hasText:'U1'}).first().click();await page.locator('#agent-open').click();
   await until(async()=>/No agent connected/.test(await page.locator('#agent-status').textContent()));
   const waiting=tool('wait_for_question',{agent:'Design helper',timeout_seconds:5});
@@ -70,19 +104,31 @@ try{
   }
   const sessions=await tool('list_sessions');assert.equal(sessions.length,1);assert.equal(sessions[0].session_id,q.session_id);
   // Idle polling, including with the panel closed, does not re-upload full contexts.
+  await until(async()=>{const current=await tool('get_current_selection');return current.context.documents.layout?.sha256===doc.sha256&&!current.context.documents.layout.selection.components.length;});
   let contextPosts=0;const onRequest=r=>{if(r.url().includes('/api/agents/context'))contextPosts++;};
   page.on('request',onRequest);await page.locator('#agent-close').click();await delay(2200);
   assert.equal(contextPosts,0);page.off('request',onRequest);await page.locator('#agent-open').click();
   const download=page.waitForEvent('download');await page.locator('#agent-export').click();await (await download).saveAs('test-results/questions.json');
   const conversation=JSON.parse(readFileSync('test-results/questions.json'));assert.equal(conversation.schema,'copper-review-conversation/v1');assert.equal(conversation.requests[0].answer.payload.answer,result.answer);
   // A changed board flags old answers and prevents navigation of old geometry.
+  let releaseNavigation,heldNavigation=false;const navigationGate=new Promise(resolve=>releaseNavigation=resolve);
+  await page.route('**/api/agents/navigation?*',async route=>{heldNavigation=true;await navigationGate;await route.continue();});
+  await until(()=>heldNavigation);
+  const oldHighlight=await tool('show_on_board',{target:'layout',sha256:doc.sha256,selection:{components:['U1'],nets:[],region:null}});
   await page.locator('#any-file').setInputFiles({name:'changed.kicad_pcb',mimeType:'application/octet-stream',buffer:Buffer.concat([readFileSync('examples/demo.kicad_pcb'),Buffer.from('\n')])});
+  await until(async()=>/changed/.test(await page.locator('#board-name').textContent()));
+  releaseNavigation();
+  await until(async()=>(await tool('get_navigation_status',{session_id:oldHighlight.session_id,command_id:oldHighlight.command_id})).status==='rejected');
+  await page.unroute('**/api/agents/navigation?*');
   await until(async()=>/Earlier design revision/.test(await page.locator('#agent-results').textContent()));
   await page.locator('#agent-results summary').getByText('U1 component record',{exact:true}).click();assert.equal(await page.getByRole('button',{name:'Show on board',exact:true}).isEnabled(),false);
   await page.screenshot({path:'test-results/questions-layout.png'});
   // Electrical context and evidence navigation use the exact loaded IR identity.
   await page.locator('#any-file').setInputFiles('tests/fixtures/electrical-ir.json');await page.locator('#mode-switch [data-mode="electrical"]').click();
   await page.locator('#electrical-search').fill('DATA');await page.locator('#electrical-entities [data-kind="net"][data-entity="DATA"]').click();
+  const electricalContext=await until(async()=>{const current=await tool('get_current_selection');return current.context.documents.electrical?.selection?.id==='DATA'&&current;});
+  const electricalHighlight=await tool('show_on_board',{target:'electrical',sha256:electricalContext.context.documents.electrical.sha256,selection:{kind:'net',id:'DATA'}});
+  await until(async()=>(await tool('get_navigation_status',{session_id:electricalHighlight.session_id,command_id:electricalHighlight.command_id})).status==='applied');
   await page.locator('#agent-prompt').fill('Explain the selected net using the electrical design.');await page.locator('#agent-send').click();
   const eq=await tool('wait_for_question',{agent:'Design helper',timeout_seconds:5}),ed=eq.context.documents.electrical;assert.equal(ed.selection.id,'DATA');
   await tool('publish_answer',{request_id:eq.id,claim_id:eq.claim_id,answer_id:'qa-ir',agent:'Design helper',based_on:{electrical:ed.sha256},answer:'DATA is the selected electrical net. The compiled IR supplies its declared connectivity; this does not prove routed copper connectivity.',citations:[{label:'Electrical selection',pointer:'/documents/electrical/selection',selection:{kind:'net',id:'DATA'}}]});
@@ -115,7 +161,7 @@ try{
   await until(async()=>/connected/.test(await page.locator('#agent-status').textContent()));
   await page.setViewportSize({width:900,height:900});await page.locator('#agent-panel').scrollIntoViewIfNeeded();await page.screenshot({path:'test-results/questions-narrow.png'});
   assert.deepEqual(errors,[]);
-  console.log('PASS: discovered MCP, stable progress rows, Q&A evidence, follow-ups, fresh Ask again, nine reloads, idle polling, cancellation, stale answers, electrical navigation, large IR fallback, single size error/recovery, export');
+  console.log('PASS: host chat without opening panel, prompts, idle resource notifications, highlight acknowledgement, discovered MCP, stable progress rows, Q&A evidence, follow-ups, fresh Ask again, nine reloads, idle polling, cancellation, stale answers, electrical navigation, large IR fallback, single size error/recovery, export');
 }finally{
   if(browser)await browser.close();
   if(mcp){mcp.stdin.end();if(mcp.exitCode===null)await once(mcp,'exit');}

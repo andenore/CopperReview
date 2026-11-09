@@ -15,13 +15,15 @@ A review tool for CopperScript designs with two halves that can be open at once:
 **Assembly** (A) uses the same board to track a manual build part by part; see
 [Assembly tracking](#assembly-tracking).
 
-**Ask about design** opens a conversation beside the board with the local CLI's
-`--agents` option. Ask a connected agent about parts, connections, power or
-layout; answers include evidence references that can select the relevant entity.
-Configure `copper-review-mcp` once: it discovers the viewer automatically and
-provides a bounded wait-for-question tool. Your agent host runs the model.
-Answers stay in the conversation; findings become review notes only when you
-choose to add them. See [design Q&A and MCP setup](docs/agent-review.md).
+With the local CLI's **`--agents`** option, select something on the board and
+ask about it in your connected agent chat. Configure `copper-review-mcp` once;
+it discovers the viewer and exposes `get_current_selection` and `show_on_board`.
+The agent can explain parts, connections, power or layout and highlight exact
+entities back in the viewer. This path needs no waiting agent loop or open sidebar.
+MCP prompts and a subscribable selection resource are included.
+**Ask about design** keeps the optional in-viewer conversation; that path needs
+an active agent turn. Findings become notes only when you choose to add them.
+See [design Q&A and MCP setup](docs/agent-review.md).
 
 The **Electrical · Layout · Both** switch in the top bar picks what is shown (E, L, B).
 **Both** puts the schematic and the board side by side with a draggable divider;

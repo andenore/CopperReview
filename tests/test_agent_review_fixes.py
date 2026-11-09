@@ -118,7 +118,9 @@ class CredentialTests(unittest.TestCase):
         self.assertEqual(self.request("/api/agents/tool", {"name": "list_sessions"}, **headers), [])
         for path, body in [("/api/agents/context", {"session_id": "tab", "context": context()}),
                            ("/api/agents/requests", {"session_id": "tab", "prompt": "Injected"}),
-                           ("/api/import", {}), ("/api/agents", None), ("/api/agents/detach", {"session_id": "tab"})]:
+                           ("/api/import", {}), ("/api/agents", None), ("/api/agents/detach", {"session_id": "tab"}),
+                           ("/api/agents/navigation?session_id=tab", None),
+                           ("/api/agents/navigation", {"session_id": "tab", "command_id": "x", "status": "applied"})]:
             with self.assertRaises(HTTPError) as error:
                 self.request(path, body, **headers)
             self.assertEqual(error.exception.code, 403)

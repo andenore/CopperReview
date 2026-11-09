@@ -1,5 +1,9 @@
 # Ask about the design
 
+Select something in CopperReview and ask your connected agent **“What does this
+do?”** in the chat you already use. The viewer supplies shared visual context;
+the answer stays in that chat. No `wait_for_question` loop is needed for this path.
+
 The agent's main job is to help the reviewer understand the board: explain a
 part, identify its connections, trace declared power relationships, or interpret
 available layout information. Questions do not automatically ask for a fault
@@ -44,7 +48,66 @@ available as a fallback; it disables automatic discovery and must be updated
 after restarting the viewer. Use the **Agent MCP** URL printed by the CLI for
 this fallback. The browser's CopperReview URL uses a different credential.
 
-Give the agent a task such as:
+## Ask from your agent chat
+
+1. Start the viewer with `--agents` and keep its browser tab open. It synchronizes
+   selection and design data automatically, including when the question panel
+   is closed. Static hosting and viewers without `--agents` do not share context.
+2. Select a part, net or region in the viewer.
+3. Ask your agent about it, or invoke the **explain-selection** MCP prompt in
+   your host's prompt picker/command interface. The prompt accepts an optional
+   `question`. Command presentation and naming depend on the host.
+4. The agent calls `get_current_selection`, then answers in your existing chat.
+   The result includes the session ID, context revision, synchronization time,
+   selected entities, exact design hashes, available evidence and omissions.
+   Synchronization normally takes about a second; background browser throttling
+   can delay it. Check `synchronized_at` when timing matters.
+5. To point something out, the agent calls `show_on_board` with `target`,
+   `sha256` and an exact `selection` from that context. It can target either
+   layout or electrical view. This only changes the visual selection.
+
+If several viewers are running, choose one using `list_viewers/select_viewer`.
+If several tabs are active, use `list_sessions/select_session` or pass
+`session_id` directly to the tool. The adapter never guesses among active tabs.
+A chosen tab becoming idle produces an error instead of silently switching tabs.
+
+Highlights are queued and acknowledged by the browser. Use
+`get_navigation_status(session_id, command_id)` to distinguish applied, rejected
+and expired highlights; a queued result alone does not prove anything was shown.
+The server validates entity IDs and the exact design hash, and the browser checks
+the hash again before navigation. One highlight is retained per tab; a newer
+command supersedes the earlier one. Unapplied highlights expire after 30 seconds.
+These tools never create questions, answers or review notes.
+
+### Selection resource and prompts
+
+`copper-review://selection` returns the same context as
+`get_current_selection`, using the selected tab or the sole active tab.
+`resources/subscribe` enables `notifications/resources/updated` when its
+revision or availability changes. The adapter checks small session metadata
+once per second and emits notifications even while the host sends no requests.
+The host decides whether to read the updated resource or include it in a turn;
+notifications do not themselves launch a model. `resources/unsubscribe` stops
+notifications. This uses the adapter's existing MCP 2025-11-25 and earlier
+protocol support; no newer protocol support is claimed.
+
+The adapter also provides two user-invoked MCP prompts:
+
+- **explain-selection**: inspect the current selection and answer in the host
+  chat, citing evidence and distinguishing facts, inference and unknowns.
+- **answer-viewer-questions**: wait for sidebar questions while the host keeps
+  the agent active, cite captured evidence, and avoid unsolicited audits.
+
+Sampling is deliberately not the wake-up mechanism. MCP
+[deprecated sampling in 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/client/sampling);
+the newer protocol delivers sampling inside a client-initiated request.
+It therefore does not solve idle-host wake-up. CopperReview neither advertises
+nor requests sampling. The direct-chat path is the default and the mailbox
+remains available for hosts that keep an agent active.
+
+## Optional in-viewer questions
+
+Use the **answer-viewer-questions** MCP prompt, or give the agent a task such as:
 
 > Help me understand the design open in CopperReview. Wait for my questions,
 > inspect each captured context and answer with evidence references. Explain
@@ -59,8 +122,8 @@ automatic model launcher. No API key or model SDK is needed in CopperReview.
 
 ## Use the sidebar
 
-1. Open **Ask about design**. This shares the open design data and current
-   selection with agents connected to this local viewer until the page closes.
+1. Open **Ask about design** for the optional viewer conversation. Context
+   sharing is already active when the viewer was started with `--agents`.
 2. Ask a question, optionally selecting a component, net or region. You can
    select and inspect the board while the sidebar remains open. No selection
    is required for general board questions. Ctrl+Enter sends.
@@ -99,6 +162,10 @@ not prove that they came from the same build. Cite both when relying on both.
 | --- | --- |
 | `list_viewers` / `select_viewer` | Discover and choose local viewer processes without exposing credentials. |
 | `list_sessions` | List browser tabs with their design identities. |
+| `select_session(session_id)` | Choose the active tab for this MCP connection. |
+| `get_current_selection(session_id?)` | Read synchronized context for host-side questions, without claiming or queuing anything. |
+| `show_on_board(target, sha256, selection, session_id?)` | Queue a hash-checked visual highlight in the board or schematic. |
+| `get_navigation_status(session_id, command_id)` | Check the browser's acknowledgement of a highlight. |
 | `get_context(session_id)` | Inspect the latest browser-synchronized selection and data. |
 | `wait_for_question(agent, session_id?, timeout_seconds?)` | Wait up to 45 seconds and atomically claim the next question; returns the captured context or null on timeout. |
 | `get_request(request_id)` | Read a captured question, its parent ID and any answer. |
@@ -210,7 +277,7 @@ active tabs require closing one before another can connect. Page exit detaches
 the session; a tab without a heartbeat for two minutes is also considered idle.
 Idle tabs do not supply new work to agents. Already claimed work may finish.
 Tab sessions expire after an hour without synchronization. Conversations use
-server memory, and restarting the server clears the mailbox.
+server memory, and restarting the server clears the mailbox and queued highlights.
 Export the conversation to retain it. Ordinary review notes keep their normal
 hash-keyed browser persistence.
 
@@ -220,10 +287,14 @@ Run `python -m unittest discover -s tests -v` and `npm test`. Python tests cover
 discovery and dead-process pruning, reconnecting, credential separation,
 mandatory claims, bounded waits, idle-session eviction, compact UTF-8 limits,
 immutable shared contexts, progress, cancellation, evidence resolution and the
-MCP/HTTP boundary. JavaScript tests verify context caching and size fallback.
+MCP/HTTP boundary. Host-chat tests cover tab selection, highlight expiry and
+acknowledgement, resource subscriptions and user-invoked prompts.
+JavaScript tests verify context caching and size fallback.
 
 With Playwright available, run `node tests/questions-browser.mjs` for an actual
-automatically discovered MCP subprocess and browser Q&A. It checks that answers
+automatically discovered MCP subprocess and browser Q&A. It first checks host
+chat with the sidebar unopened, notifications while MCP stdin is idle, prompt
+discovery and acknowledged highlights without creating notes. It checks that answers
 do not create notes, selections remain usable, citations navigate, follow-ups
 retain context, cancellations reject late answers, revisions invalidate answers,
 conversations export, reloads preserve sessions, Ask again starts a new thread,

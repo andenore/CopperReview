@@ -129,8 +129,64 @@ class AgentBridge:
                 self.requests = {key: r for key, r in self.requests.items() if r["session_id"] != oldest}
             previous = self.sessions.get(sid)
             captured = previous["context"] if previous and previous["digest"] == digest else deepcopy(context)
-            self.sessions[sid] = {"context": captured, "digest": digest, "seen": time.monotonic(), "updated_at": now(), "attached": True}
+            self.sessions[sid] = {**(previous or {}), "context": captured, "digest": digest, "seen": time.monotonic(), "updated_at": now(), "attached": True}
             return {"session_id": sid}
+
+    def _current_session(self, sid=None):
+        if sid is None:
+            active = [key for key, session in self.sessions.items() if self._active(session)]
+            if not active:
+                raise ValueError("No live review tab; open the viewer started with --agents")
+            if len(active) != 1:
+                raise ValueError("Several review tabs are active; use list_sessions and select_session or pass session_id")
+            sid = active[0]
+        session = self._session(sid)
+        if not self._active(session):
+            raise ValueError("Review tab is idle; return to the viewer before using its selection")
+        return sid, session
+
+    def current_selection(self, sid=None):
+        with self.lock:
+            self._expire()
+            sid, session = self._current_session(sid)
+            return {"session_id": sid, "revision": session["digest"].hex(),
+                    "synchronized_at": session["updated_at"], "context": deepcopy(session["context"])}
+
+    def show_on_board(self, target, digest, selection, sid=None):
+        with self.lock:
+            self._expire()
+            sid, session = self._current_session(sid)
+            doc = session["context"]["documents"].get(target)
+            if target not in ("layout", "electrical") or not doc or identity(doc) != digest:
+                raise ValueError("Navigation hash does not match the current design; read get_current_selection again")
+            self._validate_selection(target, doc, selection)
+            command = {"command_id": str(uuid.uuid4()), "target": target, "sha256": digest,
+                       "selection": deepcopy(selection), "status": "queued", "expires_at": time.time() + 30}
+            session["navigation"] = command
+            session["navigation_until"] = time.monotonic() + 30
+            return {"session_id": sid, **deepcopy(command)}
+
+    def navigation(self, sid, command_id=None):
+        with self.lock:
+            self._expire()
+            session = self._session(sid)
+            command = session.get("navigation")
+            if command_id is not None and (not command or command["command_id"] != command_id):
+                raise ValueError("Navigation unavailable or superseded by a newer highlight")
+            if command and command["status"] == "queued" and time.monotonic() >= session["navigation_until"]:
+                command.update(status="expired")
+            return deepcopy(command)
+
+    def acknowledge_navigation(self, sid, command_id, status, reason=""):
+        text(command_id, "command id", 100)
+        if status not in ("applied", "rejected"):
+            raise ValueError("Invalid navigation result")
+        text(reason, "navigation reason", 300, empty=True)
+        with self.lock:
+            command = self.navigation(sid, command_id)
+            if command["status"] == "queued":
+                self.sessions[sid]["navigation"].update(status=status, reason=reason)
+            return self.navigation(sid, command_id)
 
     def enqueue(self, sid, prompt, parent_id=None, context=None):
         text(prompt, "review prompt")
@@ -158,7 +214,7 @@ class AgentBridge:
     def sessions_list(self):
         with self.lock:
             self._expire()
-            return [{"session_id": sid, "updated_at": s["updated_at"],
+            return [{"session_id": sid, "updated_at": s["updated_at"], "active": self._active(s), "revision": s["digest"].hex(),
                      "documents": {k: {"sha256": d["sha256"], "name": d.get("name")} for k, d in s["context"]["documents"].items()}}
                     for sid, s in self.sessions.items()]
 

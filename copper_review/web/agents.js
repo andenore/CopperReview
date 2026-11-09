@@ -32,6 +32,7 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
   const cache=createContextCache(snapshot,contextState),rows=new Map();
   let connected=false,busy=false,lastContext='',parentId=null,newThread=false,timer=null,records=[],presence=[],blockedKey=null,blockedError=null;
   const outcomes=new Map(saved('copper-review:agent-outcomes',[]));
+  let navigationResult=null;
   async function api(path,body){
     const response=await fetch(`./api/agents${path}`,{method:body===undefined?'GET':'POST',
       headers:{'X-Copper-Token':token,...(body===undefined?{}:{'Content-Type':'application/json'})},
@@ -99,7 +100,19 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
     }
   }
   async function refresh(){
-    const values=await Promise.all([api(`/updates?session_id=${encodeURIComponent(sessionId)}`),api(`/status?session_id=${encodeURIComponent(sessionId)}`)]);
+    const values=await Promise.all([api(`/updates?session_id=${encodeURIComponent(sessionId)}`),api(`/status?session_id=${encodeURIComponent(sessionId)}`),api(`/navigation?session_id=${encodeURIComponent(sessionId)}`)]);
+    const command=values[2];
+    if(command?.status==='queued'){
+      if(navigationResult?.command_id!==command.command_id){
+        navigationResult={session_id:sessionId,command_id:command.command_id,status:'applied'};
+        try{
+          if(Date.now()/1000>=command.expires_at)throw Error('Highlight expired before navigation');
+          if(contextState().documents[command.target]?.sha256!==command.sha256)throw Error('Design changed before navigation');
+          revealEvidence(command);message('Agent highlighted the requested selection.');
+        }catch(error){navigationResult.status='rejected';navigationResult.reason=error.message.slice(0,300);}
+      }
+      await api('/navigation',navigationResult);
+    }
     records=values[0];presence=values[1].agents;render(contextState().documents);
     const answering=records.filter(r=>r.status==='answering').length,pending=records.filter(r=>r.status==='queued').length;
     status(answering?`${answering} question(s) being answered`:presence.length?`${presence.map(a=>a.name).join(', ')} connected${pending?` · ${pending} waiting`:''}`:`No agent connected${pending?` · ${pending} question(s) waiting`:''}`);
@@ -134,10 +147,10 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
     const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'})),a=element('a');a.href=url;a.download='design-questions.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   for(const button of document.querySelectorAll('[data-agent-question]'))button.onclick=()=>{$('agent-prompt').value=button.dataset.agentQuestion;$('agent-prompt').focus();};
-  if(localServer)api('').then(value=>{$('agent-open').hidden=!value.enabled;}).catch(()=>{});
+  if(localServer)api('').then(value=>{$('agent-open').hidden=!value.enabled;if(value.enabled&&!connected){connected=true;poll();}}).catch(()=>{});
   window.addEventListener('pagehide',()=>{const wasConnected=connected;connected=false;clearTimeout(timer);if(wasConnected)fetch('./api/agents/detach',{
     method:'POST',headers:{'X-Copper-Token':token,'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId}),keepalive:true}).catch(()=>{});});
-  window.addEventListener('pageshow',e=>{if(e.persisted&&!$('agent-panel').hidden){connected=true;lastContext='';poll();}});
+  window.addEventListener('pageshow',e=>{if(e.persisted&&localServer&&!$('agent-open').hidden){connected=true;lastContext='';poll();}});
 }
 
 function progressText(r){return r.status==='answering'?`${r.claimed_by} is answering${r.progress?` · ${r.progress}`:''}`:r.status==='cancelled'?'Cancelled':'Waiting for an agent';}

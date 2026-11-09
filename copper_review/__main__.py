@@ -224,10 +224,11 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
             if path == "/api/agents":
                 self.send(200, {"enabled": bridge is not None})
                 return
-            if path in ("/api/agents/updates", "/api/agents/status") and bridge:
+            if path in ("/api/agents/updates", "/api/agents/status", "/api/agents/navigation") and bridge:
                 try:
                     sid = parse_qs(urlsplit(self.path).query).get("session_id", [""])[0]
-                    self.send(200, bridge.updates(sid) if path.endswith("updates") else bridge.agent_status(sid))
+                    self.send(200, bridge.updates(sid) if path.endswith("updates") else
+                              bridge.navigation(sid) if path.endswith("navigation") else bridge.agent_status(sid))
                 except ValueError as exc:
                     self.send(400, {"error": str(exc)})
                 return
@@ -303,6 +304,8 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                         result = bridge.cancel(value.get("session_id"), value.get("request_id"))
                     elif self.path == "/api/agents/detach":
                         result = bridge.detach(value.get("session_id"))
+                    elif self.path == "/api/agents/navigation":
+                        result = bridge.acknowledge_navigation(value.get("session_id"), value.get("command_id"), value.get("status"), value.get("reason", ""))
                     else:
                         self.send(404, {"error": "Unknown agent endpoint"})
                         return
