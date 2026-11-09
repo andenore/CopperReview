@@ -1,6 +1,7 @@
 """Bounded, in-memory review mailbox. No models, shell commands or board writes."""
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 import re
@@ -12,6 +13,7 @@ MAX_CONTEXT = 4 * 1024 * 1024
 MAX_REQUESTS = 32
 MAX_SESSIONS = 8
 SESSION_TTL = 3600
+SESSION_IDLE = 120
 CLAIM_TTL = 300
 LAYOUT_CATEGORIES = {"placement", "routing", "package_escape", "return_path", "mechanical", "algorithm", "other"}
 ELECTRICAL_CATEGORIES = {"connectivity", "power", "interface", "part_choice", "protection", "other"}
@@ -29,6 +31,36 @@ def text(value, label, limit=16000, empty=False):
 
 def identity(document):
     return document.get("sha256") if isinstance(document, dict) else None
+
+
+def json_preview(value, limit=3000):
+    """Serialize only the prefix we will display, including for very large string leaves."""
+    def chunks(item):
+        if isinstance(item, dict):
+            yield "{"
+            for index, (key, val) in enumerate(item.items()):
+                if index:
+                    yield ","
+                yield json.dumps(key[:limit + 1], ensure_ascii=False)
+                yield ":"
+                yield from chunks(val)
+            yield "}"
+        elif isinstance(item, list):
+            yield "["
+            for index, val in enumerate(item):
+                if index:
+                    yield ","
+                yield from chunks(val)
+            yield "]"
+        else:
+            yield json.dumps(item[:limit + 1] if isinstance(item, str) else item, ensure_ascii=False, allow_nan=False)
+    parts, length = [], 0
+    for chunk in chunks(value):
+        parts.append(chunk[:max(0, limit - length)])
+        length += len(chunk)
+        if length > limit:
+            return "".join(parts), True
+    return "".join(parts), False
 
 
 class AgentBridge:
@@ -49,6 +81,16 @@ class AgentBridge:
                 r["status"] = "queued"
                 for key in ("claim_id", "lease_until", "claimed_by", "progress"):
                     r.pop(key, None)
+
+    def _active(self, session):
+        return session.get("attached", True) and time.monotonic() - session["seen"] < SESSION_IDLE
+
+    def detach(self, sid):
+        with self.changed:
+            if sid in self.sessions:
+                self.sessions[sid]["attached"] = False
+            self.changed.notify_all()
+            return {"detached": True}
 
     def _session(self, sid):
         text(sid, "session id", 100)
@@ -72,13 +114,22 @@ class AgentBridge:
         for doc in documents.values():
             if not isinstance(doc, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(identity(doc))):
                 raise ValueError("Context needs exact design hashes")
-        if len(json.dumps(context, allow_nan=False).encode()) > MAX_CONTEXT:
+        encoded = json.dumps(context, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+        if len(encoded) > MAX_CONTEXT:
             raise ValueError("Selection context exceeds 4 MiB; narrow the review or reduce notes")
+        digest = hashlib.sha256(encoded).digest()
         with self.lock:
             self._expire()
             if sid not in self.sessions and len(self.sessions) >= MAX_SESSIONS:
-                raise ValueError("Eight review tabs already connected; restart the server to clear idle tabs")
-            self.sessions[sid] = {"context": deepcopy(context), "seen": time.monotonic(), "updated_at": now()}
+                idle = [key for key, s in self.sessions.items() if not self._active(s)]
+                if not idle:
+                    raise ValueError("Eight review tabs are active; close an unused tab and try again")
+                oldest = min(idle, key=lambda key: self.sessions[key]["seen"])
+                del self.sessions[oldest]
+                self.requests = {key: r for key, r in self.requests.items() if r["session_id"] != oldest}
+            previous = self.sessions.get(sid)
+            captured = previous["context"] if previous and previous["digest"] == digest else deepcopy(context)
+            self.sessions[sid] = {"context": captured, "digest": digest, "seen": time.monotonic(), "updated_at": now(), "attached": True}
             return {"session_id": sid}
 
     def enqueue(self, sid, prompt, parent_id=None, context=None):
@@ -100,7 +151,7 @@ class AgentBridge:
                 del self.requests[completed]
             rid = str(uuid.uuid4())
             self.requests[rid] = {"id": rid, "session_id": sid, "created_at": now(), "prompt": prompt,
-                                  "parent_id": parent_id, "status": "queued", "context": deepcopy(session["context"])}
+                                  "parent_id": parent_id, "status": "queued", "context": session["context"]}
             self.changed.notify_all()
             return {"request_id": rid, "status": "queued"}
 
@@ -132,7 +183,7 @@ class AgentBridge:
     def updates(self, sid):
         with self.lock:
             self._expire()
-            self._session(sid)["seen"] = time.monotonic()
+            self._session(sid).update(seen=time.monotonic(), attached=True)
             return [{k: deepcopy(v) for k, v in r.items() if k not in ("context", "lease_until", "claim_id")}
                     for r in self.requests.values() if r["session_id"] == sid]
 
@@ -156,7 +207,7 @@ class AgentBridge:
                 while True:
                     self._expire()
                     for r in self.requests.values():
-                        if r["status"] == "queued" and (sid is None or sid == r["session_id"]):
+                        if r["status"] == "queued" and self._active(self.sessions[r["session_id"]]) and (sid is None or sid == r["session_id"]):
                             r.update(status="answering", claimed_by=agent, claim_id=str(uuid.uuid4()), lease_until=time.monotonic() + CLAIM_TTL)
                             return deepcopy(r)
                     remaining = deadline - time.monotonic()
@@ -189,11 +240,12 @@ class AgentBridge:
     def _check_claim(self, r, claim_id, agent):
         if r["status"] in ("cancelled", "completed", "stale"):
             raise ValueError("Question is no longer active")
+        text(claim_id, "claim id; call wait_for_question before publishing", 100)
         if r["status"] == "answering":
             if r.get("claim_id") != claim_id or r.get("claimed_by") != agent:
                 raise ValueError("Question is claimed by a different worker")
             r["lease_until"] = time.monotonic() + CLAIM_TTL
-        elif claim_id is not None:
+        else:
             raise ValueError("Question claim expired; wait for a new claim")
 
     def progress(self, rid, claim_id, agent, message):
@@ -264,9 +316,9 @@ class AgentBridge:
                     raise ValueError("Cited document must be included in based_on")
                 if "selection" in cite:
                     self._validate_selection(target, docs[target], cite["selection"])
-                preview = json.dumps(resolved, ensure_ascii=False, allow_nan=False)
+                preview, truncated = json_preview(resolved)
                 evidence.append({**deepcopy(cite), "target": target, "sha256": based_on[target],
-                                 "excerpt": preview[:3000], "truncated": len(preview) > 3000})
+                                 "excerpt": preview, "truncated": truncated})
             current = self._session(r["session_id"])["context"]["documents"]
             r["status"] = "completed" if all(identity(current.get(t)) == h for t, h in based_on.items()) else "stale"
             r["answer"] = {"payload": deepcopy(value), "created_at": now(), "evidence": evidence}
@@ -303,6 +355,8 @@ class AgentBridge:
                 if finding.get("priority", "medium") not in ("low", "medium", "high"):
                     raise ValueError("Invalid finding priority")
                 selection = finding.get("selection", doc.get("selection"))
+                if target == "electrical" and selection is None:
+                    raise ValueError("No electrical entity was selected; supply an explicit finding selection")
                 self._validate_selection(target, doc, selection)
             # Retries must be byte-equivalent in meaning; never duplicate annotations.
             if "feedback" in request:

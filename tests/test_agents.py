@@ -21,9 +21,9 @@ def context(digest="a" * 64):
                    "visible_layers": ["F.Cu"], "entities": {"components": ["U1"], "nets": ["GND"]}}}}
 
 
-def feedback(rid, digest="a" * 64):
+def feedback(rid, digest="a" * 64, claim=None):
     return {"request_id": rid, "feedback_id": "result-1", "target": "layout", "sha256": digest,
-            "agent": "Test reviewer", "summary": "Inspect the selected area", "findings": [
+            "claim_id": claim, "agent": "Test reviewer", "summary": "Inspect the selected area", "findings": [
                 {"observation": "Check the return path", "category": "return_path", "priority": "high"}]}
 
 
@@ -33,7 +33,12 @@ class MailboxTests(unittest.TestCase):
         self.bridge.context("tab", context())
 
     def request(self):
-        return self.bridge.enqueue("tab", "Review U1")["request_id"]
+        rid = self.bridge.enqueue("tab", "Review U1")["request_id"]
+        self.bridge.wait_for_question("Test reviewer", timeout=0)
+        return rid
+
+    def feedback(self, rid, digest="a" * 64):
+        return feedback(rid, digest, self.bridge.get_request(rid)["claim_id"])
 
     def test_request_is_immutable_and_feedback_is_idempotent(self):
         rid = self.request()
@@ -41,14 +46,14 @@ class MailboxTests(unittest.TestCase):
         changed["documents"]["layout"]["selection"]["components"] = []
         self.bridge.context("tab", changed)
         self.assertEqual(self.bridge.get_request(rid)["context"], context())
-        result = self.bridge.publish(feedback(rid))
+        result = self.bridge.publish(self.feedback(rid))
         self.assertEqual(result["status"], "completed")
         before = self.bridge.updates("tab")
-        self.assertEqual(self.bridge.publish(feedback(rid)), result)
+        self.assertEqual(self.bridge.publish(self.feedback(rid)), result)
         self.assertEqual(self.bridge.updates("tab"), before)
         annotation = before[0]["feedback"]["annotations"][0]
         self.assertEqual(annotation["selection"]["components"], ["U1"])
-        altered = feedback(rid)
+        altered = self.feedback(rid)
         altered["summary"] = "Different result"
         with self.assertRaisesRegex(ValueError, "already completed"):
             self.bridge.publish(altered)
@@ -56,20 +61,20 @@ class MailboxTests(unittest.TestCase):
     def test_revision_changes_are_stale_and_wrong_hashes_rejected(self):
         rid = self.request()
         with self.assertRaisesRegex(ValueError, "hash"):
-            self.bridge.publish(feedback(rid, "c" * 64))
+            self.bridge.publish(self.feedback(rid, "c" * 64))
         self.bridge.context("tab", context("b" * 64))
-        self.assertEqual(self.bridge.publish(feedback(rid))["status"], "stale")
+        self.assertEqual(self.bridge.publish(self.feedback(rid))["status"], "stale")
 
     def test_unknown_entities_and_invalid_regions_reject_entire_batch(self):
         rid = self.request()
         for selection in [{"components": ["missing"], "nets": [], "region": None},
                           {"components": [], "nets": [], "region": [2, 0, 1, 1]},
                           {"components": [], "nets": [], "region": [0, 0, float("inf"), 1]}]:
-            value = feedback(rid)
+            value = self.feedback(rid)
             value["findings"].append({"observation": "Bad target", "selection": selection})
             with self.assertRaises(ValueError):
                 self.bridge.publish(value)
-            self.assertEqual(self.bridge.get_request(rid)["status"], "queued")
+            self.assertEqual(self.bridge.get_request(rid)["status"], "answering")
 
     def test_tabs_and_replies_are_isolated(self):
         rid = self.request()
@@ -92,7 +97,7 @@ class MailboxTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pending"):
             self.request()
         rid = self.bridge.list_requests()[0]["id"]
-        self.bridge.publish(feedback(rid))
+        self.bridge.publish(self.feedback(rid))
         self.request()
         self.assertEqual(len(self.bridge.list_requests()), MAX_REQUESTS)
 
@@ -101,7 +106,7 @@ class MailboxTests(unittest.TestCase):
                "entities": {"pin": ["U1.VCC"]}, "view": "power", "power_state": "sleep"}
         self.bridge.context("tab", {"schema": "copper-review-agent-context/v1", "documents": {"electrical": doc}})
         rid = self.request()
-        value = {**feedback(rid, "e" * 64), "target": "electrical", "findings": [{"observation": "Check supply", "category": "power"}]}
+        value = {**self.feedback(rid, "e" * 64), "target": "electrical", "findings": [{"observation": "Check supply", "category": "power"}]}
         self.bridge.publish(value)
         saved = self.bridge.get_request(rid)["feedback"]
         self.assertEqual(saved["annotations"][0]["selection"], doc["selection"])
@@ -159,14 +164,15 @@ class AgentHTTPTests(unittest.TestCase):
 
     def test_real_stdio_mcp_to_http_to_browser_mailbox(self):
         rid = self.request("/api/agents/requests", {"session_id": "tab", "context": context(), "prompt": "Inspect U1"})["request_id"]
+        claim = self.request("/api/agents/tool", {"name": "wait_for_question", "arguments": {"agent": "Test reviewer", "timeout_seconds": 0}}, **{"X-Copper-Token": self.server.RequestHandlerClass.agent_token})["claim_id"]
         messages = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
                     {"jsonrpc": "2.0", "method": "notifications/initialized"},
                     {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_request", "arguments": {"request_id": rid}}},
-                    {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "publish_feedback", "arguments": feedback(rid)}}]
+                    {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "publish_feedback", "arguments": feedback(rid, claim=claim)}}]
         process = subprocess.run([sys.executable, "-m", "copper_review.agent_mcp"],
                                  input="\n".join(json.dumps(m) for m in messages).encode() + b"\n",
                                  capture_output=True, timeout=15, cwd=Path(__file__).resolve().parents[1],
-                                 env={**os.environ, "COPPER_REVIEW_URL": self.url + "/#token=test-token"})
+                                 env={**os.environ, "COPPER_REVIEW_URL": self.url + "/#token=" + self.server.RequestHandlerClass.agent_token})
         self.assertEqual(process.returncode, 0, process.stderr)
         responses = [json.loads(line) for line in process.stdout.splitlines()]
         self.assertEqual(len(responses), 3)

@@ -38,6 +38,14 @@ const electrical=createElectricalReview({message,
 // Both needs a schematic and a board that share parts; an unrelated pair stays apart.
 const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:m==='assembly'?!!state.scene:true;
 let agentCatalogScene=null,agentCatalog=null;
+let agentLayoutRevision=0;
+function agentContextState(){
+  const documents={};
+  if(state.scene)documents.layout={sha256:state.scene.board.sha256};
+  if(electrical.hasModel())documents.electrical={sha256:electrical.input().sha256};
+  return {key:JSON.stringify([mode,documents,agentLayoutRevision,state.selection,state.layers,electrical.agentRevision()]),documents,
+    selection:mode==='electrical'?electrical.selection():state.selection};
+}
 function boardCatalog(scene){
   if(agentCatalogScene===scene)return agentCatalog;
   agentCatalogScene=scene;
@@ -86,7 +94,7 @@ function revealAgentEvidence(cite){
   const bounds=state.selection.region||context.components[0]?.bounds_mm||context.nets[0]?.bounds_mm;
   fit(bounds||state.scene.board.bounds_mm);
 }
-createAgentReview({token,localServer,snapshot:agentSnapshot,applyFeedback:applyAgentFeedback,revealEvidence:revealAgentEvidence,message});
+createAgentReview({token,localServer,snapshot:agentSnapshot,contextState:agentContextState,applyFeedback:applyAgentFeedback,revealEvidence:revealAgentEvidence,message});
 // Side panels fold away per mode; Both starts with the board's panels and the schematic list folded.
 const PANEL_DEFAULTS={both:{'board-left':true,'board-right':true,'schematic-left':true}};
 const folded=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:panels'))||{};}catch{return {};}})();
@@ -766,6 +774,7 @@ function issuesFromForm() {
 }
 function storageKey(){return `copper-review:v1:${state.scene.board.sha256}`;}
 function saveLocal() {
+  agentLayoutRevision++;
   if(!state.scene)return;
   try {localStorage.setItem(storageKey(),JSON.stringify({schema:'copper-review-local/v1',annotations:state.annotations,summary:$('summary').value,stage:$('stage').value,copperscript_issues:issueSource()}));$('autosave-status').textContent='Saved in this browser · export JSON to share';}
   catch {$('autosave-status').textContent='Local storage unavailable/full · export JSON now';}
@@ -800,6 +809,7 @@ function renderLayers() {
   }
 }
 function loadScene(scene) {
+  agentLayoutRevision++;
   validateScene(scene);state.flipped=false;$('view-flip').setAttribute('aria-pressed','false');$('view-flip').classList.remove('active');if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
   state.issueSource=null;let raw=null;
   try{raw=localStorage.getItem(storageKey());const saved=JSON.parse(raw || 'null');if(saved){validateReview({schema:REVIEW_SCHEMA,board:{sha256:scene.board.sha256,stage:saved.stage},annotations:saved.annotations},scene);state.annotations=refreshContexts(scene,saved.annotations);$('summary').value=saved.summary || '';$('stage').value=saved.stage;state.issueSource=saved.copperscript_issues || null;}}
@@ -818,6 +828,7 @@ function setEnabled(){for(const id of ['export-scene','export-review','copy-revi
 // The issue list loaded now, else the one recorded with loaded or saved notes.
 function issueSource(){return state.issues?.source || state.issueSource || null;}
 function setIssues(issues) {
+  agentLayoutRevision++;
   state.issues=issues;const shown=!!issues;$('tab-issues').hidden=!shown;$('show-issues-label').hidden=!shown;
   $('issue-count').textContent=issues?issues.issues.length:0;if(!shown && state.tab==='issues'){state.tab='components';for(const t of ['components','nets','issues'])$(`tab-${t}`).classList.toggle('active',t==='components');}
   renderEntities();requestDraw();

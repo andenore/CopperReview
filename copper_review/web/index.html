@@ -115,6 +115,7 @@
 <aside id="agent-panel" aria-labelledby="agent-title" hidden>
   <div class="agent-heading"><h2 id="agent-title">Ask about design</h2><button id="agent-close" type="button" aria-label="Close design questions">×</button></div>
   <p id="agent-status" role="status" aria-live="polite">Connecting…</p>
+  <p id="agent-context-warning" class="quiet" role="status"></p>
   <details class="agent-help"><summary>How this works</summary><p>Ask your connected agent to explain parts, connections, supplies or layout. Opening this panel shares the open design data and selection with that agent. Answers cite the captured design and identify what is unknown.</p><p>Configure <code>copper-review-mcp</code> once in your agent host. It discovers local viewers automatically. Ask the agent to wait for and answer design questions. The host runs the model; this viewer stays read-only.</p></details>
   <div id="agent-results" role="log" aria-label="Design questions and answers" aria-live="polite"></div>
   <div class="agent-compose">

@@ -67,6 +67,36 @@ def advertise(url, label, project):
     return path
 
 
+def process_alive(pid):
+    """Return False only when the recorded process is known to have exited."""
+    if type(pid) is not int or pid <= 0:
+        return None
+    if os.name == "nt":
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel.WaitForSingleObject.restype = wintypes.DWORD
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        handle = kernel.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE
+        if not handle:
+            return False if ctypes.get_last_error() == 87 else None
+        try:
+            result = kernel.WaitForSingleObject(handle, 0)
+            return False if result == 0 else True if result == 258 else None
+        finally:
+            kernel.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return None
+
+
 def candidates():
     root = registry_dir()
     _private_directory(root)
@@ -78,7 +108,7 @@ def candidates():
             paths.append((path.stat().st_mtime, path))
         except OSError:
             continue
-    for _, path in sorted(paths, reverse=True)[:64]:
+    for _, path in sorted(paths, reverse=True):
         try:
             if path.is_symlink() or path.stat().st_size > 16384:
                 continue
@@ -87,6 +117,13 @@ def candidates():
                 continue
             record = json.loads(path.read_text(encoding="utf-8"))
             if record.get("schema") != "copper-review-discovery/v1":
+                continue
+            if str(uuid.UUID(record.get("id", ""))) != path.stem:
+                continue
+            if process_alive(record.get("pid")) is False:
+                path.unlink()
+                continue
+            if len(records) >= 64:
                 continue
             if os.name == "nt":
                 record["url"] = protect(base64.b64decode(record["protected_url"], validate=True), decrypt=True).decode()

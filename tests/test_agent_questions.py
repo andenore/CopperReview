@@ -60,14 +60,15 @@ class QuestionsTests(unittest.TestCase):
 
     def test_evidence_must_resolve_and_use_a_declared_hash(self):
         rid = self.question()
+        claim = self.bridge.wait_for_question("Helper", timeout=0)["claim_id"]
         for pointer in ["/documents/layout/missing", "/documents/layout/selection/components/-1", "/documents/layout/selection/components/01", "/mode", "/documents/layout/~2bad"]:
-            value = answer(rid)
+            value = answer(rid, claim)
             value["citations"][0]["pointer"] = pointer
             with self.assertRaises(ValueError):
                 self.bridge.publish_answer(value)
         with self.assertRaisesRegex(ValueError, "hash"):
-            self.bridge.publish_answer({**answer(rid), "based_on": {"layout": "b" * 64}})
-        self.assertEqual(self.bridge.get_request(rid)["status"], "queued")
+            self.bridge.publish_answer({**answer(rid, claim), "based_on": {"layout": "b" * 64}})
+        self.assertEqual(self.bridge.get_request(rid)["status"], "answering")
 
     def test_cancel_and_expired_claims_cannot_publish(self):
         rid = self.question()
@@ -87,8 +88,9 @@ class QuestionsTests(unittest.TestCase):
 
     def test_stale_answer_remains_readable_but_bound_to_old_hash(self):
         rid = self.question()
+        claim = self.bridge.wait_for_question("Helper", timeout=0)["claim_id"]
         self.bridge.context("tab", context("b" * 64))
-        self.assertEqual(self.bridge.publish_answer(answer(rid))["status"], "stale")
+        self.assertEqual(self.bridge.publish_answer(answer(rid, claim))["status"], "stale")
         self.assertEqual(self.bridge.updates("tab")[0]["answer"]["evidence"][0]["sha256"], "a" * 64)
 
     def test_wait_is_bounded_and_session_scoped(self):
@@ -103,7 +105,7 @@ class QuestionsTests(unittest.TestCase):
         rid = self.question()
         claim = self.bridge.wait_for_question("Helper", timeout=0)
         value = {**feedback(rid), "agent": "Helper"}
-        with self.assertRaisesRegex(ValueError, "different worker"):
+        with self.assertRaisesRegex(ValueError, "claim"):
             self.bridge.publish(value)
         value["claim_id"] = claim["claim_id"]
         self.assertEqual(self.bridge.publish(value)["status"], "completed")
@@ -125,7 +127,7 @@ class DiscoveryTests(unittest.TestCase):
         self.directory.cleanup()
 
     def viewer(self, label="board", project="project"):
-        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "secret-token", agents=True))
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "browser-token", agents=True, agent_token="secret-token"))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.servers.append((server, thread))

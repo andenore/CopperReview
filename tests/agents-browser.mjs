@@ -15,7 +15,8 @@ async function until(fn){for(let i=0;i<100;i++){const value=await fn();if(value)
 try{
   const url=await until(()=>output.match(/CopperReview: (http:\/\/[^\s]+)/)?.[1]);
   const parsed=new URL(url),token=new URLSearchParams(parsed.hash.slice(1)).get('token');
-  async function api(path,body){const response=await fetch(`${parsed.origin}/api/agents${path}`,{method:body===undefined?'GET':'POST',headers:{'X-Copper-Token':token,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const value=await response.json();assert(response.ok,JSON.stringify(value));return value;}
+  const agentUrl=await until(()=>output.match(/Agent MCP: (http:\/\/[^\s]+)/)?.[1]),agentToken=new URLSearchParams(new URL(agentUrl).hash.slice(1)).get('token');
+  async function api(path,body){const response=await fetch(`${parsed.origin}/api/agents${path}`,{method:body===undefined?'GET':'POST',headers:{'X-Copper-Token':path==='/tool'?agentToken:token,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const value=await response.json();assert(response.ok,JSON.stringify(value));return value;}
   const tool=(name,args={})=>api('/tool',{name,arguments:args});
   const requests=()=>tool('list_requests');
   browser=await chromium.launch({headless:true,executablePath:process.env.COPPER_BROWSER_EXECUTABLE||undefined});
@@ -25,10 +26,10 @@ try{
   await page.locator('.entity').filter({hasText:'U1'}).first().click();
   await page.locator('#agent-open').click();await page.locator('#agent-prompt').fill('Check the return path');await page.locator('#agent-send').click();
   const first=(await until(async()=>{const r=await requests();return r.length===1&&r;}))[0];
-  const request=await tool('get_request',{request_id:first.id});
+  const request=await tool('wait_for_question',{agent:'Test reviewer',timeout_seconds:0});
   assert.deepEqual(request.context.documents.layout.selection.components,['U1']);
   assert.equal(request.context.documents.layout.context.components[0].source_path,'control.U1');
-  const payload={request_id:first.id,feedback_id:'browser-result-1',agent:'Test reviewer',target:'layout',sha256:request.context.documents.layout.sha256,
+  const payload={request_id:first.id,claim_id:request.claim_id,feedback_id:'browser-result-1',agent:'Test reviewer',target:'layout',sha256:request.context.documents.layout.sha256,
     summary:'One observation',findings:[{observation:'Inspect U1 return path <script>bad()</script>',category:'return_path',priority:'high'}]};
   await tool('publish_feedback',payload);
   await page.getByRole('button',{name:'Add findings to review notes',exact:true}).click();
@@ -48,7 +49,8 @@ try{
   // A new exact-byte revision must not receive a response to the original board.
   await page.locator('#any-file').setInputFiles({name:'changed.kicad_pcb',mimeType:'application/octet-stream',buffer:Buffer.concat([readFileSync('examples/demo.kicad_pcb'),Buffer.from('\n')])});
   await until(async()=>{const c=await tool('get_context',{session_id:first.session_id});return c.documents.layout.sha256!==payload.sha256;});
-  const stale=await tool('publish_feedback',{...payload,request_id:reply.id,feedback_id:'stale-result'});assert.equal(stale.status,'stale');
+  const replyClaim=await tool('wait_for_question',{agent:'Test reviewer',timeout_seconds:0});
+  const stale=await tool('publish_feedback',{...payload,request_id:reply.id,claim_id:replyClaim.claim_id,feedback_id:'stale-result'});assert.equal(stale.status,'stale');
   await page.locator('#agent-open').click();await until(async()=>/Earlier design revision/.test(await page.locator('#agent-results').textContent()));
   assert.equal(await page.locator('#note-count').textContent(),'0');await page.locator('#agent-close').click();
   // Electrical target, exact native entity IDs, author metadata and exported selection.
@@ -59,9 +61,9 @@ try{
   await page.locator('#electrical-entities [data-kind="net"][data-entity="DATA"]').click();
   await page.locator('#agent-open').click();await page.locator('#agent-prompt').fill('Review this electrical net');await page.locator('#agent-send').click();
   const electrical=(await until(async()=>{const r=await requests();return r.length===3&&r;}))[2];
-  const er=await tool('get_request',{request_id:electrical.id}),ed=er.context.documents.electrical;
+  const er=await tool('wait_for_question',{agent:'Electrical reviewer',timeout_seconds:0}),ed=er.context.documents.electrical;
   assert.equal(ed.selection.id,'DATA');assert.equal(ed.ir.schema,'copperscript-ir/v0.1');
-  await tool('publish_feedback',{request_id:electrical.id,feedback_id:'electrical-result',target:'electrical',sha256:ed.sha256,agent:'Electrical reviewer',summary:'Check termination',findings:[{category:'interface',observation:'Check DATA termination against the source contract.'}]});
+  await tool('publish_feedback',{request_id:electrical.id,claim_id:er.claim_id,feedback_id:'electrical-result',target:'electrical',sha256:ed.sha256,agent:'Electrical reviewer',summary:'Check termination',findings:[{category:'interface',observation:'Check DATA termination against the source contract.'}]});
   await until(async()=>/Electrical reviewer/.test(await page.locator('#agent-results').textContent()));
   await page.getByRole('button',{name:'Add findings to review notes',exact:true}).click();
   await page.locator('#agent-close').click();

@@ -17,6 +17,7 @@ function download(name,value){const u=URL.createObjectURL(new Blob([json(value)+
 /** The electrical review. `onSelect` hears selections the reviewer makes here; `links` lets the
  * side panel offer "Show on board" and "Source" when the host can answer them. */
 export function createElectricalReview({message,onSelect=()=>{},links={}}){
+  let agentRevision=0;
   const root=$('electrical-review');
   let model,input,selection=null,focusSelection=null,view='schematic',focusRef=null,powerState='',notes=[],detail='intent',editing=null;
   let draft=blankDraft(),storageWarning='',fade=true;
@@ -43,11 +44,12 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   }
   function group(parent,items,makeItem,hidden,label){const folded=items.filter(hidden),shown=items.filter(x=>!hidden(x));for(const x of shown)parent.append(makeItem(x));if(folded.length){const d=el('details',undefined,'electrical-folded');d.append(el('summary',`${folded.length} ${label}`));for(const x of folded)d.append(makeItem(x));parent.append(d);}}
   function entity(kind,id,label=id){const b=button(label,()=>choose(kind,id),'electrical-entity');b.dataset.kind=kind;b.dataset.entity=id;b.setAttribute('aria-pressed',selected(kind,id));return b;}
-  function save(){if(!input)return;try{localStorage.setItem(key(),json({view,selection,focusSelection,focusRef,powerState,notes,showPassives}));storageWarning='';}catch{storageWarning='Browser storage unavailable/full. Export notes to keep them.';}}
+  function save(){agentRevision++;if(!input)return;try{localStorage.setItem(key(),json({view,selection,focusSelection,focusRef,powerState,notes,showPassives}));storageWarning='';}catch{storageWarning='Browser storage unavailable/full. Export notes to keep them.';}}
   function validSelection(s){return s&&({component:model.components,pin:model.pins,net:model.nets}[s.kind]?.has(s.id)||s.kind==='bus'&&model.buses.some(b=>b.id===s.id));}
   function activeNets(){if(!selection)return [];if(selection.kind==='net')return [selection.id];if(selection.kind==='pin')return [model.pins.get(selection.id).net].filter(Boolean);if(selection.kind==='bus')return model.buses.find(b=>b.id===selection.id).pathNets;return distinct(model.components.get(selection.id).pins.map(p=>p.net).filter(Boolean));}
   function stateOf(name){return model.powerStates.find(s=>s.name===powerState)?.rails[name]||'unspecified';}
   function load(envelope){
+    agentRevision++;
     if(envelope?.schema!==ELECTRICAL_SCHEMA||!envelope.input||!/^([a-f0-9]{64})$/.test(envelope.input.sha256))throw Error('Invalid electrical input identity');
     const next=electricalModel(envelope.ir); // Validate completely before replacing the current document.
     nativeCheck=envelope.analysis?.check||null;powerDrawing=new Map();busDrawing=new Map();schematic=null;sheetId=null;sheetZoom=1;
@@ -443,7 +445,10 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   $('electrical-export').onclick=exportReview;
   /** Select something chosen elsewhere (the board) without echoing it back. */
   function revealEntity(kind,id){if(!model||!validSelection({kind,id}))return false;quiet=true;try{if(view==='schematic')locate(kind,id);else choose(kind,id);}finally{quiet=false;}return true;}
-  function agentContext(){return {sha256:input.sha256,name:model.name,input,selection,view,power_state:powerState||null,
+  function agentContext(){const circuit=focusCircuit(model,selection,focusRef);return {sha256:input.sha256,name:model.name,input,selection,view,power_state:powerState||null,
+    selection_context:{components:circuit.components.slice(0,32).map(c=>({ref:c.ref,part:c.part,properties:c.properties,partDefinition:c.partDefinition,pins:c.pins.slice(0,64),pins_omitted:Math.max(0,c.pins.length-64)})),
+      nets:circuit.nets.slice(0,64).map(n=>({name:n.name,pins:n.pins.slice(0,128),pins_omitted:Math.max(0,n.pins.length-128)})),
+      components_omitted:Math.max(0,circuit.components.length-32),nets_omitted:Math.max(0,circuit.nets.length-64)},
     ir:model.ir,annotations:notes,check:nativeCheck,inspection_limits:model.warnings,
     entities:{component:[...model.components.keys()],pin:[...model.pins.keys()],net:[...model.nets.keys()],bus:model.buses.map(b=>b.id)}};}
   function addAgentFeedback(feedback,author){
@@ -455,6 +460,6 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     const ids=new Set(notes.map(n=>n.id));notes.push(...additions.filter(n=>!ids.has(n.id)));save();render();
   }
   return {load,show,render:()=>{if(model)render();},hasModel:()=>!!model,model:()=>model,input:()=>input,selection:()=>selection,
-    agentContext,addAgentFeedback,
+    agentContext,agentRevision:()=>agentRevision,addAgentFeedback,
     has:(kind,id)=>!!model&&validSelection({kind,id}),reveal:revealEntity,exportReview:()=>{if(!model)throw Error('Open a schematic first.');exportReview();},importReview};
 }

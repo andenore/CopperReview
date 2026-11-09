@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import secrets
 import socket
+import time
 from urllib.parse import parse_qs, unquote, urlsplit
 import webbrowser
 
@@ -149,14 +150,18 @@ def board_asset(root, name):
         return None
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, agents=False):
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, agents=False, agent_token=None):
     project = Path(project).resolve() if project else None
     if agents and public:
         raise ValueError("Agent review requires a loopback-only server")
     bridge = AgentBridge() if agents else None
+    tool_token = (agent_token or secrets.token_urlsafe(32)) if agents else None
+    if tool_token == token:
+        raise ValueError("Browser and agent credentials must differ")
 
     class Handler(BaseHTTPRequestHandler):
         scene = initial_scene
+        agent_token = tool_token
 
         def send(self, status, payload, content_type="application/json; charset=utf-8", csp=CSP):
             if not isinstance(payload, bytes):
@@ -177,7 +182,9 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
             if not host or self.headers.get("Host") != host:
                 self.send(403, {"error": "Invalid local host"})
                 return False
-            if auth and not secrets.compare_digest(self.headers.get("X-Copper-Token", ""), token):
+            endpoint = self.path.split("?", 1)[0]
+            expected = tool_token if self.command == "POST" and endpoint == "/api/agents/tool" and bridge else token
+            if auth and not secrets.compare_digest(self.headers.get("X-Copper-Token", ""), expected):
                 self.send(403, {"error": "Invalid session token; use the URL printed by the CLI"})
                 return False
             origin = self.headers.get("Origin")
@@ -185,6 +192,30 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                 self.send(403, {"error": "Cross-origin requests are not allowed"})
                 return False
             return True
+
+        def reject_large_body(self, length, message):
+            # Drain a bounded ordinary oversize upload so browsers can read the JSON error.
+            # Unbounded/slow senders are closed instead of tying up a server thread.
+            self.close_connection = True
+            if 0 < length <= MAX_UPLOAD:
+                previous = self.connection.gettimeout()
+                deadline = time.monotonic() + 2
+                try:
+                    remaining = length
+                    while remaining:
+                        budget = deadline - time.monotonic()
+                        if budget <= 0:
+                            break
+                        self.connection.settimeout(budget)
+                        chunk = self.rfile.read1(min(65536, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                except (OSError, TimeoutError):
+                    pass
+                finally:
+                    self.connection.settimeout(previous)
+            self.send(413, {"error": message})
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
@@ -256,8 +287,8 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                     return
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
-                    if not 0 < length <= MAX_CONTEXT + 1024:
-                        self.send(413, {"error": "Agent request exceeds 4 MiB"})
+                    if not 0 < length <= MAX_CONTEXT + 128 * 1024:
+                        self.reject_large_body(length, "Agent request exceeds 4 MiB plus 128 KiB envelope allowance")
                         return
                     value = json.loads(self.rfile.read(length), parse_constant=lambda x: (_ for _ in ()).throw(ValueError("Non-finite JSON number")))
                     if not isinstance(value, dict):
@@ -270,6 +301,8 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                         result = call_tool(bridge, value.get("name"), value.get("arguments", {}))
                     elif self.path == "/api/agents/cancel":
                         result = bridge.cancel(value.get("session_id"), value.get("request_id"))
+                    elif self.path == "/api/agents/detach":
+                        result = bridge.detach(value.get("session_id"))
                     else:
                         self.send(404, {"error": "Unknown agent endpoint"})
                         return
@@ -356,22 +389,25 @@ def main():
             print(f"Scene saved: {args.export_scene.resolve()}")
             return
         token = secrets.token_urlsafe(32)
+        agent_token = secrets.token_urlsafe(32)
         public = args.host not in ("127.0.0.1", "localhost")
         entry = args.entry.replace("\\", "/") if args.entry else None
         server = ThreadingHTTPServer((args.host, args.port), make_handler(
-            scene, token, args.project, entry, public=public, agents=args.agents,
+            scene, token, args.project, entry, public=public, agents=args.agents, agent_token=agent_token,
             board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"
         print(f"CopperReview: {url}", flush=True)
         discovery_file = None
         if args.agents:
+            agent_url = f"http://127.0.0.1:{server.server_port}/#token={agent_token}"
+            print(f"Agent MCP: {agent_url}", flush=True)
             project_root = args.project or (args.board.parent if args.board else args.electrical_ir.parent if args.electrical_ir else Path.cwd())
             try:
-                discovery_file = advertise(url, args.board.name if args.board else args.electrical_ir.name if args.electrical_ir else project_root.name, project_root)
+                discovery_file = advertise(agent_url, args.board.name if args.board else args.electrical_ir.name if args.electrical_ir else project_root.name, project_root)
                 print("Design Q&A enabled. copper-review-mcp discovers this viewer automatically; open Ask about design in the browser.", flush=True)
             except (OSError, ValueError) as exc:
-                print(f"Automatic agent discovery unavailable: {exc}. Set COPPER_REVIEW_URL to the printed URL as a fallback.", flush=True)
+                print(f"Automatic agent discovery unavailable: {exc}. Set COPPER_REVIEW_URL to the Agent MCP URL as a fallback.", flush=True)
         if public:
             hosts = lan_addresses() if args.host in ("0.0.0.0", "") else [args.host]
             for host in hosts:
