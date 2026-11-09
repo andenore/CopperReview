@@ -241,7 +241,7 @@ export function makeReview(scene,annotations,stage,summary,issueSource=null) {
     summary:summary.trim(),geometry_counts:{components:scene.components.length,nets:scene.nets.length,
       track_segments:scene.tracks.length,vias:scene.vias.length,zone_polygons:scene.zones.length},
     inspection_limits:[...scene.warnings,'Net guides show logical membership, not measured open connections.',
-      'Annotations are human observations and requests, not validated solver constraints or DRC results.'],
+      'Annotations are reviewer or agent observations and requests, not validated solver constraints or DRC results.'],
     ...(issueSource && annotations.some(a=>a.issues?.length)?{copperscript_issues:clone(issueSource)}:{}),
     annotations:clone(annotations)};
 }

@@ -219,3 +219,27 @@ body[data-mode=assembly] #pcb-review>.explorer,body[data-mode=assembly] #pcb-rev
 .assembly-designators span.done{border-color:var(--mint);color:var(--mint)}.assembly-designators span.focused{background:var(--copper);border-color:var(--copper);color:var(--on-accent)}
 .assembly-mpn{font:600 13px ui-monospace,Consolas,monospace;color:var(--label);overflow-wrap:anywhere}
 .view-gizmo{position:absolute;right:12px;top:12px;z-index:2;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px var(--shadow)}
+/* Design questions stay beside the board, without blocking selections. */
+#agent-panel{position:fixed;top:var(--topbar-height,45px);right:0;bottom:0;width:380px;z-index:4;display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--panel);color:var(--text);border-left:1px solid var(--border);overflow:hidden}
+#agent-panel .agent-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#agent-panel h2{font-size:17px;margin:0}
+#agent-panel p{line-height:1.5;margin:5px 0}
+#agent-status{font-size:12px;color:var(--muted)}
+.agent-help{font-size:11px;max-height:30vh;overflow:auto}
+#agent-results{flex:1;min-height:120px;overflow:auto;padding-right:4px}
+#agent-results article{padding:14px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+#agent-results .agent-question{background:var(--field);border-radius:6px;padding:8px;margin:5px 0 12px;white-space:pre-wrap}
+#agent-results .agent-answer{white-space:pre-wrap;line-height:1.6}
+#agent-results .agent-answer-state{font-size:11px;color:var(--muted)}
+#agent-results details{margin:10px 0;font-size:12px}
+#agent-results summary{cursor:pointer;color:var(--copper)}
+#agent-results pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;background:var(--field);padding:8px;font-size:11px}
+.agent-actions,.agent-suggestions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.agent-actions button,.agent-suggestions button{font-size:11px;padding:6px 8px}
+.agent-compose{border-top:1px solid var(--border);padding-top:6px}
+.agent-compose .field{margin:8px 0}
+#agent-reply-context{font-size:11px;overflow-wrap:anywhere;border-left:2px solid var(--mint);padding-left:8px}
+#agent-reply-context button{margin-top:4px;font-size:10px}
+body.agent-panel-open .workspace{width:calc(100% - 380px)}
+body.agent-panel-open #pcb-review{--left:180px;--right:240px;grid-template-columns:var(--left) minmax(140px,1fr) var(--right)}
+@media(max-width:1100px){#agent-panel{position:relative;top:auto;width:100%;height:75vh;border-left:0;border-top:1px solid var(--border)}body.agent-panel-open .workspace{width:100%}}

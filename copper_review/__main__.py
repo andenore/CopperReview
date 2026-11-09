@@ -15,6 +15,9 @@ import webbrowser
 
 from .importer import STAGES, import_pcb
 from .electrical import import_electrical
+from .agents import AgentBridge, MAX_CONTEXT
+from .agent_mcp import call_tool
+from .agent_discovery import advertise
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 50 * 1024 * 1024
@@ -146,8 +149,11 @@ def board_asset(root, name):
         return None
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None):
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, agents=False):
     project = Path(project).resolve() if project else None
+    if agents and public:
+        raise ValueError("Agent review requires a loopback-only server")
+    bridge = AgentBridge() if agents else None
 
     class Handler(BaseHTTPRequestHandler):
         scene = initial_scene
@@ -183,6 +189,16 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
         def do_GET(self):
             path = self.path.split("?", 1)[0]
             if not self.allowed(auth=path.startswith("/api/")):
+                return
+            if path == "/api/agents":
+                self.send(200, {"enabled": bridge is not None})
+                return
+            if path in ("/api/agents/updates", "/api/agents/status") and bridge:
+                try:
+                    sid = parse_qs(urlsplit(self.path).query).get("session_id", [""])[0]
+                    self.send(200, bridge.updates(sid) if path.endswith("updates") else bridge.agent_status(sid))
+                except ValueError as exc:
+                    self.send(400, {"error": str(exc)})
                 return
             if path == "/api/scene":
                 self.send(200, type(self).scene)
@@ -234,6 +250,33 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
         def do_POST(self):
             if not self.allowed(auth=True):
                 return
+            if self.path.startswith("/api/agents/"):
+                if not bridge:
+                    self.send(404, {"error": "Start CopperReview with --agents to enable agent review"})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= MAX_CONTEXT + 1024:
+                        self.send(413, {"error": "Agent request exceeds 4 MiB"})
+                        return
+                    value = json.loads(self.rfile.read(length), parse_constant=lambda x: (_ for _ in ()).throw(ValueError("Non-finite JSON number")))
+                    if not isinstance(value, dict):
+                        raise ValueError("Expected JSON object")
+                    if self.path == "/api/agents/context":
+                        result = bridge.context(value.get("session_id"), value.get("context"))
+                    elif self.path == "/api/agents/requests":
+                        result = bridge.enqueue(value.get("session_id"), value.get("prompt"), value.get("parent_id"), value.get("context"))
+                    elif self.path == "/api/agents/tool":
+                        result = call_tool(bridge, value.get("name"), value.get("arguments", {}))
+                    elif self.path == "/api/agents/cancel":
+                        result = bridge.cancel(value.get("session_id"), value.get("request_id"))
+                    else:
+                        self.send(404, {"error": "Unknown agent endpoint"})
+                        return
+                    self.send(200, result)
+                except (ValueError, TypeError, KeyError, UnicodeError, OverflowError) as exc:
+                    self.send(400, {"error": str(exc)})
+                return
             if self.path != "/api/import":
                 self.send(404, {"error": "Not found"})
                 return
@@ -274,8 +317,11 @@ def main():
     parser.add_argument("--host", default="127.0.0.1", help="Address to listen on; 0.0.0.0 serves other machines on your network (plain HTTP)")
     parser.add_argument("--port", type=int, default=0, help="Port; 0 selects an available port")
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--agents", action="store_true", help="Enable local MCP agent review (loopback only; see docs/agent-review.md)")
     parser.add_argument("--export-scene", type=Path, help="Write a portable normalized scene JSON and exit")
     args = parser.parse_args()
+    if args.agents and args.host != "127.0.0.1":
+        parser.error("--agents requires --host 127.0.0.1")
     try:
         if args.board and args.board.stat().st_size > MAX_UPLOAD:
             parser.error("Board exceeds 50 MiB")
@@ -313,11 +359,19 @@ def main():
         public = args.host not in ("127.0.0.1", "localhost")
         entry = args.entry.replace("\\", "/") if args.entry else None
         server = ThreadingHTTPServer((args.host, args.port), make_handler(
-            scene, token, args.project, entry, public=public,
+            scene, token, args.project, entry, public=public, agents=args.agents,
             board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"
         print(f"CopperReview: {url}", flush=True)
+        discovery_file = None
+        if args.agents:
+            project_root = args.project or (args.board.parent if args.board else args.electrical_ir.parent if args.electrical_ir else Path.cwd())
+            try:
+                discovery_file = advertise(url, args.board.name if args.board else args.electrical_ir.name if args.electrical_ir else project_root.name, project_root)
+                print("Design Q&A enabled. copper-review-mcp discovers this viewer automatically; open Ask about design in the browser.", flush=True)
+            except (OSError, ValueError) as exc:
+                print(f"Automatic agent discovery unavailable: {exc}. Set COPPER_REVIEW_URL to the printed URL as a fallback.", flush=True)
         if public:
             hosts = lan_addresses() if args.host in ("0.0.0.0", "") else [args.host]
             for host in hosts:
@@ -335,6 +389,8 @@ def main():
             pass
         finally:
             server.server_close()
+            if discovery_file:
+                discovery_file.unlink(missing_ok=True)
     except (OSError, ValueError, UnicodeError) as exc:
         parser.exit(2, f"CopperReview: {exc}\n")
 

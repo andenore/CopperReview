@@ -50,6 +50,11 @@ An annotation has a UUID `id`, UTC ISO timestamp `created_at`, optional
 `updated_at`, `category`, `priority`, `status`, `observation`, `desired_behavior`,
 `board_wide`, `visible_layers`, `selection`, and `context`.
 
+Agent findings may also carry `author`: `{kind: "agent", name, request_id,
+feedback_id}`. The name is self-reported. This optional metadata survives edits,
+local persistence and export; it does not grant the annotation authority or
+establish a verified finding. See [live agent review](agent-review.md).
+
 Categories: placement, routing, package_escape, return_path, mechanical,
 algorithm, other. Priorities: low, medium, high. Status: open or resolved.
 `observation` records the perceived problem; `desired_behavior` records the

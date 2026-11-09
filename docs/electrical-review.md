@@ -1,5 +1,11 @@
 # Electrical review
 
+The optional [local agent bridge](agent-review.md) can explain the current
+electrical selection with evidence references. Optional findings can be added
+to review notes by the reviewer. Electrical annotations may
+carry `author: {kind: "agent", name, request_id, feedback_id}`; attribution is
+retained by editing, persistence and export. Agent observations remain advisory.
+
 CopperReview reads `copperscript-ir/v0.1` board JSON produced by the public
 `copper compile` command. It requires no CopperScript installation at runtime.
 Open it with **Open → File…** (or drop it on the page), pass a JSON file as the CLI input, or run:

@@ -339,7 +339,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   }
   function renderNotes(box){
     if(!notes.length)box.append(el('p','No notes yet. Select something, then double-click it on the schematic or press N.','quiet'));
-    for(const [i,n]of notes.entries()){const row=el('div',undefined,`electrical-note${n.status==='resolved'?' resolved':''}`);row.append(el('span',String(i+1),`electrical-note-number ${n.priority}`),button(`${n.selection.id}: ${n.observation}`,()=>editNote(i)),button('Delete',()=>{notes.splice(i,1);if(editing===i){editing=null;draft=blankDraft();}else if(editing>i)editing--;save();render();}));row.title=`${n.category} · ${n.priority} · ${n.status}`;box.append(row);}
+    for(const [i,n]of notes.entries()){const row=el('div',undefined,`electrical-note${n.status==='resolved'?' resolved':''}`);row.append(el('span',String(i+1),`electrical-note-number ${n.priority}`),button(`${n.author?.kind==='agent'?`Agent: ${n.author.name} · `:''}${n.selection.id}: ${n.observation}`,()=>editNote(i)),button('Delete',()=>{notes.splice(i,1);if(editing===i){editing=null;draft=blankDraft();}else if(editing>i)editing--;save();render();}));row.title=`${n.category} · ${n.priority} · ${n.status}`;box.append(row);}
     box.append(el('h3',editing===null?'New note':`Edit note ${editing+1}`),noteForm(true).form);
     box.append(button('Export electrical review',exportReview),el('p','Electrical reviews carry the IR hash and exact entity identities; they use a separate contract from PCB reviews.','quiet'));
   }
@@ -361,7 +361,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   function saveDraft(){
     if(!selection||!draft.observation.trim()){message('Select an electrical entity and enter an observation.',true);return false;}
     const old=editing===null?null:notes[editing],now=new Date().toISOString();
-    const note={id:old?.id||randomId(),selection:{...selection},view,power_state:powerState||null,category:draft.category,priority:draft.priority,status:old?.status||'open',observation:draft.observation.trim(),desired_behavior:draft.desired.trim(),created_at:old?.created_at||now,updated_at:now};
+    const note={id:old?.id||randomId(),...(old?.author?{author:old.author}:{}),selection:{...selection},view,power_state:powerState||null,category:draft.category,priority:draft.priority,status:old?.status||'open',observation:draft.observation.trim(),desired_behavior:draft.desired.trim(),created_at:old?.created_at||now,updated_at:now};
     if(old)notes[editing]=note;else notes.push(note);editing=null;draft=blankDraft();save();render();return true;
   }
   function editNote(i){
@@ -372,7 +372,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   }
   /** Notes as plain text for an issue, a chat or a prompt. */
   function notesText(list){
-    return [`CopperReview electrical notes · ${model.name} · IR ${input.sha256.slice(0,12)}`,...list.map(n=>`${notes.indexOf(n)+1}. [${n.priority} · ${n.category} · ${n.status}] ${n.selection.kind} ${n.selection.id} (${n.view}${n.power_state?`, ${n.power_state}`:''})\n   Observation: ${n.observation}${n.desired_behavior?`\n   Desired: ${n.desired_behavior}`:''}`)].join('\n');
+    return [`CopperReview electrical notes · ${model.name} · IR ${input.sha256.slice(0,12)}`,...list.map(n=>`${notes.indexOf(n)+1}. [${n.priority} · ${n.category} · ${n.status}] ${n.selection.kind} ${n.selection.id} (${n.view}${n.power_state?`, ${n.power_state}`:''})\n   ${n.author?.kind==='agent'?`Agent: ${n.author.name} · `:''}Observation: ${n.observation}${n.desired_behavior?`\n   Desired: ${n.desired_behavior}`:''}`)].join('\n');
   }
   async function copyText(text,what){
     try{await navigator.clipboard.writeText(text);}catch{const t=el('textarea');t.value=text;document.body.append(t);t.select();document.execCommand('copy');t.remove();}
@@ -391,7 +391,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     for(const [i,n]of notes.entries()){
       const row=el('div',undefined,`electrical-notes-row${n.status==='resolved'?' resolved':''}`),go=button('',()=>{d.close();editNote(i);},'electrical-notes-go');
       const top=el('div');top.append(el('span',String(i+1),`electrical-note-number ${n.priority}`),el('strong',n.selection.id),el('span',`${n.category} · ${n.priority} · ${n.status} · ${n.view}`,'quiet'));
-      go.append(top,el('div',n.observation));if(n.desired_behavior)go.append(el('div',`→ ${n.desired_behavior}`,'quiet'));
+      go.append(top,el('div',`${n.author?.kind==='agent'?`Agent: ${n.author.name} · `:''}${n.observation}`));if(n.desired_behavior)go.append(el('div',`→ ${n.desired_behavior}`,'quiet'));
       row.append(go,button('Copy',()=>copyText(notesText([n]),`note ${i+1}`)));list.append(row);
     }
     d.append(list);d.showModal();
@@ -443,6 +443,18 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   $('electrical-export').onclick=exportReview;
   /** Select something chosen elsewhere (the board) without echoing it back. */
   function revealEntity(kind,id){if(!model||!validSelection({kind,id}))return false;quiet=true;try{if(view==='schematic')locate(kind,id);else choose(kind,id);}finally{quiet=false;}return true;}
+  function agentContext(){return {sha256:input.sha256,name:model.name,input,selection,view,power_state:powerState||null,
+    ir:model.ir,annotations:notes,check:nativeCheck,inspection_limits:model.warnings,
+    entities:{component:[...model.components.keys()],pin:[...model.pins.keys()],net:[...model.nets.keys()],bus:model.buses.map(b=>b.id)}};}
+  function addAgentFeedback(feedback,author){
+    if(input?.sha256!==feedback.payload.sha256)throw Error('Electrical IR revision changed');
+    const additions=feedback.annotations.map(f=>{
+      if(!validSelection(f.selection)||typeof f.observation!=='string'||!f.observation.trim())throw Error('Invalid electrical finding');
+      return normalNote({...f,author,view:feedback.view,power_state:feedback.power_state,status:'open',created_at:feedback.created_at,desired_behavior:f.desired_behavior||''});
+    });
+    const ids=new Set(notes.map(n=>n.id));notes.push(...additions.filter(n=>!ids.has(n.id)));save();render();
+  }
   return {load,show,render:()=>{if(model)render();},hasModel:()=>!!model,model:()=>model,input:()=>input,selection:()=>selection,
+    agentContext,addAgentFeedback,
     has:(kind,id)=>!!model&&validSelection({kind,id}),reveal:revealEntity,exportReview:()=>{if(!model)throw Error('Open a schematic first.');exportReview();},importReview};
 }

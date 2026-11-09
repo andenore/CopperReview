@@ -5,6 +5,8 @@ import {compileInput,electricalInput,cancelCompiler} from './compiler.js';
 import {rememberDocument,rememberedDocument} from './documents.js';
 import {findDeclaration,displayPath,githubLink} from './source-links.js';
 import {createElectricalReview} from './electrical.js';
+import {createAgentReview} from './agents.js';
+import {snapshotSelection} from './core.js';
 import {chipify} from './chips.js';
 import {createView3d,viewName,lookAt,cameraEye} from './view3d.js';
 import {parseVrml,buildSoup,loadBodies,modelKind} from './model3d.js';
@@ -35,6 +37,56 @@ const electrical=createElectricalReview({message,
     source:{has:(kind,id)=>!!sourceTarget(kind,id),open:(kind,id)=>openSource(kind,id)}}});
 // Both needs a schematic and a board that share parts; an unrelated pair stays apart.
 const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:m==='assembly'?!!state.scene:true;
+let agentCatalogScene=null,agentCatalog=null;
+function boardCatalog(scene){
+  if(agentCatalogScene===scene)return agentCatalog;
+  agentCatalogScene=scene;
+  agentCatalog={components:scene.components.slice(0,500).map(c=>({reference:c.reference,source_path:c.source_path,value:c.value,
+    footprint:c.footprint,position_mm:c.position_mm,side:c.side,pads:c.pads.slice(0,64).map(p=>({number:p.number,pin_name:p.pin_name,net:p.net})),
+    pads_omitted:Math.max(0,c.pads.length-64)})),nets:scene.nets.slice(0,1000).map(n=>({name:n.name})),
+    components_omitted:Math.max(0,scene.components.length-500),nets_omitted:Math.max(0,scene.nets.length-1000),
+    scope:'Exported identities and logical pad membership; this is not verified physical connectivity. Select an entity for detailed geometry.'};
+  return agentCatalog;
+}
+function agentSnapshot(){
+  const documents={};
+  if(state.scene){const scene=state.scene;
+    documents.layout={sha256:scene.board.sha256,name:scene.board.name,board:clone(scene.board),
+      selection:clone(state.selection),visible_layers:[...state.layers],context:snapshotSelection(scene,state.selection,state.layers),
+      entities:{components:scene.components.map(c=>c.reference),nets:scene.nets.map(n=>n.name)},
+      catalog:boardCatalog(scene),
+      issues:clone(state.issues),annotations:clone(state.annotations),summary:$('summary').value,
+      inspection_limits:[...scene.warnings,'Geometry queries are conservative. Net membership is not verified connectivity. Review notes are advisory.']};
+  }
+  if(electrical.hasModel())documents.electrical=electrical.agentContext();
+  return {schema:'copper-review-agent-context/v1',mode,documents};
+}
+function applyAgentFeedback(request){
+  const feedback=request.feedback,p=feedback.payload;
+  const author={kind:'agent',name:p.agent,request_id:request.id,feedback_id:p.feedback_id};
+  if(p.target==='electrical'){electrical.addAgentFeedback(feedback,author);return;}
+  if(state.scene?.board.sha256!==p.sha256)throw Error('Board revision changed');
+  // Validate the entire batch before adding anything, rebuilding geometry from the actual scene.
+  const notes=feedback.annotations.map(f=>({...makeAnnotation(state.scene,f.selection,feedback.visible_layers,
+    {category:f.category||'other',priority:f.priority||'medium',status:'open',observation:f.observation,
+      desired_behavior:f.desired_behavior||'',boardWide:!f.selection.components.length&&!f.selection.nets.length&&!f.selection.region},f.id),
+    created_at:feedback.created_at,author}));
+  validateReview({schema:REVIEW_SCHEMA,board:{sha256:p.sha256,stage:$('stage').value},annotations:notes},state.scene);
+  const ids=new Set(state.annotations.map(n=>n.id));state.annotations.push(...notes.filter(n=>!ids.has(n.id)));
+  renderNotes();saveLocal();requestDraw();
+}
+function revealAgentEvidence(cite){
+  if(cite.target==='electrical'){
+    if(electrical.input()?.sha256!==cite.sha256)throw Error('Electrical design changed');
+    setMode('electrical');if(!electrical.reveal(cite.selection.kind,cite.selection.id))throw Error('Entity unavailable');return;
+  }
+  if(state.scene?.board.sha256!==cite.sha256)throw Error('Board changed');
+  setMode('layout');state.selection=clone(cite.selection);updateSelection();
+  const context=snapshotSelection(state.scene,state.selection,state.layers);
+  const bounds=state.selection.region||context.components[0]?.bounds_mm||context.nets[0]?.bounds_mm;
+  fit(bounds||state.scene.board.bounds_mm);
+}
+createAgentReview({token,localServer,snapshot:agentSnapshot,applyFeedback:applyAgentFeedback,revealEvidence:revealAgentEvidence,message});
 // Side panels fold away per mode; Both starts with the board's panels and the schematic list folded.
 const PANEL_DEFAULTS={both:{'board-left':true,'board-right':true,'schematic-left':true}};
 const folded=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:panels'))||{};}catch{return {};}})();
@@ -724,7 +776,7 @@ function renderNotes() {
   for(const a of state.annotations){const row=document.createElement('div');row.className='note-row';
     const priority=document.createElement('span');priority.className=`priority ${a.priority}`;priority.textContent=a.priority;
     const button=document.createElement('button');button.className='note';const title=document.createElement('span');title.className='note-title';title.textContent=a.observation;
-    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.category} · ${a.status} · ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
+    const caption=document.createElement('span');caption.className='note-caption';caption.textContent=`${a.author?.kind==='agent'?`Agent: ${a.author.name} · `:''}${a.category} · ${a.status} · ${[...a.selection.components,...a.selection.nets,a.selection.region?'region':null,a.board_wide?'board-wide':null,...(a.issues || []).map(id=>`issue ${id}`)].filter(Boolean).join(', ')}`;button.append(title,caption);button.onclick=()=>editNote(a);
     const remove=document.createElement('button');remove.className='delete-note';remove.textContent='×';remove.title='Delete annotation';remove.setAttribute('aria-label',`Delete annotation: ${a.observation}`);
     remove.onclick=()=>{state.annotations=state.annotations.filter(n=>n.id!==a.id);if(state.editing===a.id)resetForm();renderNotes();saveLocal();requestDraw();};
     row.append(priority,button,remove);$('note-list').append(row);
@@ -785,7 +837,7 @@ $('export-scene').onclick=guarded(()=>download(`${state.scene.board.name}.scene.
 $('copy-review').onclick=guarded(async()=>{const text=reviewText();try{await navigator.clipboard.writeText(text);}catch{const t=document.createElement('textarea');t.value=text;document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw Error('Copy is unavailable here; use Export review JSON.');}message('Review JSON copied.');});
 $('save-note').onclick=guarded(()=>{
   const note=makeAnnotation(state.scene,state.selection,state.layers,{category:$('category').value,priority:$('priority').value,status:$('note-status').value,observation:$('observation').value,desired_behavior:$('desired').value,boardWide:$('board-wide').checked,issues:issuesFromForm()},state.editing || randomId());
-  if(state.editing){const i=state.annotations.findIndex(a=>a.id===state.editing);note.created_at=state.annotations[i].created_at;note.updated_at=new Date().toISOString();state.annotations[i]=note;}else state.annotations.push(note);
+  if(state.editing){const i=state.annotations.findIndex(a=>a.id===state.editing);note.created_at=state.annotations[i].created_at;if(state.annotations[i].author)note.author=state.annotations[i].author;note.updated_at=new Date().toISOString();state.annotations[i]=note;}else state.annotations.push(note);
   renderNotes();saveLocal();resetForm();requestDraw();message('Annotation saved.');
 });
 $('cancel-edit').onclick=resetForm;$('summary').oninput=saveLocal;$('stage').onchange=saveLocal;
