@@ -22,7 +22,10 @@ Click **Connect agent** in the viewer's top bar. Choose your host:
 
 - **ChatGPT desktop / Codex**: copy the generated command and arguments into
   Settings → MCP servers → Add server → STDIO, then save and restart the
-  connection. The dialog also supplies a TOML configuration.
+  connection. This is the local Codex host flow described in the
+  [official OpenAI documentation](https://learn.chatgpt.com/docs/extend/mcp).
+  If these settings are absent in your app, use the generated TOML with Codex
+  CLI or the IDE extension. This setup does not configure ChatGPT web.
 - **Claude Desktop**: download **copper-review.mcpb**, open it with Claude Desktop
   or install it through Settings → Desktop app → Extensions → Advanced settings.
   Keep the prefilled Python executable. The adapter is bundled; it needs the
@@ -32,6 +35,8 @@ Click **Connect agent** in the viewer's top bar. Choose your host:
   the extension to avoid duplicate connections.
 - **Claude Code**: copy the generated setup command and run it in the indicated
   shell. Update an existing `copper-review` entry instead of adding a duplicate.
+  On Windows the generated separator is quoted as `'--'` so PowerShell preserves
+  it when invoking npm's `claude.ps1` shim.
 - **Another MCP host**: use the generated command, argument array and environment
   values. Merge the JSON with existing servers rather than replacing them.
 
@@ -82,7 +87,9 @@ stdio MCP server in your agent host (substitute this checkout's absolute path):
 ```
 
 There is no port or token to copy. The adapter discovers local viewers, can start
-before the viewer, and reconnects to the same project after a viewer restart.
+before the viewer, and resolves the running viewer on every call. Heartbeats
+and ordinary reads never pin a viewer. Only an explicit `select_viewer` or
+`--project` pins a project and reconnects to that project after a restart.
 A failed call during restart returns an error; the next call rediscovers the
 viewer. Mutating calls are never silently replayed. If several viewers are
 running, the agent uses `list_viewers` and `select_viewer`, or configure the
@@ -116,9 +123,12 @@ this fallback. The browser's CopperReview URL uses a different credential.
    layout or electrical view. This only changes the visual selection.
 
 If several viewers are running, choose one using `list_viewers/select_viewer`.
-If several tabs are active, use `list_sessions/select_session` or pass
-`session_id` directly to the tool. The adapter never guesses among active tabs.
-A chosen tab becoming idle produces an error instead of silently switching tabs.
+With several active tabs, the server chooses the one most recently focused or
+used. The result identifies the chosen `session_id`, `chosen_by` and `last_used`.
+Activity is synchronized on the next poll; polling alone does not change it.
+Use `list_sessions/select_session` or pass `session_id` to override this choice.
+An explicitly chosen tab becoming idle produces an error instead of switching
+tabs. Copy the returned `session_id` into `show_on_board` to target that same tab.
 
 Highlights are queued and acknowledged by the browser. Use
 `get_navigation_status(session_id, command_id)` to distinguish applied, rejected
@@ -126,12 +136,15 @@ and expired highlights; a queued result alone does not prove anything was shown.
 The server validates entity IDs and the exact design hash, and the browser checks
 the hash again before navigation. One highlight is retained per tab; a newer
 command supersedes the earlier one. Unapplied highlights expire after 30 seconds.
+A browser receipt arriving after expiry can still confirm that the command was
+applied. While either note editor contains a draft or an existing note is being
+edited, navigation is rejected with a reason; save or cancel the note first.
 These tools never create questions, answers or review notes.
 
 ### Selection resource and prompts
 
 `copper-review://selection` returns the same context as
-`get_current_selection`, using the selected tab or the sole active tab.
+`get_current_selection`, using the explicitly selected or most recently used tab.
 `resources/subscribe` enables `notifications/resources/updated` when its
 revision or availability changes. The adapter checks small session metadata
 once per second and emits notifications even while the host sends no requests.
@@ -314,6 +327,9 @@ the location with `COPPER_REVIEW_REGISTRY`. Graceful shutdown removes its record
 discovery also prunes records whose process is known to have exited. Records
 with unknown process status are retained, and unreachable viewers are ignored.
 Discovery considers the 64 newest retained records.
+Records include the viewer package version. The adapter warns on stderr once
+per viewer/version mismatch (including older records with no version); update
+the adapter or reinstall the bundled extension after upgrading the viewer.
 
 Limits remain explicit: eight browser sessions, 32 retained questions, 4 MiB per
 context, 32 citations/findings per answer, 32,000 answer characters and 3,000
@@ -321,6 +337,9 @@ characters per evidence excerpt. At capacity, completed/cancelled requests are
 evicted before pending/claimed work. Parent history may eventually be evicted;
 the agent must treat an unavailable parent as missing context. A tab keeps its
 session ID in sessionStorage across reloads, preserving its conversation.
+An origin-scoped Web Lock prevents a duplicated tab from reusing that ID and
+overwriting the original context. Browsers without Web Locks use a new ID on
+each load instead; reload persistence is unavailable on those browsers.
 At session capacity the oldest idle tab and its requests are evicted; eight
 active tabs require closing one before another can connect. Page exit detaches
 the session; a tab without a heartbeat for two minutes is also considered idle.

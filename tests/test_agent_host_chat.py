@@ -1,5 +1,7 @@
 import json
 import unittest
+import time
+from copper_review import __version__
 
 from copper_review.agents import AgentBridge
 from copper_review.agent_mcp import Protocol, SELECTION_URI, call_tool
@@ -14,6 +16,7 @@ class HostChatTests(unittest.TestCase):
         result = self.rpc("initialize", {"protocolVersion": "2025-11-25", "capabilities": {}})
         self.assertEqual(result["result"]["capabilities"]["resources"], {"subscribe": True})
         self.assertIn("prompts", result["result"]["capabilities"])
+        self.assertEqual(result["result"]["serverInfo"]["version"], __version__)
         self.protocol.handle({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
     def rpc(self, method, params=None):
@@ -34,10 +37,20 @@ class HostChatTests(unittest.TestCase):
         selection["context"]["documents"].clear()
         self.assertEqual(self.bridge.get_context("tab"), context())
 
-    def test_multiple_tabs_require_explicit_selection_and_do_not_fall_back_from_idle_tab(self):
+    def test_multiple_tabs_follow_activity_but_explicit_selection_never_falls_back(self):
         self.bridge.context("second", context("b" * 64))
-        with self.assertRaisesRegex(ValueError, "Several"):
-            self.tool("get_current_selection")
+        self.bridge.activity("tab", time.time() - 10)
+        self.assertEqual(self.tool("get_current_selection")["session_id"], "tab")
+        self.bridge.activity("second", time.time())
+        selected = self.tool("get_current_selection")
+        self.assertEqual(selected["session_id"], "second")
+        self.assertEqual(selected["chosen_by"], "most recently used active tab")
+        self.rpc("resources/subscribe", {"uri": SELECTION_URI})
+        self.bridge.activity("tab", time.time())
+        notifications = []
+        self.protocol.poll_notifications(notifications.append)
+        self.assertEqual(len(notifications), 1)
+        self.assertEqual(self.tool("get_current_selection")["session_id"], "tab")
         self.tool("select_session", {"session_id": "second"})
         self.assertEqual(self.tool("get_current_selection")["session_id"], "second")
         resource = self.rpc("resources/read", {"uri": SELECTION_URI})
@@ -72,6 +85,8 @@ class HostChatTests(unittest.TestCase):
             self.bridge.navigation("tab", old["command_id"])
         self.bridge.sessions["tab"]["navigation_until"] = 0
         self.assertEqual(self.bridge.navigation("tab")["status"], "expired")
+        self.bridge.acknowledge_navigation("tab", current["command_id"], "applied")
+        self.assertEqual(self.bridge.navigation("tab")["status"], "applied")
         self.bridge.context("tab", {"schema": "copper-review-agent-context/v1", "documents": {
             "electrical": {"sha256": "e" * 64, "entities": {"net": ["DATA"]}}}})
         command = self.tool("show_on_board", {"target": "electrical", "sha256": "e" * 64, "selection": {"kind": "net", "id": "DATA"}})

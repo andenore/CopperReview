@@ -460,6 +460,7 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     const ids=new Set(notes.map(n=>n.id));notes.push(...additions.filter(n=>!ids.has(n.id)));save();render();
   }
   return {load,show,render:()=>{if(model)render();},hasModel:()=>!!model,model:()=>model,input:()=>input,selection:()=>selection,
+    noteDraftDirty:()=>editing!==null||JSON.stringify(draft)!==JSON.stringify(blankDraft()),
     agentContext,agentRevision:()=>agentRevision,addAgentFeedback,
     has:(kind,id)=>!!model&&validSelection({kind,id}),reveal:revealEntity,exportReview:()=>{if(!model)throw Error('Open a schematic first.');exportReview();},importReview};
 }

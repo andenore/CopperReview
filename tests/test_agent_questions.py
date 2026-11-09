@@ -161,11 +161,68 @@ class DiscoveryTests(unittest.TestCase):
         first.shutdown(); first.server_close(); thread.join()
         self.servers.remove((first, thread))
         self.viewer("A restarted", "A")
-        # A stale crash record is ignored. The failed operation is never replayed.
-        with self.assertRaisesRegex(ValueError, "Cannot reach"):
-            client("list_sessions", {})
+        # Every call resolves the explicit project again, ignoring stale records.
         self.assertEqual(client("list_sessions", {}), [])
         self.assertTrue(old_path.exists())
+
+    def test_heartbeat_and_reads_do_not_pin_viewer(self):
+        first, thread, _ = self.viewer("A", "A")
+        client = DiscoveryClient()
+        self.assertTrue(client("_connection_ping", {})["connected"])
+        self.assertEqual(client("list_sessions", {}), [])
+        self.assertIsNone(client.project)
+        self.assertIsNone(client.viewer_id)
+        self.viewer("B", "B")
+        with self.assertRaisesRegex(ValueError, "Several"):
+            client("get_current_selection", {})
+        first.shutdown(); first.server_close(); thread.join()
+        self.servers.remove((first, thread))
+        self.assertEqual(client("list_sessions", {}), [])
+        self.assertIsNone(client.project)
+
+    def test_version_warning_and_malformed_discovery_ids(self):
+        import io
+        from contextlib import redirect_stderr
+        _, _, path = self.viewer()
+        record = json.loads(path.read_text())
+        record["version"] = "old"
+        path.write_text(json.dumps(record))
+        client = DiscoveryClient()
+        output = io.StringIO()
+        with redirect_stderr(output):
+            client("_connection_ping", {})
+            client("list_sessions", {})
+        self.assertEqual(output.getvalue().count("reinstall the extension"), 1)
+        for invalid in [None, 123, {}, []]:
+            record["id"] = invalid
+            path.write_text(json.dumps(record))
+            self.assertEqual(candidates(), [])
+
+    def test_inflight_heartbeat_cannot_overwrite_explicit_selection(self):
+        from copper_review import __version__
+        client = DiscoveryClient()
+        records = [{"id": name, "project": name, "url": name, "label": name, "version": __version__} for name in ("A", "B")]
+        entered, release = threading.Event(), threading.Event()
+        results = []
+        def live():
+            if threading.current_thread().name == "heartbeat-race":
+                entered.set()
+                if not release.wait(5):
+                    raise AssertionError("Timed out waiting for explicit selection")
+                return records[:1]
+            return records
+        with patch.object(client, "live", side_effect=live), patch("copper_review.agent_mcp.connect", side_effect=lambda url, **kw: lambda name, args: url):
+            worker = threading.Thread(name="heartbeat-race", target=lambda: results.append(client("_connection_ping", {})))
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                client("select_viewer", {"viewer_id": "B"})
+            finally:
+                release.set()
+                worker.join(5)
+            self.assertEqual(results, ["A"])  # Already in flight when the user selected B.
+            self.assertEqual(client.project, "B")
+            self.assertEqual(client("list_sessions", {}), "B")
 
     def test_adapter_can_start_before_viewer_and_project_filter_is_exact(self):
         project = Path(self.directory.name) / "selected"

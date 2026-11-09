@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import stat
 import uuid
+from . import __version__
 
 
 def registry_dir():
@@ -55,7 +56,7 @@ def advertise(url, label, project):
     _private_directory(root, create=True)
     viewer_id = str(uuid.uuid4())
     record = {"schema": "copper-review-discovery/v1", "id": viewer_id, "label": label,
-              "project": str(Path(project).resolve()), "pid": os.getpid()}
+              "project": str(Path(project).resolve()), "pid": os.getpid(), "version": __version__}
     if os.name == "nt":
         record["protected_url"] = base64.b64encode(protect(url.encode())).decode()
     else:
@@ -116,9 +117,9 @@ def candidates():
             if os.name != "nt" and (info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077):
                 continue
             record = json.loads(path.read_text(encoding="utf-8"))
-            if record.get("schema") != "copper-review-discovery/v1":
+            if not isinstance(record, dict) or record.get("schema") != "copper-review-discovery/v1":
                 continue
-            if str(uuid.UUID(record.get("id", ""))) != path.stem:
+            if not isinstance(record.get("id"), str) or str(uuid.UUID(record["id"])) != path.stem:
                 continue
             if process_alive(record.get("pid")) is False:
                 path.unlink()

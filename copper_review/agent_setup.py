@@ -26,7 +26,7 @@ def setup_config():
     toml = "[mcp_servers.copper-review]\ncommand = " + json.dumps(command) + "\nargs = " + json.dumps(args)
     toml += "\n[mcp_servers.copper-review.env]\n" + "\n".join(k + " = " + json.dumps(v) for k, v in env.items()) + "\n"
     return {"config": config, "claude_json": json.dumps({"mcpServers": {"copper-review": config}}, indent=2),
-            "codex_toml": toml, "claude_command": f"claude mcp add {env_flags} --transport stdio --scope user copper-review -- {launch}",
+            "codex_toml": toml, "claude_command": f"claude mcp add {env_flags} --transport stdio --scope user copper-review {quote('--')} {launch}",
             "shell": "PowerShell" if os.name == "nt" else "shell",
             "runtime_available": Path(command).is_file() and Path(args[1]).is_file()}
 

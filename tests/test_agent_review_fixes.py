@@ -120,6 +120,7 @@ class CredentialTests(unittest.TestCase):
                            ("/api/agents/requests", {"session_id": "tab", "prompt": "Injected"}),
                            ("/api/import", {}), ("/api/agents", None), ("/api/agents/detach", {"session_id": "tab"}),
                            ("/api/agents/navigation?session_id=tab", None),
+                           ("/api/agents/activity", {"session_id": "tab", "last_used": 100}),
                            ("/api/agents/navigation", {"session_id": "tab", "command_id": "x", "status": "applied"})]:
             with self.assertRaises(HTTPError) as error:
                 self.request(path, body, **headers)

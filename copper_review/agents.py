@@ -169,9 +169,7 @@ class AgentBridge:
             active = [key for key, session in self.sessions.items() if self._active(session)]
             if not active:
                 raise ValueError("No live review tab; open the viewer started with --agents")
-            if len(active) != 1:
-                raise ValueError("Several review tabs are active; use list_sessions and select_session or pass session_id")
-            sid = active[0]
+            sid = max(active, key=lambda key: (self.sessions[key].get("last_used", 0), key))
         session = self._session(sid)
         if not self._active(session):
             raise ValueError("Review tab is idle; return to the viewer before using its selection")
@@ -180,9 +178,19 @@ class AgentBridge:
     def current_selection(self, sid=None):
         with self.lock:
             self._expire()
+            source = "explicit" if sid is not None else "most recently used active tab"
             sid, session = self._current_session(sid)
             return {"session_id": sid, "revision": session["digest"].hex(),
+                    "chosen_by": source, "last_used": session.get("last_used", 0),
                     "synchronized_at": session["updated_at"], "context": deepcopy(session["context"])}
+
+    def activity(self, sid, last_used):
+        if type(last_used) not in (int, float) or not math.isfinite(last_used) or last_used < 0:
+            raise ValueError("Invalid tab activity time")
+        with self.lock:
+            session = self._session(sid)
+            session["last_used"] = max(session.get("last_used", 0), min(last_used, time.time()))
+            return {"session_id": sid}
 
     def show_on_board(self, target, digest, selection, sid=None):
         with self.lock:
@@ -216,7 +224,8 @@ class AgentBridge:
         text(reason, "navigation reason", 300, empty=True)
         with self.lock:
             command = self.navigation(sid, command_id)
-            if command["status"] == "queued":
+            # Expiry stops new applications, but a late browser receipt is authoritative.
+            if command["status"] in ("queued", "expired"):
                 self.sessions[sid]["navigation"].update(status=status, reason=reason)
             return self.navigation(sid, command_id)
 
@@ -246,7 +255,7 @@ class AgentBridge:
     def sessions_list(self):
         with self.lock:
             self._expire()
-            return [{"session_id": sid, "updated_at": s["updated_at"], "active": self._active(s), "revision": s["digest"].hex(),
+            return [{"session_id": sid, "updated_at": s["updated_at"], "active": self._active(s), "revision": s["digest"].hex(), "last_used": s.get("last_used", 0),
                      "documents": {k: {"sha256": d["sha256"], "name": d.get("name")} for k, d in s["context"]["documents"].items()}}
                     for sid, s in self.sessions.items()]
 

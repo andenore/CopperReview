@@ -74,6 +74,34 @@ try{
   await until(async()=>(await tool('get_navigation_status',{session_id:highlight.session_id,command_id:highlight.command_id})).status==='applied');
   assert.match(await page.locator('#selection-detail').textContent(),/U1/);
   assert.equal(await page.locator('#note-count').textContent(),'0');
+  // A highlight cannot retarget an unsaved layout note.
+  await page.locator('#observation').fill('Draft belongs to U1');
+  const blocked=await tool('show_on_board',{target:'layout',sha256:selected.context.documents.layout.sha256,
+    selection:{components:['U2'],nets:[],region:null}});
+  const rejected=await until(async()=>{const r=await tool('get_navigation_status',{session_id:blocked.session_id,command_id:blocked.command_id});return r.status==='rejected'&&r;});
+  assert.match(rejected.reason,/editing a note/);
+  assert.match(await page.locator('#selection-detail').textContent(),/U1/);
+  await page.locator('#save-note').click();
+  const savedLayout=await page.evaluate(()=>Object.values(localStorage).flatMap(raw=>{try{return JSON.parse(raw)?.annotations||[];}catch{return [];}}).find(n=>n.observation==='Draft belongs to U1'));
+  assert.deepEqual(savedLayout.selection.components,['U1']);
+  await page.getByRole('button',{name:'Delete annotation: Draft belongs to U1',exact:true}).click();
+  // window.open copies sessionStorage just like Duplicate tab. Contexts stay separate.
+  const originalSession=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('copper-review:agent-session')));
+  const popup=page.waitForEvent('popup');
+  await page.evaluate(url=>window.open(url,'_blank'),url);
+  const duplicate=await popup;
+  duplicate.on('pageerror',e=>errors.push(e.message));
+  await duplicate.waitForFunction(()=>document.querySelectorAll('.entity').length===4);
+  await until(async()=>await duplicate.evaluate(original=>{const id=JSON.parse(sessionStorage.getItem('copper-review:agent-session'));return id&&id!==original;},originalSession));
+  await duplicate.bringToFront();
+  await duplicate.locator('.entity').filter({hasText:'U2'}).first().click();
+  const duplicateSelection=await until(async()=>{const r=await tool('get_current_selection');return r.session_id!==originalSession&&r.context.documents.layout?.selection.components.includes('U2')&&r;});
+  assert.equal(duplicateSelection.chosen_by,'most recently used active tab');
+  await page.bringToFront();
+  await page.locator('.entity').filter({hasText:'U1'}).first().click();
+  await until(async()=>(await tool('get_current_selection')).session_id===originalSession);
+  assert.deepEqual((await tool('get_current_selection',{session_id:duplicateSelection.session_id})).context.documents.layout.selection.components,['U2']);
+  await duplicate.close();
   // A response delayed past its deadline must not navigate a resumed browser tab.
   await page.route('**/api/agents/navigation?*',async route=>{
     const response=await route.fetch(),command=await response.json();
@@ -126,7 +154,7 @@ try{
     await page.locator('#agent-open').click();
     await until(async()=>/labeled Controller/.test(await page.locator('#agent-results').textContent()));
   }
-  const sessions=await tool('list_sessions');assert.equal(sessions.length,1);assert.equal(sessions[0].session_id,q.session_id);
+  const sessions=await tool('list_sessions');assert.equal(sessions.length,2);assert.deepEqual(sessions.filter(s=>s.active).map(s=>s.session_id),[q.session_id]);
   // Idle polling, including with the panel closed, does not re-upload full contexts.
   await until(async()=>{const current=await tool('get_current_selection');return current.context.documents.layout?.sha256===doc.sha256&&!current.context.documents.layout.selection.components.length;});
   let contextPosts=0;const onRequest=r=>{if(r.url().includes('/api/agents/context'))contextPosts++;};
@@ -153,6 +181,14 @@ try{
   const electricalContext=await until(async()=>{const current=await tool('get_current_selection');return current.context.documents.electrical?.selection?.id==='DATA'&&current;});
   const electricalHighlight=await tool('show_on_board',{target:'electrical',sha256:electricalContext.context.documents.electrical.sha256,selection:{kind:'net',id:'DATA'}});
   await until(async()=>(await tool('get_navigation_status',{session_id:electricalHighlight.session_id,command_id:electricalHighlight.command_id})).status==='applied');
+  await page.locator('#electrical-intent').getByRole('button',{name:'Notes',exact:true}).click();
+  await page.locator('#electrical-observation').fill('Draft belongs to DATA');
+  const blockedElectrical=await tool('show_on_board',{target:'electrical',sha256:electricalContext.context.documents.electrical.sha256,selection:{kind:'component',id:'HOST'}});
+  await until(async()=>{const r=await tool('get_navigation_status',{session_id:blockedElectrical.session_id,command_id:blockedElectrical.command_id});return r.status==='rejected'&&/editing a note/.test(r.reason);});
+  assert.equal(await page.locator('#electrical-observation').inputValue(),'Draft belongs to DATA');
+  await page.locator('#electrical-save-note').click();
+  const savedElectrical=await page.evaluate(()=>Object.values(localStorage).flatMap(raw=>{try{return JSON.parse(raw)?.notes||[];}catch{return [];}}).find(n=>n.observation==='Draft belongs to DATA'));
+  assert.deepEqual(savedElectrical.selection,{kind:'net',id:'DATA'});
   await page.locator('#agent-prompt').fill('Explain the selected net using the electrical design.');await page.locator('#agent-send').click();
   const eq=await tool('wait_for_question',{agent:'Design helper',timeout_seconds:5}),ed=eq.context.documents.electrical;assert.equal(ed.selection.id,'DATA');
   await tool('publish_answer',{request_id:eq.id,claim_id:eq.claim_id,answer_id:'qa-ir',agent:'Design helper',based_on:{electrical:ed.sha256},answer:'DATA is the selected electrical net. The compiled IR supplies its declared connectivity; this does not prove routed copper connectivity.',citations:[{label:'Electrical selection',pointer:'/documents/electrical/selection',selection:{kind:'net',id:'DATA'}}]});
@@ -185,7 +221,7 @@ try{
   await until(async()=>/connected/.test(await page.locator('#agent-status').textContent()));
   await page.setViewportSize({width:900,height:900});await page.locator('#agent-panel').scrollIntoViewIfNeeded();await page.screenshot({path:'test-results/questions-narrow.png'});
   assert.deepEqual(errors,[]);
-  console.log('PASS: host chat without opening panel, prompts, idle resource notifications, highlight acknowledgement, discovered MCP, stable progress rows, Q&A evidence, follow-ups, fresh Ask again, nine reloads, idle polling, cancellation, stale answers, electrical navigation, large IR fallback, single size error/recovery, export');
+  console.log('PASS: host chat, prompts, resource notifications, highlights, layout/schematic draft protection, duplicated tab isolation, focus selection, Q&A evidence, nine reloads, idle polling, cancellation, stale answers, large IR fallback, setup, extension download, export');
 }finally{
   if(browser)await browser.close();
   if(mcp){mcp.stdin.end();if(mcp.exitCode===null)await once(mcp,'exit');}

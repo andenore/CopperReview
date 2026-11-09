@@ -312,6 +312,8 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                             bridge.client_activity(value.get("client"), result)
                     elif self.path == "/api/agents/connection-test":
                         result = bridge.connection_test(value.get("session_id"))
+                    elif self.path == "/api/agents/activity":
+                        result = bridge.activity(value.get("session_id"), value.get("last_used"))
                     elif self.path == "/api/agents/cancel":
                         result = bridge.cancel(value.get("session_id"), value.get("request_id"))
                     elif self.path == "/api/agents/detach":

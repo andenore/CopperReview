@@ -72,6 +72,26 @@ class ConnectionStateTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell shim regression")
+    def test_generated_command_preserves_separator_through_powershell_shim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            capture = root / "capture.py"
+            capture.write_text("import json, sys; print(json.dumps(sys.argv[1:]))")
+            quote = lambda s: "'" + str(s).replace("'", "''") + "'"
+            (root / "claude.ps1").write_text(f"& {quote(sys.executable)} {quote(capture)} @args")
+            with patch("copper_review.agent_setup.sys.executable", str(root / "Tool's Folder" / "$secret" / "python.exe")):
+                config = setup_config()
+            script = root / "install.ps1"
+            script.write_text(config["claude_command"], encoding="utf-8")
+            result = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+                                    env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"]},
+                                    capture_output=True, text=True, timeout=20, check=True)
+            arguments = json.loads(result.stdout)
+            separator = arguments.index("--")
+            self.assertEqual(arguments[separator + 1:], [config["config"]["command"], *config["config"]["args"]])
+            self.assertIn("COPPER_REVIEW_URL=", arguments)
+
     def test_generated_json_and_toml_use_the_current_runtime(self):
         config = setup_config()
         self.assertTrue(config["runtime_available"])

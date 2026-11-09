@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
 from .agent_discovery import candidates
+from . import __version__
 
 PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 SELECTION_URI = "copper-review://selection"
@@ -37,11 +38,11 @@ def tool(name, description, properties=None, required=()):
 
 STRING = {"type": "string"}
 TOOLS = [
-    tool("get_current_selection", "Read the current synchronized board/schematic selection and context for questions asked in this chat. No mailbox or wait loop needed. If several tabs are active, pass session_id or select_session. Context includes exact hashes, revision, synchronization time and omissions.",
+    tool("get_current_selection", "Read synchronized board/schematic context for questions in this chat, without a wait loop. Defaults to the most recently focused or used active tab; returns session_id and chosen_by. Pass session_id or select_session to override. Context includes exact hashes, revision, synchronization time and omissions.",
          {"session_id": STRING}),
     tool("select_session", "Choose which active review tab tools and copper-review://selection refer to. Selection belongs to this MCP connection.",
          {"session_id": STRING}, ("session_id",)),
-    tool("show_on_board", "Queue a highlight in the viewer, without changing the design or notes. Copy target and exact sha256 from get_current_selection. Layout selection: {components:[refs],nets:[names],region:null or [x0,y0,x1,y1]}; electrical: {kind:component|pin|net|bus,id:exact id}. The browser rechecks the hash; queued does not mean applied. Check get_navigation_status. A newer highlight replaces the previous one.",
+    tool("show_on_board", "Queue a highlight without changing design or notes. Copy session_id, target and exact sha256 from get_current_selection. Layout selection: {components:[refs],nets:[names],region:null or [x0,y0,x1,y1]}; electrical: {kind:component|pin|net|bus,id:exact id}. The browser rejects navigation while a note is being edited and rechecks the hash. Queued does not mean applied: check get_navigation_status. A newer highlight replaces the previous one.",
          {"session_id": STRING, "target": {"enum": ["layout", "electrical"]}, "sha256": STRING, "selection": {"type": "object"}},
          ("target", "sha256", "selection")),
     tool("get_navigation_status", "Check whether the browser applied, rejected or expired a queued highlight.",
@@ -150,14 +151,28 @@ def connect(url, timeout=10, client=None):
 class DiscoveryClient:
     def __init__(self, url=None, project=None):
         self.client = {"id": str(uuid.uuid4()), "name": "MCP host"}
-        self.explicit = connect(url, client=self.client) if url else None
+        self.explicit = url
+        if url:
+            connect(url)  # Validate before starting the protocol.
         self.project = str(Path(project).resolve()) if project else None
         self.viewer_id = None
-        self.connection = None
+        self.lock = threading.RLock()
+        self.warned_versions = set()
 
     def identify(self, name):
         if isinstance(name, str) and name.strip():
-            self.client["name"] = name[:100]
+            with self.lock:
+                self.client["name"] = name[:100]
+
+    def check_version(self, record):
+        version = record.get("version", "unknown")
+        if version != __version__:
+            key = (record["id"], str(version))
+            with self.lock:
+                if key in self.warned_versions:
+                    return
+                self.warned_versions.add(key)
+            print(f"CopperReview adapter {__version__} differs from viewer {version}; update the adapter or reinstall the extension.", file=sys.stderr, flush=True)
 
     def live(self):
         def probe(record):
@@ -175,36 +190,37 @@ class DiscoveryClient:
         if name == "list_viewers":
             if self.explicit:
                 return {"explicit_url": True, "message": "Connected through COPPER_REVIEW_URL; remove it to enable automatic discovery"}
-            return [{k: r[k] for k in ("id", "label", "project")} for r in self.live()]
+            return [{k: r.get(k) for k in ("id", "label", "project", "version")} for r in self.live()]
         if name == "select_viewer":
             if self.explicit:
                 raise ValueError("Remove COPPER_REVIEW_URL to select a discovered viewer")
             record = next((r for r in self.live() if r["id"] == arguments.get("viewer_id")), None)
             if record is None:
                 raise ValueError("Viewer unavailable; call list_viewers again")
-            self.viewer_id, self.project = record["id"], record["project"]
-            self.connection = connect(record["url"], client=self.client)
+            with self.lock:
+                self.viewer_id, self.project = record["id"], record["project"]
+            self.check_version(record)
             return {k: record[k] for k in ("id", "label", "project")}
+        with self.lock:
+            client, project, viewer_id = dict(self.client), self.project, self.viewer_id
         if self.explicit:
-            return self.explicit(name, arguments)
-        if self.connection is None:
-            records = self.live()
-            if self.project:
-                records = [r for r in records if os.path.normcase(r["project"]) == os.path.normcase(self.project)]
-            if not records:
-                raise ValueError("No matching CopperReview viewer is running; start it with --agents and open its browser viewer")
-            if len(records) != 1:
-                raise ValueError("Several viewers are running; use list_viewers and select_viewer, or configure --project")
-            record = records[0]
-            self.viewer_id, self.project = record["id"], record["project"]
-            self.connection = connect(record["url"], client=self.client)
-        try:
-            return self.connection(name, arguments)
-        except ValueError as exc:
-            # Never retry a write automatically. The next tool call discovers a restarted viewer.
-            if str(exc).startswith(("Cannot reach CopperReview", "Invalid session token")):
-                self.connection = None
-            raise
+            return connect(self.explicit, client=client)(name, arguments)
+        records = self.live()
+        if project:
+            records = [r for r in records if os.path.normcase(r["project"]) == os.path.normcase(project)]
+        chosen = next((r for r in records if r["id"] == viewer_id), None)
+        if chosen:
+            records = [chosen]
+        if not records:
+            raise ValueError("No matching CopperReview viewer is running; start it with --agents and open its browser viewer")
+        if len(records) != 1:
+            raise ValueError("Several viewers are running; use list_viewers and select_viewer, or configure --project")
+        record = records[0]
+        self.check_version(record)
+        # Resolve each call. Neither heartbeats nor reads implicitly pin a project.
+        # The network operation is outside the state lock; long mailbox waits cannot block heartbeats.
+        # Never replay an operation after a transport failure.
+        return connect(record["url"], client=client)(name, arguments)
 
 
 class Protocol:
@@ -222,9 +238,10 @@ class Protocol:
         try:
             sessions = self.call("list_sessions", {})
             active = [s for s in sessions if s.get("active") and (self.selected_session is None or s["session_id"] == self.selected_session)]
-            if len(active) != 1:
+            if not active:
                 return ("unavailable", self.selected_session, tuple(sorted(s["session_id"] for s in active)))
-            return (active[0]["session_id"], active[0]["revision"])
+            chosen = max(active, key=lambda s: (s.get("last_used", 0), s["session_id"]))
+            return (chosen["session_id"], chosen["revision"])
         except ValueError as exc:
             return ("unavailable", str(exc))
 
@@ -317,7 +334,7 @@ class Protocol:
             requested = params.get("protocolVersion")
             response["result"] = {"protocolVersion": requested if requested in PROTOCOLS else PROTOCOLS[0],
                                   "capabilities": {"tools": {}, "resources": {"subscribe": True}, "prompts": {}},
-                                  "serverInfo": {"name": "copper-review", "version": "0.1.0"}, "instructions": GUIDANCE}
+                                  "serverInfo": {"name": "copper-review", "version": __version__}, "instructions": GUIDANCE}
             self.initialized = True
         elif method == "ping":
             response["result"] = {}

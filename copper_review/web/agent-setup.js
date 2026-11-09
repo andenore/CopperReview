@@ -19,7 +19,7 @@ export function createAgentSetup({api,downloadExtension,sync,sessionId}){
     set('agent-runtime',config.runtime_available?'Using the Python installation that is running this viewer.':'The Python launcher is missing. Restart the viewer from a valid installation.');
     set('agent-setup-instructions',isClaude?'Download the extension and open it with Claude Desktop, or use Settings → Desktop app → Extensions → Advanced settings → Install Extension. Keep the prefilled Python executable. If CopperReview is already configured manually, disable that entry to avoid duplicate connections.':
       isCode?`Run this once in ${config.shell}, then open Claude Code and check /mcp. An existing copper-review entry must be updated instead of added again.`:
-      client==='chatgpt'?'In ChatGPT desktop, open Settings → MCP servers → Add server. Name it copper-review, choose STDIO, and enter the command and arguments below. Save and restart the connection.':
+      client==='chatgpt'?'In ChatGPT desktop with local Codex support, open Settings → MCP servers → Add server. Name it copper-review, choose STDIO, and enter the command and arguments below. Save and restart the connection. If those settings are absent, use the Codex TOML configuration below with Codex CLI or its IDE extension. This does not configure ChatGPT web.':
       'Add a local STDIO MCP server named copper-review in your host using these command, arguments and environment values.');
     $('agent-command').value=config.config.command;
     $('agent-arguments').value=JSON.stringify(config.config.args);

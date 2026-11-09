@@ -83,7 +83,12 @@ function applyAgentFeedback(request){
   const ids=new Set(state.annotations.map(n=>n.id));state.annotations.push(...notes.filter(n=>!ids.has(n.id)));
   renderNotes();saveLocal();requestDraw();
 }
+let noteDraftDirty=false;
+for(const id of ['observation','desired','issue-ids','board-wide','category','priority','note-status'])
+  for(const event of ['input','change'])$(id).addEventListener(event,()=>{noteDraftDirty=true;$('cancel-edit').hidden=false;$('cancel-edit').textContent='Cancel note';});
 function revealAgentEvidence(cite){
+  if(noteDraftDirty||state.editing||$('observation').value||$('desired').value||$('issue-ids').value||$('board-wide').checked||electrical.noteDraftDirty())
+    throw Error('Reviewer is editing a note; save or cancel it before showing another selection.');
   if(cite.target==='electrical'){
     if(electrical.input()?.sha256!==cite.sha256)throw Error('Electrical design changed');
     setMode('electrical');if(!electrical.reveal(cite.selection.kind,cite.selection.id))throw Error('Entity unavailable');return;
@@ -800,7 +805,7 @@ function editNote(a) {
   else if(a.selection.components.length){const c=state.scene.components.find(c=>c.reference===a.selection.components[0]);const b=c.bounds_mm;fit([b[0]-5,b[1]-5,b[2]+5,b[3]+5]);}
   $('observation').focus();
 }
-function resetForm() {state.editing=null;$('observation').value='';$('issue-ids').value='';$('desired').value='';$('note-status').value='open';$('board-wide').checked=false;$('save-note').textContent='Add annotation';$('cancel-edit').hidden=true;}
+function resetForm() {noteDraftDirty=false;state.editing=null;$('observation').value='';$('issue-ids').value='';$('desired').value='';$('note-status').value='open';$('board-wide').checked=false;$('save-note').textContent='Add annotation';$('cancel-edit').hidden=true;}
 function renderLayers() {
   $('layer-list').replaceChildren();
   for(const layer of state.scene.board.layers){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=state.layers.includes(layer);input.dataset.layer=layer;

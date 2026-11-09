@@ -27,13 +27,37 @@ export function createContextCache(snapshot,state,prepare=prepareContext){
     if(error)throw error;return {...value,key};}};
 }
 
-export function createAgentReview({token,localServer,snapshot,contextState,applyFeedback,revealEvidence,message}){
-  const $=id=>document.getElementById(id),sessionId=saved('copper-review:agent-session',null)||randomId();
+export async function claimTabSession(){
+  const previous=saved('copper-review:agent-session',null);
+  let sessionId=typeof previous==='string'?previous:randomId();
+  // Origin-scoped locks live with the document, unlike copied sessionStorage.
+  // Reload releases the lock; a duplicate must claim its own identity.
+  if(navigator.locks){
+    for(;;){
+      const acquired=await new Promise((resolve,reject)=>navigator.locks.request(
+        'copper-review:tab:'+sessionId,{ifAvailable:true},lock=>{
+          resolve(!!lock);return lock?new Promise(()=>{}):undefined;
+        }).catch(reject));
+      if(acquired)break;
+      sessionId=randomId();
+    }
+  }else sessionId=randomId(); // Isolation takes precedence over reload persistence.
   save('copper-review:agent-session',sessionId);
+  if(previous!==sessionId)save('copper-review:agent-outcomes',[]);
+  return sessionId;
+}
+
+export async function createAgentReview({token,localServer,snapshot,contextState,applyFeedback,revealEvidence,message}){
+  if(!localServer)return;
+  const $=id=>document.getElementById(id),sessionId=await claimTabSession();
   const cache=createContextCache(snapshot,contextState),rows=new Map();
   let connected=false,busy=false,lastContext='',parentId=null,newThread=false,timer=null,records=[],presence=[],blockedKey=null,blockedError=null;
   const outcomes=new Map(saved('copper-review:agent-outcomes',[]));
   let navigationResult=null;
+  let lastUsed=document.hasFocus()?Date.now()/1000:0,reportedUse=-1;
+  const used=()=>{lastUsed=Date.now()/1000;};
+  window.addEventListener('focus',used);
+  for(const event of ['pointerdown','keydown'])document.addEventListener(event,used,{capture:true,passive:true});
   async function api(path,body){
     const response=await fetch(`./api/agents${path}`,{method:body===undefined?'GET':'POST',
       headers:{'X-Copper-Token':token,...(body===undefined?{}:{'Content-Type':'application/json'})},
@@ -92,13 +116,19 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
   async function sync(){
     const state=contextState();$('agent-selection').textContent=state.selection?describeSelection(state.selection):'Whole design';
     if(state.key===blockedKey)throw blockedError;
-    if(state.key===lastContext)return;
+    if(state.key===lastContext){
+      if(lastUsed!==reportedUse){
+        const captured=lastUsed;await api('/activity',{session_id:sessionId,last_used:captured});reportedUse=captured;
+      }
+      return;
+    }
     let prepared;
     async function block(error){blockedKey=state.key;blockedError=error;await api('/detach',{session_id:sessionId}).catch(()=>{});}
     try{prepared=cache.read();}catch(error){await block(error);throw error;}
     try{
       $('agent-context-warning').textContent=prepared.omissions.length?'Some large design data was omitted. The agent can see the omissions and selected context.':'';
       await api('/context',`{"session_id":${JSON.stringify(sessionId)},"context":${prepared.serialized}}`);lastContext=prepared.key;
+      const captured=lastUsed;await api('/activity',{session_id:sessionId,last_used:captured});reportedUse=captured;
     }catch(error){
       // Capacity and transport errors can recover without a design change.
       if(error.status===413||(error.status===400&&error.message.includes('exceeds 4 MiB')))await block(error);
@@ -108,7 +138,9 @@ export function createAgentReview({token,localServer,snapshot,contextState,apply
   async function refresh(){
     const values=await Promise.all([api(`/updates?session_id=${encodeURIComponent(sessionId)}`),api(`/status?session_id=${encodeURIComponent(sessionId)}`),api(`/navigation?session_id=${encodeURIComponent(sessionId)}`)]);
     const command=values[2];
-    if(command?.status==='queued'){
+    if(navigationResult?.command_id===command?.command_id&&command?.status==='expired'){
+      await api('/navigation',navigationResult);
+    }else if(command?.status==='queued'){
       if(navigationResult?.command_id!==command.command_id){
         navigationResult={session_id:sessionId,command_id:command.command_id,status:'applied'};
         try{
