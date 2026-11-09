@@ -6,6 +6,7 @@ import {rememberDocument,rememberedDocument} from './documents.js';
 import {findDeclaration,displayPath,githubLink} from './source-links.js';
 import {createElectricalReview} from './electrical.js';
 import {createAgentReview} from './agents.js';
+import {createLivePreview} from './live-preview.js';
 import {snapshotSelection} from './core.js';
 import {chipify} from './chips.js';
 import {createView3d,viewName,lookAt,cameraEye} from './view3d.js';
@@ -24,6 +25,7 @@ const token=new URLSearchParams(location.hash.slice(1)).get('token') || '';
 // The CLI server prints a #token link; it may be reached by loopback or (with --host) a network address over HTTP.
 const localServer=!!token&&(['127.0.0.1','localhost','[::1]'].includes(location.hostname)||location.protocol==='http:');
 let documentRevision=0,remoteLoad=null,electricalOrigin=null;
+let livePreview=null;
 let startupReady=Promise.resolve(),documentBaseline='static';
 const documentIdentity=data=>data?.input?.sha256||data?.board?.sha256||'empty';
 const state={scene:null,selection:{components:[],nets:[],region:null},layers:[],annotations:[],tab:'components',mode:'component',
@@ -86,8 +88,9 @@ function applyAgentFeedback(request){
 let noteDraftDirty=false;
 for(const id of ['observation','desired','issue-ids','board-wide','category','priority','note-status'])
   for(const event of ['input','change'])$(id).addEventListener(event,()=>{noteDraftDirty=true;$('cancel-edit').hidden=false;$('cancel-edit').textContent='Cancel note';});
+function editingReviewNote(){return !!(noteDraftDirty||state.editing||$('observation').value||$('desired').value||$('issue-ids').value||$('board-wide').checked||electrical.noteDraftDirty());}
 function revealAgentEvidence(cite){
-  if(noteDraftDirty||state.editing||$('observation').value||$('desired').value||$('issue-ids').value||$('board-wide').checked||electrical.noteDraftDirty())
+  if(editingReviewNote())
     throw Error('Reviewer is editing a note; save or cancel it before showing another selection.');
   if(cite.target==='electrical'){
     if(electrical.input()?.sha256!==cite.sha256)throw Error('Electrical design changed');
@@ -99,7 +102,7 @@ function revealAgentEvidence(cite){
   const bounds=state.selection.region||context.components[0]?.bounds_mm||context.nets[0]?.bounds_mm;
   fit(bounds||state.scene.board.bounds_mm);
 }
-createAgentReview({token,localServer,snapshot:agentSnapshot,contextState:agentContextState,applyFeedback:applyAgentFeedback,revealEvidence:revealAgentEvidence,message});
+createAgentReview({token,localServer,snapshot:agentSnapshot,contextState:agentContextState,applyFeedback:applyAgentFeedback,revealEvidence:revealAgentEvidence,message,previewStatus:()=>livePreview?.status()||null});
 // Side panels fold away per mode; Both starts with the board's panels and the schematic list folded.
 const PANEL_DEFAULTS={both:{'board-left':true,'board-right':true,'schematic-left':true}};
 const folded=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:panels'))||{};}catch{return {};}})();
@@ -180,7 +183,7 @@ function loadDocument(data){
   else{loadScene(data);electrical.render();setMode(available('both')?'both':'layout');}
   showCompilerResult(data);
 }
-function beginOpen(){if(remoteLoad){remoteLoad.abort();remoteLoad=null;projectBusy(false);}const revision=++documentRevision;cancelCompiler();$('compiler-cancel').hidden=true;return revision;}
+function beginOpen(){livePreview?.setPaused(true);if(remoteLoad){remoteLoad.abort();remoteLoad=null;projectBusy(false);}const revision=++documentRevision;cancelCompiler();$('compiler-cancel').hidden=true;return revision;}
 async function openDesignFile(file,{origin=null,prepared=null,revision=beginOpen()}={}){
   if(!file)return;if(file.size>49*1024*1024)throw Error('File exceeds 49 MiB.');
   try{
@@ -305,6 +308,55 @@ async function openServedProject(project){
   if(!boards.length)throw Error(`No board source in ${project.name}.`);
   if(boards.length===1){await openLocalBoard(boards[0]);return;}
   const list=$('folder-boards');list.replaceChildren();for(const path of boards){const option=document.createElement('option');option.value=option.textContent=path;list.append(option);}list.selectedIndex=0;$('folder-dialog').showModal();list.focus();
+}
+function startLivePreview(){
+  const set=(id,text)=>{if($(id).textContent!==text)$(id).textContent=text;};
+  livePreview=createLivePreview({
+    request:async(path,options={})=>{
+      const signal=options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000);
+      const response=await fetch('.'+path,{...options,signal,headers:{'X-Copper-Token':token},cache:'no-store'}),value=await response.json();
+      if(!response.ok)throw Error(value.error||'Live preview unavailable');return value;
+    },
+    isEditing:editingReviewNote,
+    prepare:async(kind,data,{signal})=>{
+      if(kind==='layout'){validateScene(data);return data;}
+      const files=new Map(Object.entries(data.files).map(([path,text])=>[path,new Blob([text])]));
+      const boards=data.entry?[data.entry]:await localBoardSources(files);
+      if(boards.length!==1)throw Error('Live preview needs one board entry; restart with --entry path/to/board.copper.');
+      const entry=boards[0],file=files.get(entry);if(!file)throw Error('Board entry is missing: '+entry);
+      const prepared=await compileLocalProject(files,entry,new Uint8Array(await file.arrayBuffer()),{signal});
+      prepared.input.origin={provider:'local',folder:data.name,path:entry,root:data.root};
+      const directory=entry.split('/').slice(0,-1).join('/'),lockPath=(directory?directory+'/':'')+'assembly.lock';
+      let lock=null,warning='';
+      if(files.has(lockPath))try{const bytes=await files.get(lockPath).arrayBuffer();lock={sheet:sheetFromLock(JSON.parse(new TextDecoder().decode(bytes)),await sha256(bytes)),path:lockPath};}
+      catch(error){warning='Assembly lock could not be read: '+error.message;}
+      return {prepared,files,entry,name:data.name,root:data.root,lock,warning};
+    },
+    apply:(kind,value)=>{
+      if(editingReviewNote())throw Error('Reviewer is editing a note');
+      if(kind==='layout'){
+        loadScene(value,{preserveView:true});electrical.render();showCompilerResult(value);applyProjectLock();
+        return {sha256:value.board.sha256,message:'Board export updated; build provenance is not verified'};
+      }
+      const hadModel=electrical.hasModel(),{prepared,files,entry,name,root,lock,warning}=value;
+      electrical.load(prepared,{preserveView:hadModel});electricalOrigin=prepared.input.origin;sources=prepared.sources;
+      folderFiles=files;folderName=name;folderRoot=root;projectLock=lock;applyProjectLock();
+      showCompilerResult(prepared);
+      if(!state.scene)setMode('electrical',{remember:false});else if(!hadModel)setMode(available('both')?'both':'layout',{remember:false});
+      return {sha256:prepared.input.sha256,entry,message:warning||(`Up to date · ${prepared.analysis.check?.passed?'ERC passed':'ERC findings; see Compiler check'}`)};
+    },
+    onStatus:(value,disk)=>{
+      $('live-preview').hidden=false;$('live-preview-enabled').checked=!value.paused;
+      const states=Object.values(value).filter(v=>v&&typeof v==='object').map(v=>v.state);
+      const label=value.paused?'Paused':states.includes('error')||disk?.error?'Out of date':states.includes('deferred')?'Update waiting':states.includes('compiling')?'Compiling':states.length&&states.every(s=>s==='current')?'Up to date':'Waiting';
+      set('live-preview-label','Live · '+label);$('live-preview').dataset.state=label==='Out of date'?'error':'';
+      set('live-preview-details',disk?.error||['source','layout'].filter(k=>disk?.[k]).map(k=>{
+        const channel=value[k];return `${k==='source'?'Schematic':'PCB'}: ${channel?.message||'Waiting'}${channel?.revision?'\nDisplayed revision: '+channel.revision.slice(0,12):''}`;
+      }).join('\n\n'));
+    }
+  });
+  $('live-preview-enabled').onchange=()=>livePreview.setPaused(!$('live-preview-enabled').checked);
+  livePreview.start();
 }
 $('folder-open').onclick=guarded(async()=>{const path=$('folder-boards').value;$('folder-dialog').close();if(path)await openLocalBoard(path);});
 $('folder-boards').ondblclick=()=>$('folder-open').click();
@@ -813,7 +865,8 @@ function renderLayers() {
     const swatch=document.createElement('span');swatch.className='swatch';swatch.style.background=copperColor(layer);label.append(input,swatch,document.createTextNode(layer));$('layer-list').append(label);
   }
 }
-function loadScene(scene) {
+function loadScene(scene,{preserveView=false}={}) {
+  const previous=preserveView&&state.scene?{selection:clone(state.selection),layers:[...state.layers],zoom:state.zoom,offset:[...state.offset],flipped:state.flipped}:null;
   agentLayoutRevision++;
   validateScene(scene);state.flipped=false;$('view-flip').setAttribute('aria-pressed','false');$('view-flip').classList.remove('active');if(state.issues)setIssues(null);state.scene=scene;state.trackCopper=buildTrackCopper(scene.tracks);state.layers=[...scene.board.layers];state.annotations=[];clearHover();clearSelection();resetForm();$('summary').value='';$('stage').value=scene.board.stage || 'unknown';
   state.issueSource=null;let raw=null;
@@ -824,8 +877,12 @@ function loadScene(scene) {
     message('Saved local notes could not be read; they were kept under an ":unreadable" key. Load an exported review to recover.',true);}
   $('component-count').textContent=scene.components.length;$('net-count').textContent=scene.nets.length;$('empty-state').hidden=true;
   $('warnings').replaceChildren();for(const warning of scene.warnings){const li=document.createElement('li');li.textContent=warning;$('warnings').append(li);}$('warning-count').textContent=`(${scene.warnings.length})`;
-  renderLayers();renderEntities();renderNotes();loadAssemblyState();fit();setEnabled();
-  if(!view3dCanvas.hidden)show3d(true);
+  if(previous){state.selection={components:previous.selection.components.filter(ref=>scene.components.some(c=>c.reference===ref)),
+      nets:previous.selection.nets.filter(name=>scene.nets.some(n=>n.name===name)),region:previous.selection.region};
+    state.layers=previous.layers.filter(layer=>scene.board.layers.includes(layer));state.zoom=previous.zoom;state.offset=previous.offset;state.flipped=previous.flipped;
+    $('view-flip').setAttribute('aria-pressed',String(state.flipped));$('view-flip').classList.toggle('active',state.flipped);updateSelection();}
+  renderLayers();renderEntities();renderNotes();loadAssemblyState();if(!previous)fit();else requestDraw();setEnabled();
+  if(!view3dCanvas.hidden)show3d(true,{preserveView:!!previous});
 }
 function reviewText() {if(!state.scene)throw new Error('Open a board first.');return JSON.stringify(makeReview(state.scene,state.annotations,$('stage').value,$('summary').value,issueSource()),null,2)+'\n';}
 function download(name,text,type='application/json') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -873,7 +930,7 @@ async function fetchBody(path,cache=bodyCache){
   try{return await readStep(await response.arrayBuffer());}
   catch(error){cache.stepProblem=error.message;return null;} // the generated body stands in
 }
-async function show3d(on){
+async function show3d(on,{preserveView=false}={}){
   $('view-3d').setAttribute('aria-pressed',String(on));$('view-3d').classList.toggle('active',on);
   canvas.hidden=on;view3dCanvas.hidden=!on;$('view-ortho').hidden=!on;$('view-gizmo').hidden=!on;requestDraw();if(!on)return;
   const scene=state.scene;
@@ -888,7 +945,7 @@ async function show3d(on){
   if(state.scene!==scene||view3dCanvas.hidden)return;
   const soup=buildSoup(scene,bodies,undefined,{textRects}),{drawn,approximate,missing}=soup.summary;
   if(!drawn){message(generateError||'This board has no footprint geometry to build 3D bodies from.',true);return show3d(false);}
-  view3d.orthographic=orthographic3d;view3d.onDraw=drawGizmo;view3d.setSoup(soup,scene.board.bounds_mm);if(!!state.flipped!==(view3d.camera.pitch<0))view3d.flip();
+  view3d.orthographic=orthographic3d;view3d.onDraw=drawGizmo;view3d.setSoup(soup,scene.board.bounds_mm,{preserveView});if(!!state.flipped!==(view3d.camera.pitch<0))view3d.flip();
   message(`3D: ${drawn} bodies${approximate?` (${approximate} generated by CopperScript, approximate)`:''}${missing?` · ${missing} without a body`:''}${generateError?` · ${generateError}`:''}${cache.stepProblem?` · STEP models not drawn: ${cache.stepProblem}`:''} · board thickness assumed 1.6 mm`);
 }
 $('view-3d').onclick=guarded(()=>show3d(view3dCanvas.hidden));
@@ -1292,22 +1349,24 @@ document.addEventListener('keydown',e=>{
 new ResizeObserver(entries=>document.documentElement.style.setProperty('--topbar-height',`${entries[0].target.getBoundingClientRect().height}px`)).observe(document.querySelector('body>header'));
 setMode('layout',{remember:false});
 setEnabled();
-startupReady=guarded(async()=>{const revision=documentRevision;let data=null,project=null;
+startupReady=guarded(async()=>{const revision=documentRevision;let data=null,project=null,watch=null;
   // A #token link on a page that is not the CLI server (a static http host, a stale link) opens as static.
   if(localServer)try{
     const response=await fetch('./api/scene',{headers:{'X-Copper-Token':token}});const scene=await response.json();if(!response.ok)throw new Error(scene.error);
     const served=await fetch('./api/project',{headers:{'X-Copper-Token':token},cache:'no-store'});const listing=await served.json();if(!served.ok)throw new Error(listing.error);
     data=scene;project=listing;documentBaseline=documentIdentity(data);
+    const preview=await fetch('./api/preview',{headers:{'X-Copper-Token':token},cache:'no-store'});if(preview.ok)watch=await preview.json();
   }catch(error){message(`Local server unavailable (${error.message}); opened as a static viewer.`,true);}
   let preferred=null;try{preferred=localStorage.getItem('copper-review:mode');}catch{}
   const remembered=async slot=>{try{return await rememberedDocument(documentBaseline,slot);}catch{return null;}};
   // A design opened here since this server input was loaded wins over it, as before; the baseline
   // keeps an unrelated saved design from replacing a new server input.
   const isSchematic=d=>d?.schema==='copper-review-electrical/v1',legacy=project?null:await remembered('last');
-  const layout=await remembered('layout')||(isSchematic(legacy)?null:legacy)||(isSchematic(data)?null:data);
+  const layout=watch?.enabled?(isSchematic(data)?null:data):await remembered('layout')||(isSchematic(legacy)?null:legacy)||(isSchematic(data)?null:data);
   if(layout&&revision===documentRevision)loadDocument(layout);
   // Opening waits for startup to finish; this is startup, so release that wait first.
-  if(project){startupReady=null;await openServedProject(project);}
+  if(watch?.enabled){startupReady=null;startLivePreview();}
+  else if(project){startupReady=null;await openServedProject(project);}
   else{const schematic=await remembered('electrical')||(isSchematic(legacy)?legacy:null)||(isSchematic(data)?data:null);if(schematic&&revision===documentRevision)loadDocument(schematic);}
   // A served schematic and board open side by side; otherwise the mode last chosen here, if any.
   if(data&&project)setMode('both',{remember:false});else if(preferred)setMode(preferred,{remember:false});

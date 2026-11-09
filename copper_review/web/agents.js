@@ -47,13 +47,14 @@ export async function claimTabSession(){
   return sessionId;
 }
 
-export async function createAgentReview({token,localServer,snapshot,contextState,applyFeedback,revealEvidence,message}){
+export async function createAgentReview({token,localServer,snapshot,contextState,applyFeedback,revealEvidence,message,previewStatus=()=>null}){
   if(!localServer)return;
   const $=id=>document.getElementById(id),sessionId=await claimTabSession();
   const cache=createContextCache(snapshot,contextState),rows=new Map();
   let connected=false,busy=false,lastContext='',parentId=null,newThread=false,timer=null,records=[],presence=[],blockedKey=null,blockedError=null;
   const outcomes=new Map(saved('copper-review:agent-outcomes',[]));
   let navigationResult=null;
+  let lastPreview='';
   let lastUsed=document.hasFocus()?Date.now()/1000:0,reportedUse=-1;
   const used=()=>{lastUsed=Date.now()/1000;};
   window.addEventListener('focus',used);
@@ -160,8 +161,10 @@ export async function createAgentReview({token,localServer,snapshot,contextState
   }
   async function poll(){
     if(!connected||busy)return;busy=true;
-    try{await sync();await refresh();}
-    catch(error){setup.unavailable(error.message);if(blockedKey===contextState().key)status(error.message);else{lastContext='';status(`Connection: ${error.message} Retrying…`);}}
+    try{await sync();const preview=previewStatus(),serialized=JSON.stringify(preview);
+      if(preview&&serialized!==lastPreview){await api('/preview',{session_id:sessionId,preview});lastPreview=serialized;}
+      await refresh();}
+    catch(error){setup.unavailable(error.message);if(blockedKey===contextState().key)status(error.message);else{lastContext='';lastPreview='';status(`Connection: ${error.message} Retrying…`);}}
     finally{busy=false;if(connected)timer=setTimeout(poll,1000);}
   }
   async function send(){

@@ -231,12 +231,44 @@ not prove that they came from the same build. Cite both when relying on both.
 
 ## Agent tools
 
+### Editing source while reviewing
+
+For an agent host with local file and command tools, start the viewer with:
+
+```console
+uv run copper-review --project /path/to/project --entry board.copper --watch --agents
+```
+
+The user can then ask: “Read the selected component, change its value in the
+project source, run the project's checks, and verify the preview shows my edit.”
+Use your host's authorized file tools for the edit. CopperReview's tools remain
+read-only with respect to source and board files; they never run a build.
+
+After saving, call `get_preview_status(session_id)` for the tab returned by
+`get_current_selection`. It returns disk source/PCB revisions, per-file source
+hashes, the browser's compilation state and displayed hashes, plus
+`current.source` / `current.layout`. A true flag requires the reported revision
+and document hash to match both the current disk snapshot and synchronized tab.
+Read the current selection again before explaining the updated design.
+Current means the revision reached the viewer; it does not mean ERC passed or
+the design is qualified. Inspect compiler findings separately.
+
+While compilation fails, files are changing, the reviewer edits a note, or live
+preview is paused, the tool makes the incomplete state explicit. It also appears
+in `get_current_selection.preview`. Do not claim a successful update while it is
+pending. Source and physical layout update separately: provide the PCB path to
+the viewer and use the project's normal native build commands to regenerate it.
+The viewer does not infer source-to-PCB provenance from matching component names.
+
+### Tool reference
+
 | Tool | Purpose |
 | --- | --- |
 | `list_viewers` / `select_viewer` | Discover and choose local viewer processes without exposing credentials. |
 | `list_sessions` | List browser tabs with their design identities. |
 | `select_session(session_id)` | Choose the active tab for this MCP connection. |
 | `get_current_selection(session_id?)` | Read synchronized context for host-side questions, without claiming or queuing anything. |
+| `get_preview_status(session_id?)` | Check watched disk revisions, source hashes, browser compilation/errors and whether each displayed document is current. |
 | `show_on_board(target, sha256, selection, session_id?)` | Queue a hash-checked visual highlight in the board or schematic. |
 | `get_navigation_status(session_id, command_id)` | Check the browser's acknowledgement of a highlight. |
 | `get_context(session_id)` | Inspect the latest browser-synchronized selection and data. |

@@ -1,3 +1,3 @@
 """CopperReview: dependency-free, read-only board inspection."""
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"

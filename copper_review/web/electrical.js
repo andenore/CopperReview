@@ -48,7 +48,9 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
   function validSelection(s){return s&&({component:model.components,pin:model.pins,net:model.nets}[s.kind]?.has(s.id)||s.kind==='bus'&&model.buses.some(b=>b.id===s.id));}
   function activeNets(){if(!selection)return [];if(selection.kind==='net')return [selection.id];if(selection.kind==='pin')return [model.pins.get(selection.id).net].filter(Boolean);if(selection.kind==='bus')return model.buses.find(b=>b.id===selection.id).pathNets;return distinct(model.components.get(selection.id).pins.map(p=>p.net).filter(Boolean));}
   function stateOf(name){return model.powerStates.find(s=>s.name===powerState)?.rails[name]||'unspecified';}
-  function load(envelope){
+  function load(envelope,{preserveView=false}={}){
+    const previous=preserveView&&model?{selection,focusSelection,focusRef,view,powerState,detail,sheetId,sheetZoom,selectionSel,showPassives,
+      powerConnections,powerZoom,busConnections,busZoom,scroll:[$('electrical-canvas').scrollLeft,$('electrical-canvas').scrollTop]}:null;
     agentRevision++;
     if(envelope?.schema!==ELECTRICAL_SCHEMA||!envelope.input||!/^([a-f0-9]{64})$/.test(envelope.input.sha256))throw Error('Invalid electrical input identity');
     const next=electricalModel(envelope.ir); // Validate completely before replacing the current document.
@@ -59,7 +61,15 @@ export function createElectricalReview({message,onSelect=()=>{},links={}}){
     const initial=model.buses.find(b=>b.provenance==='Configured peripheral')||model.buses[0];if(!selection)selection=initial?{kind:'bus',id:initial.id}:focusRef?{kind:'component',id:focusRef}:null;
     focusSelection=selection;
     try{const saved=JSON.parse(localStorage.getItem(key())||'null');if(validSelection(saved?.focusSelection))focusSelection=saved.focusSelection;showPassives=saved?.showPassives===true;}catch{}
-    render();$('electrical-canvas').scrollTo(0,0);
+    if(previous){
+      selection=validSelection(previous.selection)?previous.selection:null;
+      focusSelection=validSelection(previous.focusSelection)?previous.focusSelection:selection;
+      focusRef=model.components.has(previous.focusRef)?previous.focusRef:focusRef;
+      ({view,detail,sheetId,sheetZoom,showPassives,powerConnections,powerZoom,busConnections,busZoom}=previous);
+      powerState=model.powerStates.some(s=>s.name===previous.powerState)?previous.powerState:'';
+      selectionSel=validSelection(previous.selectionSel)?previous.selectionSel:null;
+    }
+    render();$('electrical-canvas').scrollTo(...(previous?.scroll||[0,0]));
   }
   function show(value){root.hidden=!value;if(value&&model)render();}
   function render(){

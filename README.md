@@ -125,6 +125,43 @@ Dependencies pinned in `copper.lock` are downloaded from GitHub and checked agai
 the lock. `--entry boards/main/board.copper` picks the board when the folder has
 several; otherwise the page asks.
 
+### Live edits with a coding agent
+
+Start an opt-in live preview of a local project:
+
+```powershell
+uv run copper-review --project C:/path/to/board-project --entry board.copper --watch --agents
+# Also refresh a PCB after your existing build command replaces it:
+uv run copper-review C:/path/to/board-project/build/board.kicad_pcb --project C:/path/to/board-project --entry board.copper --watch --agents
+```
+
+Connect the agent and give it file/command access to the board project through
+its host. Ask it to read the current selection, edit the relevant `.copper`
+source, and run the project's checks. CopperReview reads stable saves and
+recompiles the schematic with its browser compiler; no page reload is needed.
+The viewer and MCP tools never write source or execute build commands.
+
+**Live** in the top bar shows compilation, errors and pending updates, and lets
+you pause/resume. Errors keep the last successful preview visibly out of date.
+Updates wait while either note editor has a draft. Valid selections, zoom and
+viewport are preserved; saved notes stay under their original design hash.
+Opening another file pauses live preview; resuming restores the watched inputs.
+
+The agent can call `get_preview_status` to compare disk revisions and source
+file hashes with the synchronized displayed revision. `current.source` and
+`current.layout` are independent: source compilation does not place or route
+the board. Run the project's native build separately; the optional watched PCB
+refreshes only after a stable, parseable export is available. This does not prove
+that the PCB was built from the currently displayed source.
+
+`--watch` is loopback-only and supports a project folder, a PCB, or both.
+Project snapshots include the served sources and manifests, are bounded to
+8 MiB, and settle for at least 600 ms before reading. The browser checks about
+every 750 ms while idle; compilation and browser throttling add latency. In a
+multi-board folder, supply `--entry`. Dependency changes must be represented
+by the project's pinned manifests/lock. The ordinary mode still recompiles only
+on page reload.
+
 `--host 0.0.0.0` listens on your network as well and prints a `network:` link per
 address. It is plain HTTP: anyone holding the link (with its token) can read the
 design and, with `--project`, its sources, so use it only on networks you trust.

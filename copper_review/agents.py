@@ -80,6 +80,44 @@ class AgentBridge:
         self.requests = {}
         self.workers = {}
         self.clients = {}
+        self.preview_source = None
+
+    def report_preview(self, sid, value):
+        if not isinstance(value, dict) or len(json.dumps(value, ensure_ascii=False).encode()) > 16000:
+            raise ValueError("Invalid preview status")
+        allowed = {"state", "revision", "message", "sha256", "entry"}
+        if set(value) - {"source", "layout", "paused"} or type(value.get("paused", False)) is not bool:
+            raise ValueError("Invalid preview status")
+        for kind in ("source", "layout"):
+            if kind not in value:
+                continue
+            item = value[kind]
+            if not isinstance(item, dict) or set(item) - allowed:
+                raise ValueError("Invalid preview channel")
+            if item.get("state") not in ("waiting", "compiling", "current", "error", "deferred", "paused"):
+                raise ValueError("Invalid preview state")
+            for key, val in item.items():
+                text(val, "preview " + key, 3000, empty=True)
+        with self.lock:
+            self._session(sid)["preview"] = deepcopy(value)
+        return {"saved": True}
+
+    def preview_status(self, sid=None):
+        disk = self.preview_source() if self.preview_source else {"enabled": False}
+        with self.lock:
+            self._expire()
+            sid, session = self._current_session(sid)
+            browser = deepcopy(session.get("preview", {}))
+            current = {}
+            for kind, target in (("source", "electrical"), ("layout", "layout")):
+                if kind not in disk:
+                    continue
+                shown = browser.get(kind, {})
+                current[kind] = bool(not browser.get("paused") and disk[kind]["state"] == "ready" and
+                    shown.get("state") == "current" and shown.get("revision") == disk[kind]["revision"] and
+                    shown.get("sha256") == identity(session["context"]["documents"].get(target)))
+            return {"session_id": sid, "disk": disk, "browser": browser, "current": current,
+                    "note": "Source and PCB update independently; a displayed PCB is not proof it was built from the current sources."}
 
     def client_activity(self, client, selected=None):
         if client is None:
@@ -190,9 +228,12 @@ class AgentBridge:
             self._expire()
             source = "explicit" if sid is not None else "most recently used active tab"
             sid, session = self._current_session(sid)
-            return {"session_id": sid, "revision": session["digest"].hex(),
+            result = {"session_id": sid, "revision": session["digest"].hex(),
                     "chosen_by": source, "last_used": session.get("last_used", 0),
                     "synchronized_at": session["updated_at"], "context": deepcopy(session["context"])}
+        if self.preview_source:
+            result["preview"] = self.preview_status(sid)
+        return result
 
     def activity(self, sid, last_used):
         if type(last_used) not in (int, float) or not math.isfinite(last_used) or last_used < 0:

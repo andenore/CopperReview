@@ -155,10 +155,10 @@ export function createView3d(canvas) {
   });
   canvas.addEventListener('wheel',e=>{e.preventDefault();camera.distance=Math.max(radius*.2,Math.min(radius*12,camera.distance*Math.exp(e.deltaY*.0012)));request();},{passive:false});
   return {
-    setSoup(soup,bounds){
+    setSoup(soup,bounds,{preserveView=false}={}){
       count=soup.positions.length/3;upload('position',soup.positions);upload('normal',soup.normals);upload('color',soup.colors);
       let first=0;fills=(soup.fills||[]).map(f=>{const n=f.points.length/3,fill={...f,first,count:n};first+=n;return fill;});
-      const all=new Float32Array(first*3);fills.forEach(f=>all.set(f.points,f.first*3));upload('fill',all);fit(bounds);
+      const all=new Float32Array(first*3);fills.forEach(f=>all.set(f.points,f.first*3));upload('fill',all);if(!preserveView)fit(bounds);else request();
     },
     /** Turn the board over: the same angle from the other side. */
     flip(){camera={...camera,pitch:-camera.pitch};request();},

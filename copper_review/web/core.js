@@ -3,7 +3,7 @@ import {randomId} from './hash.js';
 export const REVIEW_SCHEMA = 'copper-review/v2';
 // v1 reviews (full geometry copies in each context) still load; their contexts are recomputed.
 export const READABLE_REVIEW_SCHEMAS = ['copper-review/v1', REVIEW_SCHEMA];
-export const TOOL_VERSION = '0.2.2';
+export const TOOL_VERSION = '0.3.0';
 export const SCENE_SCHEMA = 'copper-review-scene/v1';
 export const round = value => Math.round(value * 1e6) / 1e6;
 export const clone = value => JSON.parse(JSON.stringify(value));

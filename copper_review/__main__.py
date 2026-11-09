@@ -20,6 +20,7 @@ from .agents import AgentBridge, MAX_CONTEXT, connection_versions
 from .agent_mcp import call_tool
 from .agent_discovery import advertise
 from .agent_setup import setup_config, extension_bundle
+from .preview import LivePreview
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 50 * 1024 * 1024
@@ -151,11 +152,16 @@ def board_asset(root, name):
         return None
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, agents=False, agent_token=None):
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, agents=False, agent_token=None, watch=False, watch_board=None, stage="unknown"):
     project = Path(project).resolve() if project else None
     if agents and public:
         raise ValueError("Agent review requires a loopback-only server")
+    if watch and public:
+        raise ValueError("Live preview requires a loopback-only server")
     bridge = AgentBridge() if agents else None
+    preview = LivePreview(project, board, watch_board, stage, project_files, project_file) if watch else None
+    if bridge:
+        bridge.preview_source = preview.status if preview else None
     tool_token = (agent_token or secrets.token_urlsafe(32)) if agents else None
     if tool_token == token:
         raise ValueError("Browser and agent credentials must differ")
@@ -242,6 +248,19 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
             if path == "/api/scene":
                 self.send(200, type(self).scene)
                 return
+            if path == "/api/preview":
+                self.send(200, preview.status() if preview else {"enabled": False})
+                return
+            if path == "/api/preview/snapshot":
+                if not preview:
+                    self.send(404, {"error": "Live preview is disabled; start with --watch"})
+                    return
+                query = parse_qs(urlsplit(self.path).query)
+                try:
+                    self.send(200, preview.snapshot(query.get("kind", [""])[0], query.get("revision", [""])[0]))
+                except ValueError as exc:
+                    self.send(409, {"error": str(exc)})
+                return
             if path == "/api/project":
                 if not project:
                     self.send(200, None)
@@ -315,6 +334,8 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                         result = bridge.connection_test(value.get("session_id"))
                     elif self.path == "/api/agents/activity":
                         result = bridge.activity(value.get("session_id"), value.get("last_used"))
+                    elif self.path == "/api/agents/preview":
+                        result = bridge.report_preview(value.get("session_id"), value.get("preview"))
                     elif self.path == "/api/agents/cancel":
                         result = bridge.cancel(value.get("session_id"), value.get("request_id"))
                     elif self.path == "/api/agents/detach":
@@ -369,10 +390,14 @@ def main():
     parser.add_argument("--port", type=int, default=0, help="Port; 0 selects an available port")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--agents", action="store_true", help="Enable local MCP agent review (loopback only; see docs/agent-review.md)")
+    parser.add_argument("--watch", action="store_true", help="Live preview local project sources and an optional rebuilt PCB; never runs build commands")
     parser.add_argument("--export-scene", type=Path, help="Write a portable normalized scene JSON and exit")
     args = parser.parse_args()
     if args.agents and args.host != "127.0.0.1":
         parser.error("--agents requires --host 127.0.0.1")
+    if args.watch and (args.host != "127.0.0.1" or args.electrical_ir or
+                       (not args.project and not args.board) or (args.board and args.board.suffix.lower() != ".kicad_pcb")):
+        parser.error("--watch requires loopback and --project and/or a .kicad_pcb file")
     try:
         if args.board and args.board.stat().st_size > MAX_UPLOAD:
             parser.error("Board exceeds 50 MiB")
@@ -412,6 +437,7 @@ def main():
         entry = args.entry.replace("\\", "/") if args.entry else None
         server = ThreadingHTTPServer((args.host, args.port), make_handler(
             scene, token, args.project, entry, public=public, agents=args.agents, agent_token=agent_token,
+            watch=args.watch, watch_board=args.board, stage=args.stage,
             board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"
@@ -433,7 +459,9 @@ def main():
             print("Served over plain HTTP to your network. Anyone with the link (including its token) can read "
                   "the design" + (" and its project sources" if args.project else "") + "; share it only on networks you trust.", flush=True)
         if args.project:
-            print(f"Project: {args.project.resolve()} (reload the page to recompile after editing)", flush=True)
+            print(f"Project: {args.project.resolve()} (" + ("live preview enabled" if args.watch else "reload the page to recompile after editing") + ")", flush=True)
+        if args.watch:
+            print("Live preview: stable saves refresh the browser; PCB builds remain external.", flush=True)
         print("Read-only inspection. Annotations save in this browser; export JSON to keep/share them. Ctrl+C stops the server.", flush=True)
         if not args.no_browser:
             webbrowser.open(url)
