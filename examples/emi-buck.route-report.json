@@ -1,0 +1,1771 @@
+{
+ "emi": {
+  "board": "EmiBuck",
+  "cells": [
+   {
+    "catch_diode": "D1",
+    "controller": "U1",
+    "current_peak": "4.5 A",
+    "fall_time": null,
+    "frequency_basis": "fixed",
+    "frequency_hz": 500000.0,
+    "hot_capacitors": [
+     "CIN"
+    ],
+    "hot_return_net": "GND",
+    "hot_supply_net": "VIN",
+    "magnetic": "L1",
+    "part": "p.Buck",
+    "provenance": "declared",
+    "rise_time": "5 ns",
+    "slew_rate": null,
+    "switch_nets": [
+     "SW"
+    ],
+    "topology": "buck"
+   }
+  ],
+  "evidence_grade": "screening",
+  "findings": [
+   {
+    "cell": "U1",
+    "code": "EMI-HOT-LOOP",
+    "estimate": {
+     "frequency_hz": 64031302.0,
+     "kind": "absolute_screening",
+     "method": "small-loop formula E = 1.316e-14 I f^2 A / r on the trapezoid envelope of the switch current (scenario current_limit: amplitude current_peak 4.5 A, a worst case), 500000 Hz fixed, current edge 5 ns (10-90 %, switch pin rise_time/fall_time), used for the current commutation because no current_rise_time/current_fall_time is declared, duty 0.42 from 5 V / 12 V; worst point of 30 MHz to 1000 MHz at 10 m",
+     "not_modelled": [
+      "common-mode currents on cables and attached conductors (the hot loop is the only radiator)",
+      "ground-plane reflection and enclosure effects (free-space value)",
+      "the field of the power inductor and of currents outside the hot loop",
+      "current waveform details beyond the trapezoid envelope (ringing is reported separately and not added to the spectrum)"
+     ],
+     "numerical_sensitivity": null,
+     "quantity": "dm_radiated_field",
+     "unit": "dBuV/m",
+     "value": 8.45
+    },
+    "layers": [
+     "F.Cu"
+    ],
+    "margin_db": 21.55,
+    "measured_nm": null,
+    "measures": {
+     "candidates": [
+      {
+       "capacitor": "CIN",
+       "declared": true,
+       "inductance_nh": 9.964,
+       "loop_area_mm2": 22.0565
+      }
+     ],
+     "capacitor_selection": "declared: the capacitor declares decouples of a hot-supply pin; least inductance among the declared ones",
+     "field_victims": [
+      {
+       "kind": "sensitive_net",
+       "name": "FB",
+       "pads": [
+        "R1.2",
+        "R2.1"
+       ]
+      },
+      {
+       "kind": "cable_connector",
+       "name": "J1",
+       "pads": [
+        "J1.1",
+        "J1.2"
+       ]
+      }
+     ],
+     "inductance_method": "partial inductance of the traced copper: 13 bars with their real widths, free space at the true layer heights: the path uses the In1.Cu plane layer or the far side of it; 2 via barrel(s) added in series (Johnson-Graham estimate)",
+     "inputs_text": [
+      "edge time 5 ns (10-90 %, switch pin rise_time/fall_time), used for the current commutation because no current_rise_time/current_fall_time is declared",
+      "current: scenario current_limit, amplitude 4.5 A = current_peak, the switch current limit (a worst case, not a load current; declare load_current on U1 for an operating point)"
+     ],
+     "legs": [
+      {
+       "from": "CIN supply CIN.1",
+       "kind": "traced",
+       "layer_changes": 0,
+       "layers": [
+        "F.Cu"
+       ],
+       "length_mm": 2.1118,
+       "narrowest_width_mm": 0.25,
+       "net": "VIN",
+       "plane_shortcut": false,
+       "to": "hot supply U1.1",
+       "vias": 0
+      },
+      {
+       "from": "hot supply U1.1",
+       "kind": "component",
+       "layer_changes": 0,
+       "layers": [],
+       "length_mm": 2.54,
+       "narrowest_width_mm": null,
+       "net": null,
+       "plane_shortcut": false,
+       "to": "switch U1.3",
+       "vias": 0
+      },
+      {
+       "from": "switch U1.3",
+       "kind": "traced",
+       "layer_changes": 0,
+       "layers": [
+        "F.Cu"
+       ],
+       "length_mm": 4.3513,
+       "narrowest_width_mm": 0.25,
+       "net": "SW",
+       "plane_shortcut": false,
+       "to": "D1 switch side D1.2",
+       "vias": 0
+      },
+      {
+       "from": "D1 switch side D1.2",
+       "kind": "component",
+       "layer_changes": 0,
+       "layers": [],
+       "length_mm": 2.0,
+       "narrowest_width_mm": null,
+       "net": null,
+       "plane_shortcut": false,
+       "to": "D1 rail side D1.1",
+       "vias": 0
+      },
+      {
+       "from": "D1 rail side D1.1",
+       "kind": "traced",
+       "layer_changes": 2,
+       "layers": [
+        "F.Cu",
+        "In1.Cu"
+       ],
+       "length_mm": 8.0916,
+       "narrowest_width_mm": 0.25,
+       "net": "GND",
+       "plane_shortcut": true,
+       "to": "CIN return CIN.2",
+       "vias": 2
+      },
+      {
+       "from": "CIN return CIN.2",
+       "kind": "component",
+       "layer_changes": 0,
+       "layers": [],
+       "length_mm": 2.0,
+       "narrowest_width_mm": null,
+       "net": null,
+       "plane_shortcut": false,
+       "to": "CIN supply CIN.1",
+       "vias": 0
+      }
+     ],
+     "loop_area_mm2": 22.0565,
+     "loop_capacitor": "CIN",
+     "loop_current": {
+      "current_limit_a": 4.5,
+      "field_amplitude_a": 4.5,
+      "field_amplitude_basis": "current_peak, the switch current limit (a worst case, not a load current)",
+      "mean_a": null,
+      "peak_a": null,
+      "ring_current_a": 4.5,
+      "ring_current_basis": "the switch current limit current_peak (a worst case, not a load current)",
+      "scenario": "current_limit",
+      "valley_a": null,
+      "waveform": "flat_top_trapezoid"
+     },
+     "loop_inductance_nh": 9.964,
+     "loop_path_3d_mm": [
+      [
+       25.5,
+       29.0,
+       0.0
+      ],
+      [
+       27.23,
+       29.0,
+       0.0
+      ],
+      [
+       27.5,
+       28.73,
+       0.0
+      ],
+      [
+       27.5,
+       31.27,
+       0.0
+      ],
+      [
+       26.5,
+       31.27,
+       0.0
+      ],
+      [
+       26.5,
+       31.5,
+       0.0
+      ],
+      [
+       26.5,
+       32.25,
+       0.0
+      ],
+      [
+       25.0,
+       33.75,
+       0.0
+      ],
+      [
+       25.0,
+       34.0,
+       0.0
+      ],
+      [
+       23.0,
+       34.0,
+       0.0
+      ],
+      [
+       22.0,
+       34.0,
+       0.0
+      ],
+      [
+       22.0,
+       34.0,
+       -0.5333
+      ],
+      [
+       22.5,
+       29.0,
+       -0.5333
+      ],
+      [
+       22.5,
+       29.0,
+       0.0
+      ],
+      [
+       23.5,
+       29.0,
+       0.0
+      ]
+     ],
+     "loop_polygon_mm": [
+      [
+       25.5,
+       29.0
+      ],
+      [
+       27.23,
+       29.0
+      ],
+      [
+       27.5,
+       28.73
+      ],
+      [
+       27.5,
+       31.27
+      ],
+      [
+       26.5,
+       31.27
+      ],
+      [
+       26.5,
+       31.5
+      ],
+      [
+       26.5,
+       32.25
+      ],
+      [
+       25.0,
+       33.75
+      ],
+      [
+       25.0,
+       34.0
+      ],
+      [
+       23.0,
+       34.0
+      ],
+      [
+       22.0,
+       34.0
+      ],
+      [
+       22.5,
+       29.0
+      ],
+      [
+       23.5,
+       29.0
+      ]
+     ],
+     "loop_reference_plane_z_mm": null,
+     "operating_point": {
+      "current_limit_a": 4.5,
+      "how_to_declare": "component U1 { load_current = <current>; }",
+      "load_current_a": null,
+      "reason": null,
+      "status": "not_declared",
+      "topology": "buck"
+     },
+     "pad_polygon_mm": [
+      [
+       25.5,
+       29.0
+      ],
+      [
+       27.5,
+       28.73
+      ],
+      [
+       27.5,
+       31.27
+      ],
+      [
+       25.0,
+       34.0
+      ],
+      [
+       23.0,
+       34.0
+      ],
+      [
+       23.5,
+       29.0
+      ]
+     ],
+     "pad_sequence": [
+      "CIN supply CIN.1",
+      "hot supply U1.1",
+      "switch U1.3",
+      "D1 switch side D1.2",
+      "D1 rail side D1.1",
+      "CIN return CIN.2"
+     ],
+     "path_length_mm": 20.0281,
+     "placement": "fixed",
+     "radiated_validity": {
+      "band_truncated_by_loop_size": false,
+      "conditions": "free-space small-loop formula: loop path at most lambda / 10 at the evaluated frequency, observation distance beyond lambda / (2 pi), distance at least 3 x the loop's longest dimension",
+      "distance_over_lambda_2pi_at_30_mhz": 6.288,
+      "distance_over_loop_size": 1312.81,
+      "electrically_small": true,
+      "evaluated_band_mhz": [
+       30.0,
+       1000.0
+      ],
+      "far_field": true,
+      "holds": true,
+      "loop_path_over_wavelength_at_worst_point": 0.0043,
+      "point_source": true
+     },
+     "reference_plane": null,
+     "ring_current_a": 4.5,
+     "ring_energy_nj": 100.881,
+     "ring_frequency_mhz": 100.84,
+     "ring_overshoot_v": 28.41,
+     "routed_copper_on_loop_nets": true,
+     "scenario": "current_limit",
+     "switch_node_capacitance_pf": 250.0,
+     "trace_layer_changes": 2,
+     "trace_narrowest_width_mm": 0.25,
+     "trace_status": "traced_copper",
+     "trace_unrouted_legs": 0,
+     "trace_via_count": 2,
+     "traced_path_length_mm": 14.5548,
+     "vias_on_loop_nets": 8
+    },
+    "message": "U1: hot loop CIN area 22.06 mm2, path 20.0 mm, about 10.0 nH (traced copper: 3 leg(s), 2 via(s), 2 layer change(s), narrowest 0.25 mm); differential-mode field about 8.5 dBuV/m at 64 MHz, 10 m, scenario current_limit (current limit 4.5 A, a worst case that bounds operation, NOT a prediction of it (declare load_current on U1 for an operating point)) (+21.5 dB to the cispr32_class_b line; a screening margin, never a pass or fail); stored energy L I^2/2 = 100.9 nJ at the current limit 4.5 A (current_peak, a worst case); ringing about 101 MHz with 250 pF, overshoot up to 28.4 V at the current limit 4.5 A (current_peak, a worst case)",
+    "nets": [
+     "VIN",
+     "GND",
+     "SW"
+    ],
+    "objects": [
+     "U1",
+     "CIN",
+     "D1"
+    ],
+    "provenance": "declared",
+    "required_nm": null,
+    "severity": "warning",
+    "tags": [
+     "traced_copper",
+     "plane_shortcut",
+     "scenario_current_limit",
+     "worst_case_current",
+     "current_edge_from_voltage_edge"
+    ]
+   },
+   {
+    "cell": "U1",
+    "code": "EMI-CONDUCTED",
+    "estimate": {
+     "band_db": [
+      89.44,
+      95.64
+     ],
+     "basis": "rule_of_thumb",
+     "frequency_hz": 500000.0,
+     "kind": "absolute_screening",
+     "method": "linear-network prediction (copper_emi::conducted), scenario current_limit: flat-top input-current pulses of amplitude 4.5 A (current_peak, the switch current limit: a worst case, not a prediction), through 1 capacitor branch(es), each its own R-L-C with its own connection inductance, with 9.964 nH hot-loop inductance between the current source and the hot capacitor's node into the 50 uH V-network; level is the RMS dBuV of the least-margin harmonic at the worst LISN port (peak = quasi-peak = average for isolated lines); differential mode only; the value is the HIGH end of a band over rule-of-thumb inputs (largest level over 3 case(s)), the margin is the high end's",
+     "not_modelled": [
+      "common-mode noise path (differential mode only; common mode often dominates above a few MHz)",
+      "spread-spectrum clocking, frequency modulation, jitter and burst or skip modes",
+      "converter source impedance and control-loop interaction (the converter is an ideal harmonic current source)",
+      "frequency dependence of component models beyond ESR, ESL and self-resonance (DC-bias loss is a parameter band or a declared capacitance, not a model)",
+      "the supply impedance behind the V-network",
+      "mutual inductance between the capacitor branches and between the hot loop and the branches (each branch has self inductance only)",
+      "the load-side network (the output capacitor, the load and the inductor current's own harmonics are not in the input network; the converter is only an input-current source)",
+      "inductor saturation and the dead time, reverse recovery and ringing of the switch (the ramp uses the inductance as a constant)",
+      "operating modes other than a fixed-frequency buck in continuous conduction (discontinuous conduction, pulse skipping and forced-PWM light-load operation are outside the model)",
+      "zone fills and plane cut-outs (the hot-loop inductance is from placed or traced copper over an idealised plane)",
+      "the real stack-up (none is declared; FR-4 spread evenly over the board thickness is assumed)"
+     ],
+     "numerical_sensitivity": null,
+     "quantity": "conducted_emission",
+     "unit": "dBuV",
+     "value": 95.64
+    },
+    "layers": [
+     "F.Cu"
+    ],
+    "margin_db": -49.64,
+    "measured_nm": null,
+    "measures": {
+     "anti_resonances": [],
+     "assumptions": [
+      "Results are screening evidence: the solver, source harmonics and LISN transfer are checked against hand calculations, but no prediction has been correlated with a measurement and no accuracy figure is claimed.",
+      "Linear time-invariant network: all passives are linear; capacitor and inductor parasitics are single-element ESR/ESL/parallel-C models with no frequency dependence (no skin or proximity effect, no ferrite or dielectric dispersion).",
+      "The capacitances are used as given: DC-bias and temperature derating of an MLCC (more than half of the capacitance at rated bias) is the caller's input, not part of this model."
+     ],
+     "band_cases": 3,
+     "capacitor_branches": [
+      {
+       "capacitance_band_uf": [
+        5.0,
+        10.0
+       ],
+       "capacitance_used_uf": 5.0,
+       "capacitance_value_uf": 10.0,
+       "component": "CIN",
+       "connection_basis": "none: the hot-loop inductance is in the converter's branch",
+       "connection_inductance_nh": null,
+       "current_share_fundamental": 1.0001,
+       "current_share_worst_harmonic": 1.0001,
+       "dc_bias_basis": "rule_of_thumb",
+       "dc_bias_note": null,
+       "declared": {
+        "capacitance_at_bias": false,
+        "esl": false,
+        "esr": false
+       },
+       "defaulted": [
+        "esr",
+        "esl",
+        "dc_bias"
+       ],
+       "esl_basis": "package_default",
+       "esl_nh": 0.6,
+       "esr_mohm": 5.0,
+       "role": "hot",
+       "sources": [
+        "CIN value 10 uF",
+        "ESR 5 mohm default for a ceramic",
+        "ESL 0.6 nH default for package 0805"
+       ]
+      }
+     ],
+     "common_mode": "not modelled",
+     "common_mode_reason": "the only capacitance the board model knows for the switch node is its island capacitance to the board's own ground plane (EMI-SWITCH-NODE), and that plane is the converter's return: the current it carries closes through the plane and the controller's ground pin without entering the LISN, so using it as the capacitance to the LISN reference would overstate common mode by the whole shielding effect of the plane. The capacitance that drives common-mode current out of the board is the one from the board (switch node, heat sink, plane edges, cables) to the reference or chassis, which depends on geometry outside the board model; the reported levels are differential mode only and common mode, which usually dominates above a few MHz, is not included",
+     "current_edge_basis": "declared",
+     "current_edge_source": "voltage_edge",
+     "current_edge_time_band_ns": null,
+     "current_fall_time_10_90_ns": 5.0,
+     "current_ramp_time_0_100_ns": 6.25,
+     "current_rise_time_10_90_ns": 5.0,
+     "current_share_definition": "capacitor branch currents are reported as |I_branch| / |I_source| at one harmonic: a ratio of the magnitudes of complex currents, not a partition of the source current. The branches can circulate current between themselves (an inductive branch against a capacitive one), so the ratios of the branches can add to more than 100 %",
+     "dc_bias_derating": "rule of thumb band; nominal derated",
+     "dc_bias_loss": 0.5,
+     "detector_applicability": "isolated_lines",
+     "detector_bands": [
+      {
+       "band": "B",
+       "harmonic_spacing_hz": 500000.0,
+       "harmonics": 60,
+       "rbw_hz": 9000.0,
+       "reason": null,
+       "status": "isolated_lines"
+      }
+     ],
+     "detector_reason": null,
+     "duty": 0.416667,
+     "filter_model": null,
+     "frequency_basis": "fixed",
+     "frequency_scenario": "fixed",
+     "fundamental": {
+      "cm_dbuv": null,
+      "dm_dbuv": 95.64,
+      "frequency_hz": 500000.0,
+      "harmonic": 1,
+      "high_dbuv": 95.64,
+      "limit_avg": 46.0,
+      "limit_qp": 56.0,
+      "low_dbuv": 89.44,
+      "margin_avg_db": -49.64,
+      "margin_db": -49.64,
+      "margin_qp_db": -39.64,
+      "receiver": null,
+      "source_current_a": 2.767129,
+      "total_dbuv": 95.64
+     },
+     "harmonics": [
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 95.64,
+       "frequency_hz": 500000.0,
+       "harmonic": 1,
+       "high_dbuv": 95.64,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 89.44,
+       "margin_avg_db": -49.64,
+       "margin_db": -49.64,
+       "margin_qp_db": -39.64,
+       "receiver": null,
+       "source_current_a": 2.767129,
+       "total_dbuv": 95.64
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 77.16,
+       "frequency_hz": 1000000.0,
+       "harmonic": 2,
+       "high_dbuv": 77.16,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 70.43,
+       "margin_avg_db": -31.16,
+       "margin_db": -31.16,
+       "margin_qp_db": -21.16,
+       "receiver": null,
+       "source_current_a": 0.716151,
+       "total_dbuv": 77.16
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 71.82,
+       "frequency_hz": 1500000.0,
+       "harmonic": 3,
+       "high_dbuv": 71.82,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 64.51,
+       "margin_avg_db": -25.82,
+       "margin_db": -25.82,
+       "margin_qp_db": -15.82,
+       "receiver": null,
+       "source_current_a": 0.67514,
+       "total_dbuv": 71.82
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 66.6,
+       "frequency_hz": 2000000.0,
+       "harmonic": 4,
+       "high_dbuv": 66.6,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 60.83,
+       "margin_avg_db": -20.6,
+       "margin_db": -20.6,
+       "margin_qp_db": -10.6,
+       "receiver": null,
+       "source_current_a": 0.620086,
+       "total_dbuv": 66.6
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 49.94,
+       "frequency_hz": 2500000.0,
+       "harmonic": 5,
+       "high_dbuv": 49.94,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 49.75,
+       "margin_avg_db": -3.94,
+       "margin_db": -3.94,
+       "margin_qp_db": 6.06,
+       "receiver": null,
+       "source_current_a": 0.148233,
+       "total_dbuv": 49.94
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 58.61,
+       "frequency_hz": 3000000.0,
+       "harmonic": 6,
+       "high_dbuv": 62.4,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 58.61,
+       "margin_avg_db": -16.4,
+       "margin_db": -16.4,
+       "margin_qp_db": -6.4,
+       "receiver": null,
+       "source_current_a": 0.477189,
+       "total_dbuv": 58.61
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 47.67,
+       "frequency_hz": 3500000.0,
+       "harmonic": 7,
+       "high_dbuv": 51.45,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 47.67,
+       "margin_avg_db": -5.45,
+       "margin_db": -5.45,
+       "margin_qp_db": 4.55,
+       "receiver": null,
+       "source_current_a": 0.10584,
+       "total_dbuv": 47.67
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.58,
+       "frequency_hz": 4000000.0,
+       "harmonic": 8,
+       "high_dbuv": 62.5,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 59.58,
+       "margin_avg_db": -16.5,
+       "margin_db": -16.5,
+       "margin_qp_db": -6.5,
+       "receiver": null,
+       "source_current_a": 0.309804,
+       "total_dbuv": 59.58
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 58.9,
+       "frequency_hz": 4500000.0,
+       "harmonic": 9,
+       "high_dbuv": 61.13,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 58.9,
+       "margin_avg_db": -15.13,
+       "margin_db": -15.13,
+       "margin_qp_db": -5.13,
+       "receiver": null,
+       "source_current_a": 0.224786,
+       "total_dbuv": 58.9
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 56.65,
+       "frequency_hz": 5000000.0,
+       "harmonic": 10,
+       "high_dbuv": 58.4,
+       "limit_avg": 46.0,
+       "limit_qp": 56.0,
+       "low_dbuv": 56.65,
+       "margin_avg_db": -12.4,
+       "margin_db": -12.4,
+       "margin_qp_db": -2.4,
+       "receiver": null,
+       "source_current_a": 0.143009,
+       "total_dbuv": 56.65
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.92,
+       "frequency_hz": 5500000.0,
+       "harmonic": 11,
+       "high_dbuv": 64.32,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.92,
+       "margin_avg_db": -14.32,
+       "margin_db": -14.32,
+       "margin_qp_db": -4.32,
+       "receiver": null,
+       "source_current_a": 0.251073,
+       "total_dbuv": 62.92
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": -234.99,
+       "frequency_hz": 6000000.0,
+       "harmonic": 12,
+       "high_dbuv": -233.83,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": -234.99,
+       "margin_avg_db": 283.83,
+       "margin_db": 283.83,
+       "margin_qp_db": 293.83,
+       "receiver": null,
+       "source_current_a": 0.0,
+       "total_dbuv": -234.99
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.63,
+       "frequency_hz": 6500000.0,
+       "harmonic": 13,
+       "high_dbuv": 64.59,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.63,
+       "margin_avg_db": -14.59,
+       "margin_db": -14.59,
+       "margin_qp_db": -4.59,
+       "receiver": null,
+       "source_current_a": 0.212282,
+       "total_dbuv": 63.63
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 58.15,
+       "frequency_hz": 7000000.0,
+       "harmonic": 14,
+       "high_dbuv": 58.97,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 58.15,
+       "margin_avg_db": -8.97,
+       "margin_db": -8.97,
+       "margin_qp_db": 1.03,
+       "receiver": null,
+       "source_current_a": 0.101992,
+       "total_dbuv": 58.15
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 61.35,
+       "frequency_hz": 7500000.0,
+       "harmonic": 15,
+       "high_dbuv": 62.05,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 61.35,
+       "margin_avg_db": -12.05,
+       "margin_db": -12.05,
+       "margin_qp_db": -2.05,
+       "receiver": null,
+       "source_current_a": 0.13456,
+       "total_dbuv": 61.35
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.26,
+       "frequency_hz": 8000000.0,
+       "harmonic": 16,
+       "high_dbuv": 63.87,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.26,
+       "margin_avg_db": -13.87,
+       "margin_db": -13.87,
+       "margin_qp_db": -3.87,
+       "receiver": null,
+       "source_current_a": 0.154424,
+       "total_dbuv": 63.26
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 52.89,
+       "frequency_hz": 8500000.0,
+       "harmonic": 17,
+       "high_dbuv": 53.43,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 52.89,
+       "margin_avg_db": -3.43,
+       "margin_db": -3.43,
+       "margin_qp_db": 6.57,
+       "receiver": null,
+       "source_current_a": 0.043413,
+       "total_dbuv": 52.89
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.73,
+       "frequency_hz": 9000000.0,
+       "harmonic": 18,
+       "high_dbuv": 65.21,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.73,
+       "margin_avg_db": -15.21,
+       "margin_db": -15.21,
+       "margin_qp_db": -5.21,
+       "receiver": null,
+       "source_current_a": 0.158328,
+       "total_dbuv": 64.73
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.07,
+       "frequency_hz": 9500000.0,
+       "harmonic": 19,
+       "high_dbuv": 53.5,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.07,
+       "margin_avg_db": -3.5,
+       "margin_db": -3.5,
+       "margin_qp_db": 6.5,
+       "receiver": null,
+       "source_current_a": 0.038798,
+       "total_dbuv": 53.07
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.64,
+       "frequency_hz": 10000000.0,
+       "harmonic": 20,
+       "high_dbuv": 64.02,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.64,
+       "margin_avg_db": -14.02,
+       "margin_db": -14.02,
+       "margin_qp_db": -4.02,
+       "receiver": null,
+       "source_current_a": 0.123253,
+       "total_dbuv": 63.64
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 61.93,
+       "frequency_hz": 10500000.0,
+       "harmonic": 21,
+       "high_dbuv": 62.28,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 61.93,
+       "margin_avg_db": -12.28,
+       "margin_db": -12.28,
+       "margin_qp_db": -2.28,
+       "receiver": null,
+       "source_current_a": 0.095781,
+       "total_dbuv": 61.93
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 58.97,
+       "frequency_hz": 11000000.0,
+       "harmonic": 22,
+       "high_dbuv": 59.29,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 58.97,
+       "margin_avg_db": -9.29,
+       "margin_db": -9.29,
+       "margin_qp_db": 0.71,
+       "receiver": null,
+       "source_current_a": 0.064604,
+       "total_dbuv": 58.97
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.73,
+       "frequency_hz": 11500000.0,
+       "harmonic": 23,
+       "high_dbuv": 65.02,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.73,
+       "margin_avg_db": -15.02,
+       "margin_db": -15.02,
+       "margin_qp_db": -5.02,
+       "receiver": null,
+       "source_current_a": 0.119292,
+       "total_dbuv": 64.73
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": -227.56,
+       "frequency_hz": 12000000.0,
+       "harmonic": 24,
+       "high_dbuv": -227.29,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": -227.56,
+       "margin_avg_db": 277.29,
+       "margin_db": 277.29,
+       "margin_qp_db": 287.29,
+       "receiver": null,
+       "source_current_a": 0.0,
+       "total_dbuv": -227.56
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.8,
+       "frequency_hz": 12500000.0,
+       "harmonic": 25,
+       "high_dbuv": 65.04,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.8,
+       "margin_avg_db": -15.04,
+       "margin_db": -15.04,
+       "margin_qp_db": -5.04,
+       "receiver": null,
+       "source_current_a": 0.109579,
+       "total_dbuv": 64.8
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.11,
+       "frequency_hz": 13000000.0,
+       "harmonic": 26,
+       "high_dbuv": 59.33,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 59.11,
+       "margin_avg_db": -9.33,
+       "margin_db": -9.33,
+       "margin_qp_db": 0.67,
+       "receiver": null,
+       "source_current_a": 0.054496,
+       "total_dbuv": 59.11
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.14,
+       "frequency_hz": 13500000.0,
+       "harmonic": 27,
+       "high_dbuv": 62.34,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.14,
+       "margin_avg_db": -12.34,
+       "margin_db": -12.34,
+       "margin_qp_db": -2.34,
+       "receiver": null,
+       "source_current_a": 0.074151,
+       "total_dbuv": 62.14
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.92,
+       "frequency_hz": 14000000.0,
+       "harmonic": 28,
+       "high_dbuv": 64.11,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.92,
+       "margin_avg_db": -14.11,
+       "margin_db": -14.11,
+       "margin_qp_db": -4.11,
+       "receiver": null,
+       "source_current_a": 0.087495,
+       "total_dbuv": 63.92
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.44,
+       "frequency_hz": 14500000.0,
+       "harmonic": 29,
+       "high_dbuv": 53.62,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.44,
+       "margin_avg_db": -3.62,
+       "margin_db": -3.62,
+       "margin_qp_db": 6.38,
+       "receiver": null,
+       "source_current_a": 0.025224,
+       "total_dbuv": 53.44
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 65.19,
+       "frequency_hz": 15000000.0,
+       "harmonic": 30,
+       "high_dbuv": 65.36,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 65.19,
+       "margin_avg_db": -15.36,
+       "margin_db": -15.36,
+       "margin_qp_db": -5.36,
+       "receiver": null,
+       "source_current_a": 0.094118,
+       "total_dbuv": 65.19
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.47,
+       "frequency_hz": 15500000.0,
+       "harmonic": 31,
+       "high_dbuv": 53.62,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.47,
+       "margin_avg_db": -3.62,
+       "margin_db": -3.62,
+       "margin_qp_db": 6.38,
+       "receiver": null,
+       "source_current_a": 0.023551,
+       "total_dbuv": 53.47
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.96,
+       "frequency_hz": 16000000.0,
+       "harmonic": 32,
+       "high_dbuv": 64.11,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.96,
+       "margin_avg_db": -14.11,
+       "margin_db": -14.11,
+       "margin_qp_db": -4.11,
+       "receiver": null,
+       "source_current_a": 0.076262,
+       "total_dbuv": 63.96
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.21,
+       "frequency_hz": 16500000.0,
+       "harmonic": 33,
+       "high_dbuv": 62.35,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.21,
+       "margin_avg_db": -12.35,
+       "margin_db": -12.35,
+       "margin_qp_db": -2.35,
+       "receiver": null,
+       "source_current_a": 0.060317,
+       "total_dbuv": 62.21
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.2,
+       "frequency_hz": 17000000.0,
+       "harmonic": 34,
+       "high_dbuv": 59.33,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 59.2,
+       "margin_avg_db": -9.33,
+       "margin_db": -9.33,
+       "margin_qp_db": 0.67,
+       "receiver": null,
+       "source_current_a": 0.041351,
+       "total_dbuv": 59.2
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.93,
+       "frequency_hz": 17500000.0,
+       "harmonic": 35,
+       "high_dbuv": 65.05,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.93,
+       "margin_avg_db": -15.05,
+       "margin_db": -15.05,
+       "margin_qp_db": -5.05,
+       "receiver": null,
+       "source_current_a": 0.077515,
+       "total_dbuv": 64.93
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": -229.39,
+       "frequency_hz": 18000000.0,
+       "harmonic": 36,
+       "high_dbuv": -229.27,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": -229.39,
+       "margin_avg_db": 279.27,
+       "margin_db": 279.27,
+       "margin_qp_db": 289.27,
+       "receiver": null,
+       "source_current_a": 0.0,
+       "total_dbuv": -229.39
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.93,
+       "frequency_hz": 18500000.0,
+       "harmonic": 37,
+       "high_dbuv": 65.04,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.93,
+       "margin_avg_db": -15.04,
+       "margin_db": -15.04,
+       "margin_qp_db": -5.04,
+       "receiver": null,
+       "source_current_a": 0.073155,
+       "total_dbuv": 64.93
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.21,
+       "frequency_hz": 19000000.0,
+       "harmonic": 38,
+       "high_dbuv": 59.31,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 59.21,
+       "margin_avg_db": -9.31,
+       "margin_db": -9.31,
+       "margin_qp_db": 0.69,
+       "receiver": null,
+       "source_current_a": 0.036826,
+       "total_dbuv": 59.21
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.22,
+       "frequency_hz": 19500000.0,
+       "harmonic": 39,
+       "high_dbuv": 62.32,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.22,
+       "margin_avg_db": -12.32,
+       "margin_db": -12.32,
+       "margin_qp_db": -2.32,
+       "receiver": null,
+       "source_current_a": 0.050682,
+       "total_dbuv": 62.22
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.98,
+       "frequency_hz": 20000000.0,
+       "harmonic": 40,
+       "high_dbuv": 64.07,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.98,
+       "margin_avg_db": -14.07,
+       "margin_db": -14.07,
+       "margin_qp_db": -4.07,
+       "receiver": null,
+       "source_current_a": 0.060443,
+       "total_dbuv": 63.98
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.48,
+       "frequency_hz": 20500000.0,
+       "harmonic": 41,
+       "high_dbuv": 53.57,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.48,
+       "margin_avg_db": -3.57,
+       "margin_db": -3.57,
+       "margin_qp_db": 6.43,
+       "receiver": null,
+       "source_current_a": 0.0176,
+       "total_dbuv": 53.48
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 65.22,
+       "frequency_hz": 21000000.0,
+       "harmonic": 42,
+       "high_dbuv": 65.3,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 65.22,
+       "margin_avg_db": -15.3,
+       "margin_db": -15.3,
+       "margin_qp_db": -5.3,
+       "receiver": null,
+       "source_current_a": 0.066293,
+       "total_dbuv": 65.22
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.47,
+       "frequency_hz": 21500000.0,
+       "harmonic": 43,
+       "high_dbuv": 53.55,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.47,
+       "margin_avg_db": -3.55,
+       "margin_db": -3.55,
+       "margin_qp_db": 6.45,
+       "receiver": null,
+       "source_current_a": 0.016736,
+       "total_dbuv": 53.47
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.96,
+       "frequency_hz": 22000000.0,
+       "harmonic": 44,
+       "high_dbuv": 64.04,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.96,
+       "margin_avg_db": -14.04,
+       "margin_db": -14.04,
+       "margin_qp_db": -4.04,
+       "receiver": null,
+       "source_current_a": 0.054649,
+       "total_dbuv": 63.96
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.19,
+       "frequency_hz": 22500000.0,
+       "harmonic": 45,
+       "high_dbuv": 62.26,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.19,
+       "margin_avg_db": -12.26,
+       "margin_db": -12.26,
+       "margin_qp_db": -2.26,
+       "receiver": null,
+       "source_current_a": 0.043566,
+       "total_dbuv": 62.19
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.17,
+       "frequency_hz": 23000000.0,
+       "harmonic": 46,
+       "high_dbuv": 59.24,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 59.17,
+       "margin_avg_db": -9.24,
+       "margin_db": -9.24,
+       "margin_qp_db": 0.76,
+       "receiver": null,
+       "source_current_a": 0.030091,
+       "total_dbuv": 59.17
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.89,
+       "frequency_hz": 23500000.0,
+       "harmonic": 47,
+       "high_dbuv": 64.95,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.89,
+       "margin_avg_db": -14.95,
+       "margin_db": -14.95,
+       "margin_qp_db": -4.95,
+       "receiver": null,
+       "source_current_a": 0.056809,
+       "total_dbuv": 64.89
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": -221.54,
+       "frequency_hz": 24000000.0,
+       "harmonic": 48,
+       "high_dbuv": -221.48,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": -221.54,
+       "margin_avg_db": 271.48,
+       "margin_db": 271.48,
+       "margin_qp_db": 281.48,
+       "receiver": null,
+       "source_current_a": 0.0,
+       "total_dbuv": -221.54
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.87,
+       "frequency_hz": 24500000.0,
+       "harmonic": 49,
+       "high_dbuv": 64.93,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.87,
+       "margin_avg_db": -14.93,
+       "margin_db": -14.93,
+       "margin_qp_db": -4.93,
+       "receiver": null,
+       "source_current_a": 0.05432,
+       "total_dbuv": 64.87
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.14,
+       "frequency_hz": 25000000.0,
+       "harmonic": 50,
+       "high_dbuv": 59.2,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 59.14,
+       "margin_avg_db": -9.2,
+       "margin_db": -9.2,
+       "margin_qp_db": 0.8,
+       "receiver": null,
+       "source_current_a": 0.027511,
+       "total_dbuv": 59.14
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.14,
+       "frequency_hz": 25500000.0,
+       "harmonic": 51,
+       "high_dbuv": 62.2,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.14,
+       "margin_avg_db": -12.2,
+       "margin_db": -12.2,
+       "margin_qp_db": -2.2,
+       "receiver": null,
+       "source_current_a": 0.038081,
+       "total_dbuv": 62.14
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.89,
+       "frequency_hz": 26000000.0,
+       "harmonic": 52,
+       "high_dbuv": 63.94,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.89,
+       "margin_avg_db": -13.94,
+       "margin_db": -13.94,
+       "margin_qp_db": -3.94,
+       "receiver": null,
+       "source_current_a": 0.045666,
+       "total_dbuv": 63.89
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.39,
+       "frequency_hz": 26500000.0,
+       "harmonic": 53,
+       "high_dbuv": 53.44,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.39,
+       "margin_avg_db": -3.44,
+       "margin_db": -3.44,
+       "margin_qp_db": 6.56,
+       "receiver": null,
+       "source_current_a": 0.013367,
+       "total_dbuv": 53.39
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 65.12,
+       "frequency_hz": 27000000.0,
+       "harmonic": 54,
+       "high_dbuv": 65.17,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 65.12,
+       "margin_avg_db": -15.17,
+       "margin_db": -15.17,
+       "margin_qp_db": -5.17,
+       "receiver": null,
+       "source_current_a": 0.050601,
+       "total_dbuv": 65.12
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 53.36,
+       "frequency_hz": 27500000.0,
+       "harmonic": 55,
+       "high_dbuv": 53.41,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 53.36,
+       "margin_avg_db": -3.41,
+       "margin_db": -3.41,
+       "margin_qp_db": 6.59,
+       "receiver": null,
+       "source_current_a": 0.012836,
+       "total_dbuv": 53.36
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 63.84,
+       "frequency_hz": 28000000.0,
+       "harmonic": 56,
+       "high_dbuv": 63.89,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 63.84,
+       "margin_avg_db": -13.89,
+       "margin_db": -13.89,
+       "margin_qp_db": -3.89,
+       "receiver": null,
+       "source_current_a": 0.042105,
+       "total_dbuv": 63.84
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 62.07,
+       "frequency_hz": 28500000.0,
+       "harmonic": 57,
+       "high_dbuv": 62.11,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 62.07,
+       "margin_avg_db": -12.11,
+       "margin_db": -12.11,
+       "margin_qp_db": -2.11,
+       "receiver": null,
+       "source_current_a": 0.033713,
+       "total_dbuv": 62.07
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 59.04,
+       "frequency_hz": 29000000.0,
+       "harmonic": 58,
+       "high_dbuv": 59.09,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 59.04,
+       "margin_avg_db": -9.09,
+       "margin_db": -9.09,
+       "margin_qp_db": 0.91,
+       "receiver": null,
+       "source_current_a": 0.023383,
+       "total_dbuv": 59.04
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": 64.75,
+       "frequency_hz": 29500000.0,
+       "harmonic": 59,
+       "high_dbuv": 64.79,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": 64.75,
+       "margin_avg_db": -14.79,
+       "margin_db": -14.79,
+       "margin_qp_db": -4.79,
+       "receiver": null,
+       "source_current_a": 0.044322,
+       "total_dbuv": 64.75
+      },
+      {
+       "cm_dbuv": null,
+       "dm_dbuv": -214.02,
+       "frequency_hz": 30000000.0,
+       "harmonic": 60,
+       "high_dbuv": -213.98,
+       "limit_avg": 50.0,
+       "limit_qp": 60.0,
+       "low_dbuv": -214.02,
+       "margin_avg_db": 263.98,
+       "margin_db": 263.98,
+       "margin_qp_db": 273.98,
+       "receiver": null,
+       "source_current_a": 0.0,
+       "total_dbuv": -214.02
+      }
+     ],
+     "harmonics_over_average": 55,
+     "harmonics_over_quasi_peak": 37,
+     "harmonics_reported": 60,
+     "hot_capacitor": "CIN",
+     "hot_capacitor_band_uf": [
+      5.0,
+      10.0
+     ],
+     "hot_capacitor_esl_nh": 0.6,
+     "hot_capacitor_esr_mohm": 5.0,
+     "hot_capacitor_sources": [
+      "CIN value 10 uF",
+      "ESR 5 mohm default for a ceramic",
+      "ESL 0.6 nH default for package 0805"
+     ],
+     "hot_capacitor_uf": 5.0,
+     "hot_loop_inductance_basis": "traced copper path",
+     "hot_loop_inductance_nh": 9.9635,
+     "hot_loop_inductance_placement": "between the converter's current source and the hot capacitor's node; does not change the level at the LISN",
+     "input_filter": "no input filter recognised",
+     "inputs_text": [
+      "Vin 12 V (supply VIN on VIN), Vout 5 V (supply VOUT on VOUT), duty 0.4167",
+      "switching frequency 500 kHz (fixed)",
+      "scenario current_limit: no load_current is declared on U1: the switch current limit 4.5 A is used as the pulse amplitude, a worst case and not a prediction of operation; declare `load_current = <current>;` on the component to give the cell an operating point",
+      "current edge time 5 ns (10-90 %, switch pin rise_time/fall_time), used for the current commutation because no current_rise_time/current_fall_time is declared; ramp 6.25 ns (0-100 %, divided by 0.8); an assumption: the voltage edge and the current commutation are different quantities",
+      "capacitor CIN (hot): 10 uF nominal 5 uF, ESR 5 mohm (package default), ESL 0.6 nH (package_default), DC-bias loss (rule of thumb: ceramic DC-bias loss by package (0805: 50 %; 0402, 0603, 0805 50 %, 1206 35 %, 1210 and larger 25 %); the band runs from no loss to this loss, the nominal is the derated value from 5 V hot-supply voltage, else the un-derated value; declare capacitance_at_bias on the component to replace it) (nominal derated); connection: none, the hot-loop inductance 9.964 nH (traced copper path) is in the converter's branch; branch current over source current 100.0 % at the fundamental and 100.0 % at the worst harmonic",
+      "hot-loop inductance sits between the converter's current source and the hot capacitor's node K, where the capacitors and the feed attach: it does not change the level at the LISN (an ideal current source is not affected by a series inductance); a feed attached at the switch pins instead of the capacitor pads would put it in series with the capacitor",
+      "no input filter recognised",
+      "no anti-resonance of the input network between 150 kHz and 30 MHz (prominence of at least 0.5 dB)",
+      "common mode not modelled: the island capacitance to the board's ground plane is not a path to the LISN reference",
+      "limits: cispr32_class_b mains-port conducted lines (quasi-peak and average), a reference for a DC input"
+     ],
+     "largest_current_share_fundamental": {
+      "component": "CIN",
+      "definition": "peak branch current over the peak source current at that harmonic (circulating currents between branches can make a share exceed 100 %)",
+      "frequency_hz": 500000.0,
+      "harmonic": 1,
+      "share": 1.0001
+     },
+     "largest_current_share_worst_harmonic": {
+      "component": "CIN",
+      "definition": "peak branch current over the peak source current at that harmonic (circulating currents between branches can make a share exceed 100 %)",
+      "frequency_hz": 500000.0,
+      "harmonic": 1,
+      "share": 1.0001
+     },
+     "limit_class": "B",
+     "limit_standard": "cispr32_class_b",
+     "margins_available": true,
+     "margins_scope": "all_harmonics",
+     "operating_point": {
+      "current_limit_a": 4.5,
+      "how_to_declare": "component U1 { load_current = <current>; }",
+      "load_current_a": null,
+      "status": "not_declared"
+     },
+     "receiver_emulation": null,
+     "receiver_emulation_failure": null,
+     "scenario": "current_limit",
+     "secondary_scenario": null,
+     "skipped_capacitors": [],
+     "slew_rate_v_per_ns": null,
+     "switching_frequency_hz": 500000.0,
+     "vin_v": 12.0,
+     "voltage_edge_basis": "declared",
+     "voltage_fall_time_10_90_ns": 5.0,
+     "voltage_rise_time_10_90_ns": 5.0,
+     "vout_v": 5.0,
+     "worst_harmonic": {
+      "cm_dbuv": null,
+      "dm_dbuv": 95.64,
+      "frequency_hz": 500000.0,
+      "harmonic": 1,
+      "high_dbuv": 95.64,
+      "limit_avg": 46.0,
+      "limit_qp": 56.0,
+      "low_dbuv": 89.44,
+      "margin_avg_db": -49.64,
+      "margin_db": -49.64,
+      "margin_qp_db": -39.64,
+      "receiver": null,
+      "source_current_a": 2.767129,
+      "total_dbuv": 95.64
+     }
+    },
+    "message": "U1: conducted emission at the input (differential mode only, 50 uH V-network), scenario current_limit (a worst case at the switch current limit 4.5 A, NOT a prediction of operation; declare load_current on U1 for an operating point): worst harmonic 1 at 500 kHz: 95.6 dBuV (band [89.4 .. 95.6] dBuV, nominal 95.6; -49.6 dB to the average line from the high end); fundamental 500 kHz 95.6 dBuV (band [89.4 .. 95.6]); 37 of 60 harmonics above the quasi-peak line, 55 above the average line (high ends); the band rests on rule-of-thumb inputs (ceramic DC-bias loss); Vin 12 V Vout 5 V duty 0.417, 500 kHz fixed, current edge 5 ns (10-90 %, switch pin rise_time/fall_time), used for the current commutation because no current_rise_time/current_fall_time is declared, hot capacitor 5 uF (5 mohm ESR, 0.6 nH ESL, package defaults), 1 capacitor branch(es), hot loop 9.964 nH (traced copper path), no input filter recognised, DC-bias loss a rule-of-thumb band, common mode not modelled",
+    "nets": [
+     "VIN",
+     "GND"
+    ],
+    "objects": [
+     "U1",
+     "CIN"
+    ],
+    "provenance": "declared",
+    "required_nm": null,
+    "severity": "warning",
+    "tags": [
+     "traced_copper",
+     "plane_shortcut",
+     "scenario_current_limit",
+     "worst_case_current",
+     "differential_mode_only",
+     "current_edge_from_voltage_edge",
+     "rule_of_thumb_dc_bias",
+     "default_capacitor_parasitics"
+    ]
+   },
+   {
+    "cell": "U1",
+    "code": "EMI-SWITCH-NODE",
+    "estimate": {
+     "definition": "20 log10(f C V / (100 MHz * 1 pF * 1 V)), maximised over 30 MHz to 1 GHz: f the frequency, C the island capacitance to the nearest ground plane, V the amplitude of the switch-node trapezoid envelope at f. The displacement current 2 pi f C V is the driver; no field-per-current constant and no distance enter, so the score ranks cells and boards by drive and is neither a field nor comparable with an emission limit. Relative to the reference product only",
+     "frequency_hz": 30000000.0,
+     "kind": "ranking_score",
+     "method": "ranking score 20 log10(f C V / (100 MHz * 1 pF * 1 V)), V the trapezoid envelope of a 12 V swing (500000 Hz fixed, edge 5 ns (10-90 %, switch pin rise_time/fall_time), duty 0.42 from 5 V / 12 V), C the island capacitance to the ground plane, worst point of 30 MHz to 1 GHz; relative, not a field, no distance, no limit",
+     "not_modelled": [
+      "cable and attached-conductor geometry (length, routing, which conductors the displacement current reaches)",
+      "board-to-environment coupling (capacitance of the board to chassis, earth or a heat sink)",
+      "return impedance of the common-mode path (the plane under the island is the converter's own return)",
+      "radiation efficiency of the structure that carries the current",
+      "frequency dependence of the island capacitance (a quasi-static plate-and-fringe estimate)"
+     ],
+     "numerical_sensitivity": null,
+     "quantity": "cm_coupling_score",
+     "unit": "dB",
+     "value": -20.1
+    },
+    "layers": [
+     "B.Cu",
+     "F.Cu"
+    ],
+    "measured_nm": null,
+    "measures": {
+     "capacitance_to_plane_pf": 2.5866,
+     "cm_drivers": {
+      "capacitance_to_plane_pf": 2.5866,
+      "duty": 0.4167,
+      "edge_time_10_90_ns": 5.0,
+      "island_area_mm2": 8.5993,
+      "swing_v": 12.0,
+      "switching_frequency_hz": 500000.0
+     },
+     "copper_area_mm2": 8.5993,
+     "distance_to_board_edge_mm": 24.5,
+     "distance_to_cable_connectors_mm": [
+      {
+       "connector": "J1",
+       "distance_mm": 39.706
+      }
+     ],
+     "inputs_text": [
+      "edge time 5 ns (10-90 %, switch pin rise_time/fall_time)"
+     ],
+     "missing_for_absolute_prediction": [
+      "cable and attached-conductor geometry (length, routing, which conductors the displacement current reaches)",
+      "board-to-environment coupling (capacitance of the board to chassis, earth or a heat sink)",
+      "return impedance of the common-mode path (the plane under the island is the converter's own return)",
+      "radiation efficiency of the structure that carries the current",
+      "frequency dependence of the island capacitance (a quasi-static plate-and-fringe estimate)"
+     ],
+     "pad_area_mm2": 3.7854,
+     "pads": 4,
+     "reference": "In1.Cu at 0.533 mm, In1.Cu at 1.067 mm",
+     "routed_copper": true
+    },
+    "message": "U1: switch net SW has 8.60 mm2 of copper (pads, tracks and pours), 24.5 mm from the board edge, about 2.59 pF to the ground plane, 39.7 mm from cable connector J1; voltage-driven common-mode coupling-risk score -20.1 dB (ranking only: relative to f C V = 100 MHz x 1 pF x 1 V, not a field and not comparable with an emission limit); an absolute prediction would need the cable and attached-conductor geometry, the board-to-environment coupling and the return impedance, none of which the board model has",
+    "nets": [
+     "SW"
+    ],
+    "objects": [
+     "U1"
+    ],
+    "provenance": "declared",
+    "required_nm": null,
+    "severity": "warning",
+    "tags": [
+     "ranking_only"
+    ]
+   },
+   {
+    "cell": "U1",
+    "code": "EMI-PROXIMITY",
+    "estimate": null,
+    "layers": [],
+    "measured_nm": 2415476,
+    "measures": {
+     "distance_mm": 2.415,
+     "reference_component": "L1",
+     "reference_size_mm": 3.0,
+     "source": "L1",
+     "source_kind": "magnetic",
+     "source_shielding": "unshielded",
+     "threshold_factor": 3.0,
+     "threshold_mm": 9.0,
+     "victim": "FB",
+     "victim_kind": "sensitive_net"
+    },
+    "message": "U1: L1 (unshielded) is 2.42 mm from sensitive net FB (pads L1.2 and R1.2), inside the screening distance 3x3.0 mm = 9.0 mm",
+    "nets": [
+     "FB"
+    ],
+    "objects": [
+     "L1",
+     "FB"
+    ],
+    "provenance": "declared",
+    "required_nm": 9000000,
+    "severity": "warning",
+    "tags": []
+   },
+   {
+    "cell": "U1",
+    "code": "EMI-PROXIMITY",
+    "estimate": null,
+    "layers": [],
+    "measured_nm": 4243416,
+    "measures": {
+     "distance_mm": 4.243,
+     "reference_component": "L1",
+     "reference_size_mm": 3.0,
+     "source": "SW",
+     "source_kind": "switch_node",
+     "source_shielding": "n/a",
+     "threshold_factor": 1.5,
+     "threshold_mm": 4.5,
+     "victim": "FB",
+     "victim_kind": "sensitive_net"
+    },
+    "message": "U1: switch node SW is 4.24 mm from sensitive net FB (pads L1.1 and R1.2), inside the screening distance 1.5x3.0 mm = 4.5 mm",
+    "nets": [
+     "SW",
+     "FB"
+    ],
+    "objects": [
+     "SW",
+     "FB"
+    ],
+    "provenance": "declared",
+    "required_nm": 4500000,
+    "severity": "warning",
+    "tags": []
+   }
+  ],
+  "limits": {
+   "band_hz": [
+    30000000.0,
+    1000000000.0
+   ],
+   "distance_m": 10.0,
+   "limit_source": "CISPR 32 / EN 55032 radiated 30-1000 MHz (Annex A; table number unverified)",
+   "notes": [
+    "screening evidence: ranks likely noise sources, never establishes EMC qualification",
+    "validated: the closed forms, the circuit solver and the receiver emulation against hand calculations and analytic cases (unit tests); not validated: no estimate has been correlated with a measurement, so no accuracy, confidence interval or bound is claimed; margins are screening margins, not pass or fail",
+    "uncertainty is reported as three separate things per estimate: numerical sensitivity (null for closed forms), parameter bands from rule-of-thumb defaults (band_db), and the named mechanisms not modelled (not_modelled)",
+    "common-mode radiation is a relative coupling-risk score (ranking only): it has no distance, no field value and no margin, and is never compared with an emission limit",
+    "hot-loop geometry is the traced copper path where routed copper joins the loop pads (traced_copper, partially_traced) and the pad-centre polygon elsewhere (placement_estimate)",
+    "differential-mode loop field is free space; in the current_limit scenario the radiated sweep is the upper envelope of the trapezoid, in the declared_operating_point scenario it is the harmonic lines of the ramp-on-pedestal switch current; peak against quasi-peak limits",
+    "limit tables are transcribed from the published numbers and must be verified against the standards",
+    "radiated hot-loop estimates are ordered by their headline level in dBuV/m, each in its own cell's scenario (declared_operating_point or current_limit); levels of unlike scenarios are compared as numbers, not as like with like: a current_limit level is a worst case that bounds the cell, a declared_operating_point level an estimate of its operation (ties break by loop area, larger first)",
+    "1 of 5 finding(s) rest on rule-of-thumb defaults (tags rule_of_thumb_edge, rule_of_thumb_capacitance, rule_of_thumb_dc_bias, rule_of_thumb_ripple):              their levels are bands with the nominal or the unfavourable end stated, the defaults are listed as `input:` lines and none is a datasheet value;              declare the attribute named in each line to replace a default; the band covers the default inputs only, not the mechanisms listed in `not_modelled`",
+    "no stack-up is declared: copper layers are spread evenly over the board thickness, relative permittivity 4.5 assumed"
+   ],
+   "standard": "cispr32_class_b",
+   "validation": "validated: the closed forms, the circuit solver and the receiver emulation against hand calculations and analytic cases (unit tests); not validated: no estimate has been correlated with a measurement, so no accuracy, confidence interval or bound is claimed"
+  },
+  "schema": "copperscript-emi-check/v0.1",
+  "summary": {
+   "accepted": 0,
+   "cells": 1,
+   "conducted": 1,
+   "findings": 5,
+   "rule_of_thumb": 1
+  }
+ },
+ "schema": "copperscript-route-board/v0.1"
+}

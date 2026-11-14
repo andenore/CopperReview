@@ -13,7 +13,10 @@ A review tool for CopperScript designs with two halves that can be open at once:
   the next LLM-assisted solver iteration.
 
 **Assembly** (A) uses the same board to track a manual build part by part; see
-[Assembly tracking](#assembly-tracking).
+[Assembly tracking](#assembly-tracking). A CopperScript run's `route-report.json` adds an
+**EMI screening** layer to the board: hot loop, switch-node copper and victim pads with the
+findings' numbers and conducted spectrum, all screening estimates; see
+[EMI screening](#emi-screening).
 
 The **Electrical · Layout · Both** switch in the top bar picks what is shown (E, L, B).
 **Both** puts the schematic and the board side by side with a draggable divider;
@@ -27,7 +30,8 @@ GitHub** at the pinned commit or **Open in VS Code** for a project served locall
 
 Everything opens from one **Open** menu, or by dropping files on the page:
 **File…** (Ctrl+O) recognizes a board export, compiled IR, `.copper` source, saved
-scene, layout review, electrical review or CopperScript issue list by its contents,
+scene, layout review, electrical review, CopperScript issue list or run report
+(`route-report.json`) by its contents,
 and accepts several at once. Opening a board keeps the open schematic, and the other
 way round. **Project folder…** compiles a local project (the folder holding
 `board.copper` and `copper.mod`) in the browser: sources never leave the computer,
@@ -58,6 +62,7 @@ make serve PROJECT=../BysseControl-32        # compile a project folder; reload 
 make serve PROJECT=../BysseControl-32 HOST=0.0.0.0 OPEN=no   # reachable from other machines
 make serve PROJECT=../BysseControl-32 BOARD=../BysseControl-32/build/board.kicad_pcb   # schematic and board, linked
 make serve IR=build/electrical.ir.json       # or a compiled IR; BOARD=… alone for a PCB
+make serve BOARD=run/board.kicad_pcb REPORT=run/route-report.json   # board with its EMI screening
 make test
 ```
 
@@ -118,6 +123,28 @@ design and, with `--project`, its sources, so use it only on networks you trust.
 The API still requires the token; static files do not. Hashing and note IDs fall
 back to built-in implementations because browsers withhold `crypto.subtle` from
 non-HTTPS network addresses.
+
+## EMI screening
+
+`copper emi-check` and `copper route-board` store EMI screening in the run's
+`route-report.json`, key `emi` (there is no sidecar file). Open the board, then the report
+(**Open → File…**, or drop both; also in the static build), or serve both:
+`copper-review run/board.kicad_pcb --route-report run/route-report.json`. Try
+`python -m copper_review examples/emi-buck.kicad_pcb --route-report examples/emi-buck.route-report.json`
+(CopperScript's `examples/emi_buck`, routed; the report trimmed to its `emi` section). `examples/emi-buck.review.json` is a review with a cited finding.
+
+The **EMI** button opens a panel with the converter cells, each finding's key numbers
+(hot-loop inductance, worst conducted harmonic with its margin, anti-resonances, switch-node
+copper, proximity distances), the assumptions in plain sentences, what is not modelled and the
+conducted spectrum with its limit lines. The **EMI screening overlay** layer draws the hot loop
+(solid on the component layer, dashed on another, rings at vias), switch-node copper and
+the victim pads with their distances; selecting a finding zooms to it, and clicking the overlay
+selects the finding. **Cite in layout note** puts a finding in a note and in the exported review.
+
+These are **screening estimates, not a compliance measurement**: they rank likely noise sources and
+are never a pass or fail. A report without an `emi` section, or from an older CopperScript, opens
+with a note saying what is missing. See [EMI screening review](docs/emi-review.md) and the
+[review contract](docs/review-format.md#emi-findings).
 
 ## Review workflow
 
@@ -358,7 +385,7 @@ IR; it supplies no PCB geometry. `.copper` source files must be compiled externa
 
 ```powershell
 python -m unittest discover -s tests -v
-node --test tests/core.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js
+node --test tests/core.test.js tests/emi.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js
 ```
 
 Browser integration test (optional Playwright installation, not a runtime
@@ -381,6 +408,8 @@ the demo sheet, marking, rework notes, persistence, progress export and import.
 `node tests/viewer-regressions.mjs "http://127.0.0.1:PORT/#token=TOKEN"` additionally
 checks linked-fill holes/connector pixels, pad labels, and transient whole-net hover;
 `node tests/issues-labels.mjs URL` checks issue loading/citation and label thinning.
+`node tests/emi-browser.mjs "http://127.0.0.1:PORT/#token=TOKEN"` checks the EMI layer, panel, citing and export on a
+server started on `examples/emi-buck.kicad_pcb` with `--route-report examples/emi-buck.route-report.json` (see the script's header).
 `tests/fixtures/kicad-conformance` is a KiCad 9 board with hand-derived expectations
 shared with CopperScript's KiCad reader (keep both copies identical).
 

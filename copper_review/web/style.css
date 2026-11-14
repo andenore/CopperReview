@@ -219,3 +219,43 @@ body[data-mode=assembly] #pcb-review>.explorer,body[data-mode=assembly] #pcb-rev
 .assembly-designators span.done{border-color:var(--mint);color:var(--mint)}.assembly-designators span.focused{background:var(--copper);border-color:var(--copper);color:var(--on-accent)}
 .assembly-mpn{font:600 13px ui-monospace,Consolas,monospace;color:var(--label);overflow-wrap:anywhere}
 .view-gizmo{position:absolute;right:12px;top:12px;z-index:2;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px var(--shadow)}
+/* ---- EMI screening panel and spectrum chart (screening estimates, never compliance) ---- */
+:root{--emi-level:#1d5fa8;--emi-warn:#c8321a;--emi-limit:#1c2427;--emi-limit-soft:#5c6b72;--emi-band:#1d5fa833;--emi-ok:#2e7d5b}
+:root[data-theme=dark]{--emi-level:#7db4ee;--emi-warn:#ff8a6b;--emi-limit:#e6ecee;--emi-limit-soft:#94a3aa;--emi-band:#7db4ee33;--emi-ok:#84d4c0}
+.emi-panel{flex:none;height:min(350px,40vh);display:flex;flex-direction:column;min-height:0;background:var(--panel);border-top:2px solid var(--copper)}
+.emi-panel[hidden]{display:none}
+.emi-head{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--border);flex:none}
+.emi-head .quiet{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.emi-badge{font-size:10px;padding:1px 8px;border-radius:999px;border:1px solid var(--copper);color:var(--copper);white-space:nowrap}
+#emi-close{padding:0 8px;line-height:20px;font-size:16px}
+.emi-disclaimer{margin:0;padding:4px 12px;font-size:12px;font-weight:600;color:var(--copper);flex:none}
+.emi-notes{margin:0;padding:0 12px 4px 28px;font-size:11px;color:var(--muted);flex:none;max-height:64px;overflow:auto}.emi-notes:empty{display:none}
+.emi-body{display:grid;grid-template-columns:minmax(180px,220px) minmax(260px,1fr) minmax(380px,1.2fr);flex:1;min-height:0;border-top:1px solid var(--border)}
+.emi-list,.emi-detail,.emi-chart{min-height:0;overflow:auto;padding:8px 12px}
+.emi-list{border-right:1px solid var(--border);padding:6px}.emi-detail{border-right:1px solid var(--border)}
+.emi-cell{display:flex;flex-direction:column;padding:6px 6px 2px;font-size:12px}.emi-cell .quiet{font-size:11px}
+.emi-item{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;border-color:transparent;background:transparent;padding:5px 6px;white-space:normal}
+.emi-item[aria-pressed=true]{border-color:var(--copper);background:var(--selected-bg)}
+.emi-item-text{display:flex;flex-direction:column;min-width:0}.emi-item-title{font-weight:600;font-size:12px}.emi-item-note{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.emi-dot{flex:none;width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--muted)}.emi-dot.warning{background:var(--copper)}.emi-dot.error{background:var(--emi-warn)}
+.emi-detail-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}.emi-detail h3,.emi-chart h4,.emi-assumptions h4{margin:0 0 4px;font-size:13px}
+.emi-chips{display:flex;gap:4px}.emi-sev{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}.emi-sev.warning{border-color:var(--copper);color:var(--copper)}.emi-sev.error{border-color:var(--emi-warn);color:var(--emi-warn)}
+.emi-message{margin:4px 0 8px;font-size:12px;overflow-wrap:anywhere;color:var(--text)}
+.emi-facts,.emi-caps{border-collapse:collapse;font-size:12px;margin:4px 0 8px;width:100%}.emi-facts th{font-weight:500;color:var(--muted);text-align:left;padding:2px 12px 2px 0;vertical-align:top;white-space:nowrap}.emi-facts td,.emi-caps td,.emi-caps th{padding:2px 8px 2px 0;font-variant-numeric:tabular-nums}.emi-caps th{color:var(--muted);text-align:left;font-weight:500}
+.emi-pads,.emi-note{font-size:11px;color:var(--muted);margin:2px 0 6px;overflow-wrap:anywhere}.emi-note{color:var(--copper)}
+.emi-assumptions{margin:8px 0}.emi-assumptions ul,.emi-chart-assumptions,.emi-folded ul{margin:0;padding-left:18px;font-size:12px}.emi-folded{margin:6px 0;font-size:12px}.emi-folded summary{cursor:pointer;color:var(--muted)}.emi-folded li{margin:2px 0;overflow-wrap:anywhere}
+.emi-actions{display:flex;gap:6px;margin:10px 0 4px}.emi-actions button{padding:4px 10px;font-size:12px}
+.emi-chart .quiet{font-size:11px;margin:0 0 4px}.emi-chart-assumptions{margin-top:6px}
+.emi-svg{width:100%}.emi-spectrum{display:block;width:100%;height:auto;max-height:290px}
+.emi-spectrum .emi-grid{stroke:var(--border);stroke-width:1}.emi-spectrum .emi-grid.major{stroke:var(--quiet)}
+.emi-spectrum .emi-frame{fill:none;stroke:var(--muted)}.emi-spectrum text{fill:var(--muted);font:11px system-ui,sans-serif}.emi-spectrum .emi-axis-label{fill:var(--text);font-size:11px}
+.emi-spectrum .emi-limit{fill:none;stroke-width:2}.emi-spectrum .emi-limit.qp{stroke:var(--emi-limit)}.emi-spectrum .emi-limit.avg{stroke:var(--emi-limit-soft);stroke-dasharray:6 4}
+.emi-spectrum .emi-envelope{fill:none;stroke:var(--emi-level);stroke-opacity:.45}.emi-spectrum .emi-band rect,.emi-spectrum rect.emi-band{fill:var(--emi-band);stroke:var(--emi-level);stroke-opacity:.6}
+.emi-spectrum .emi-harmonic line{stroke:var(--emi-level);stroke-width:1.2}.emi-spectrum .emi-harmonic circle,.emi-spectrum circle.emi-harmonic{fill:var(--emi-level)}
+.emi-spectrum .emi-harmonic.over line{stroke:var(--emi-warn)}.emi-spectrum .emi-harmonic.over circle,.emi-spectrum circle.emi-harmonic.over{fill:var(--emi-warn)}
+.emi-spectrum .emi-worst-ring{fill:none;stroke:var(--text);stroke-width:1.5}
+.emi-spectrum text.emi-worst{fill:var(--text);font-size:12px;paint-order:stroke;stroke:var(--panel);stroke-width:3.5px;stroke-linejoin:round}.emi-spectrum text.emi-worst.head{font-weight:700}
+@media(max-width:1200px){.emi-body{grid-template-columns:minmax(170px,200px) minmax(0,1fr)}.emi-chart{grid-column:1/-1;border-top:1px solid var(--border)}.emi-panel{height:min(520px,60vh)}}
+.emi-open .review-tray{height:64px;min-height:64px;overflow:hidden}
+#emi-toggle.active{background:var(--selected-bg);border-color:var(--copper);color:var(--copper)}
+body[data-mode=assembly] .emi-panel,body[data-mode=assembly] #emi-toggle,body[data-mode=assembly] #show-emi-label{display:none!important}

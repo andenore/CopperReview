@@ -106,6 +106,32 @@ list and `board_verified` (false when the list had no hash, so CopperReview
 could not confirm it belongs to this board). Issue ids are only meaningful for
 that run; a new run renumbers them.
 
+### EMI findings
+
+When a CopperScript run report (`route-report.json`) was opened (**Open → File…** or `--route-report`,
+see [EMI screening review](emi-review.md)), an annotation may cite findings of its `emi` section.
+This extends `copper-review/v2` with optional fields only; readers that ignore them are unaffected:
+
+- `emi_findings`: the cited ids (`E1`, `E2`, …). An id is the finding's 1-based position in that
+  report's `emi.findings`, so it means nothing for another report or a re-run.
+- `context.emi_findings`: one compact brief per cited finding: `id`, `cell`, `code` (`EMI-HOT-LOOP`,
+  `EMI-CONDUCTED`, `EMI-SWITCH-NODE`, `EMI-PROXIMITY`, …), `severity`, `message` (cut at 600
+  characters), `nets`, `objects`, `margin_db` (limit minus level, so positive is under the limit and
+  null when the finding has none), `estimate` (`quantity`, `value`, `unit`, `frequency_hz`, `kind`),
+  `key_measures` (the headline numbers of the finding: loop inductance and area, distance, copper
+  area, worst conducted harmonic), `tags` (assumption tags) and `window_mm`, the board window the
+  overlay frames.
+- A note may cite only findings, with no component, net or region.
+- `copperscript_emi` at the top level (present only when a note cites a finding): `schema`
+  (`copperscript-emi-check/v0.1`), `report_schema`, `file` (the report's file name, no path),
+  `board_name` (the name inside the report), `evidence_grade` (always `screening`), `report_sha256`
+  (of the report file when it was opened from a file) and `board_verified`, always `false`: the report
+  records no board hash, so CopperReview could not confirm it describes this board.
+
+Every cited finding is a **screening estimate**, not a compliance measurement and never a pass or
+fail; treat it as an observation to investigate, like the rest of the note. The full report stays
+with the run; the brief names it so the findings can be looked up there.
+
 Lists are capped (region: 60 components, 120 pads, 160 tracks, 100 vias, 40
 zones, 40 drawings; 40 zones per net). A capped list keeps its first items in
 scene order and `truncated` gives its full count; select a smaller region or

@@ -5,6 +5,7 @@
 #   make serve PROJECT=../board ENTRY=boards/main/board.copper
 #   make serve IR=build/electrical.ir.json      open a compiled electrical IR
 #   make serve BOARD=build/placed.kicad_pcb     open a PCB
+#   make serve BOARD=run/board.kicad_pcb REPORT=run/route-report.json   a PCB with its EMI screening layer
 #   make serve PROJECT=../board HOST=0.0.0.0    also reachable from other machines (plain HTTP)
 #   make test                                   Python and Node tests
 #
@@ -14,6 +15,7 @@ PROJECT ?=
 ENTRY ?=
 IR ?=
 BOARD ?=
+REPORT ?=
 STAGE ?= unknown
 HOST ?= 0.0.0.0
 PORT ?= 8769
@@ -21,7 +23,7 @@ OPEN ?= yes
 
 WASM := copper_review/web/wasm/manifest.json
 SERVE_ARGS := $(if $(PROJECT),--project "$(PROJECT)") $(if $(ENTRY),--entry "$(ENTRY)") \
-	$(if $(IR),--electrical-ir "$(IR)") $(if $(BOARD),"$(BOARD)" --stage $(STAGE)) \
+	$(if $(IR),--electrical-ir "$(IR)") $(if $(BOARD),"$(BOARD)" --stage $(STAGE)) $(if $(and $(BOARD),$(REPORT)),--route-report "$(REPORT)") \
 	--host $(HOST) --port $(PORT) $(if $(filter yes,$(OPEN)),,--no-browser)
 
 .DEFAULT_GOAL := help

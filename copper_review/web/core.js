@@ -195,15 +195,17 @@ export function snapshotSelection(scene,selection,layers) {
 }
 export function makeAnnotation(scene,selection,layers,fields,id=randomId()) {
   if(!fields.observation.trim()) throw new Error('Write an observation before saving.');
-  const cited=fields.issues || [];
-  if(!selection.components.length && !selection.nets.length && !selection.region && !fields.boardWide && !cited.length)
-    throw new Error('Select a component, net, region, cite an issue, or enable a board-wide note.');
+  const cited=fields.issues || [],emi=fields.emi || [];
+  if(!selection.components.length && !selection.nets.length && !selection.region && !fields.boardWide && !cited.length && !emi.length)
+    throw new Error('Select a component, net, region, cite an issue or EMI finding, or enable a board-wide note.');
   const context=snapshotSelection(scene,selection,layers);
   if(cited.length)context.issues=cited.map(issueBrief);
+  // Cited EMI screening findings (route-report.json `emi`): ids plus compact briefs, like cited issues.
+  if(emi.length)context.emi_findings=clone(emi);
   return {id,created_at:new Date().toISOString(),category:fields.category,priority:fields.priority,
     status:fields.status || 'open',observation:fields.observation.trim(),desired_behavior:fields.desired_behavior.trim(),
     board_wide:!!fields.boardWide,selection:clone(selection),visible_layers:[...layers],
-    ...(cited.length?{issues:cited.map(i=>i.id)}:{}),context};
+    ...(cited.length?{issues:cited.map(i=>i.id)}:{}),...(emi.length?{emi_findings:emi.map(e=>e.id)}:{}),context};
 }
 // CopperScript `copper issues RUN --json` documents, shown as framed windows.
 export const ISSUES_SCHEMA = 'copperscript.run-issues/v1';
@@ -235,7 +237,7 @@ export function validateIssues(doc,scene) {
     board_verified:hashes.length>0,omitted:Number.isInteger(doc.omitted)?doc.omitted:0},
     issues:doc.issues.map(issueBrief)};
 }
-export function makeReview(scene,annotations,stage,summary,issueSource=null) {
+export function makeReview(scene,annotations,stage,summary,issueSource=null,emiSource=null) {
   return {schema:REVIEW_SCHEMA,tool:{name:'CopperReview',version:TOOL_VERSION},exported_at:new Date().toISOString(),
     board:{...clone(scene.board),stage,stage_evidence:'reviewer-declared; not connectivity validation'},
     summary:summary.trim(),geometry_counts:{components:scene.components.length,nets:scene.nets.length,
@@ -243,6 +245,7 @@ export function makeReview(scene,annotations,stage,summary,issueSource=null) {
     inspection_limits:[...scene.warnings,'Net guides show logical membership, not measured open connections.',
       'Annotations are human observations and requests, not validated solver constraints or DRC results.'],
     ...(issueSource && annotations.some(a=>a.issues?.length)?{copperscript_issues:clone(issueSource)}:{}),
+    ...(emiSource && annotations.some(a=>a.emi_findings?.length)?{copperscript_emi:clone(emiSource)}:{}),
     annotations:clone(annotations)};
 }
 export function validateScene(scene) {
@@ -324,7 +327,8 @@ export function validateReview(review,scene) {
     if(ids.has(a.id) || !['placement','routing','package_escape','return_path','mechanical','algorithm','other'].includes(a.category) ||
        !['low','medium','high'].includes(a.priority) || !['open','resolved'].includes(a.status) ||
        typeof a.board_wide!=='boolean' || a.visible_layers.some(l=>!scene.board.layers.includes(l)) ||
-       (a.issues!==undefined && !(Array.isArray(a.issues) && a.issues.every(s=>typeof s==='string')))) throw new Error('Invalid review annotation fields.');
+       (a.issues!==undefined && !(Array.isArray(a.issues) && a.issues.every(s=>typeof s==='string'))) ||
+       (a.emi_findings!==undefined && !(Array.isArray(a.emi_findings) && a.emi_findings.every(s=>typeof s==='string')))) throw new Error('Invalid review annotation fields.');
     ids.add(a.id);
     // Older imports named a blank or repeated reference by its native text; map it to the
     // renamed component when exactly one component carries that native reference.
@@ -346,5 +350,6 @@ export function validateReview(review,scene) {
 export function refreshContexts(scene,annotations) {
   // Cited CopperScript issues are not part of the scene: keep their saved summaries.
   return annotations.map(a=>{const context=snapshotSelection(scene,a.selection,a.visible_layers);
-    if(a.context?.issues)context.issues=clone(a.context.issues);return {...clone(a),context};});
+    if(a.context?.issues)context.issues=clone(a.context.issues);
+    if(a.context?.emi_findings)context.emi_findings=clone(a.context.emi_findings);return {...clone(a),context};});
 }
