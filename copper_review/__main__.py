@@ -146,7 +146,31 @@ def board_asset(root, name):
         return None
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None):
+def load_route_report(path):
+    """The `emi` section of a CopperScript run report (route-report.json), with the file's name and SHA-256.
+
+    Only the section travels to the page (never the rest of the report, which can hold local paths).
+    A report without the section is allowed: the page then says so. Raises ValueError for other files.
+    """
+    path = Path(path)
+    if path.stat().st_size > MAX_UPLOAD:
+        raise ValueError("Run report exceeds 50 MiB")
+    data = path.read_bytes()
+    try:
+        report = json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path.name} is not valid JSON: {exc}") from exc
+    schema = report.get("schema") if isinstance(report, dict) else None
+    if not isinstance(schema, str) or not schema.startswith(("copperscript-route-board/", "copperscript-emi-check/")):
+        raise ValueError(f"{path.name} is not a CopperScript run report (route-report.json)")
+    served = {"schema": schema, "file": path.name, "sha256": hashlib.sha256(data).hexdigest()}
+    section = report if schema.startswith("copperscript-emi-check/") else report.get("emi")
+    if isinstance(section, dict):
+        served["emi"] = section
+    return served
+
+
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, route_report=None):
     project = Path(project).resolve() if project else None
 
     class Handler(BaseHTTPRequestHandler):
@@ -186,6 +210,9 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                 return
             if path == "/api/scene":
                 self.send(200, type(self).scene)
+                return
+            if path == "/api/route-report":
+                self.send(200, route_report)
                 return
             if path == "/api/project":
                 if not project:
@@ -269,6 +296,7 @@ def main():
     parser.add_argument("--electrical-ir", type=Path, help="CopperScript compiled electrical IR JSON (no PCB required)")
     parser.add_argument("--stage", choices=STAGES, default="unknown", help="Declared review stage, not a verified routing status")
     parser.add_argument("--source", type=Path, help="Optional .copper source whose filename and hash accompany the board")
+    parser.add_argument("--route-report", type=Path, help="CopperScript run report (route-report.json) whose `emi` section is shown as an EMI screening layer on the board (screening estimates, not compliance)")
     parser.add_argument("--project", type=Path, help="CopperScript project folder; the browser compiles it on every page load")
     parser.add_argument("--entry", help="Board source inside --project when the folder has several (e.g. boards/main/board.copper)")
     parser.add_argument("--host", default="127.0.0.1", help="Address to listen on; 0.0.0.0 serves other machines on your network (plain HTTP)")
@@ -285,6 +313,14 @@ def main():
             parser.error("Choose --project or --electrical-ir, not both")
         if args.project and args.board and args.board.suffix.lower() == ".json":
             parser.error("With --project, the board must be a .kicad_pcb export")
+        if args.route_report and not args.board:
+            parser.error("--route-report needs a board")
+        route_report = None
+        if args.route_report:
+            try:
+                route_report = load_route_report(args.route_report)
+            except ValueError as exc:
+                parser.error(str(exc))
         if args.entry and not args.project:
             parser.error("--entry needs --project")
         if args.project:
@@ -313,7 +349,7 @@ def main():
         public = args.host not in ("127.0.0.1", "localhost")
         entry = args.entry.replace("\\", "/") if args.entry else None
         server = ThreadingHTTPServer((args.host, args.port), make_handler(
-            scene, token, args.project, entry, public=public,
+            scene, token, args.project, entry, public=public, route_report=route_report,
             board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"

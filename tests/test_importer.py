@@ -213,6 +213,12 @@ class ImportTests(unittest.TestCase):
         expected = json.loads((ROOT / "examples/demo.scene.json").read_text(encoding="utf-8"))
         self.assertEqual(import_pcb(DEMO, "demo.kicad_pcb", stage="partially_routed"), expected)
 
+    def test_emi_example_scene_is_what_the_importer_produces(self):
+        import json
+        board = (ROOT / "examples/emi-buck.kicad_pcb").read_bytes()
+        expected = json.loads((ROOT / "examples/emi-buck.scene.json").read_text(encoding="utf-8"))
+        self.assertEqual(import_pcb(board, "emi-buck.kicad_pcb", stage="fully_routed"), expected)
+
     def test_example_review_matches_the_published_schema(self):
         try:
             import jsonschema
@@ -223,6 +229,9 @@ class ImportTests(unittest.TestCase):
         review = json.loads((ROOT / "examples/demo.review.json").read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker()).validate(review)
         self.assertEqual(review["board"]["sha256"], hashlib.sha256(DEMO).hexdigest())
+        emi_review = json.loads((ROOT / "examples/emi-buck.review.json").read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker()).validate(emi_review)
+        self.assertEqual(emi_review["board"]["sha256"], hashlib.sha256((ROOT / "examples/emi-buck.kicad_pcb").read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

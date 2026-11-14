@@ -1,0 +1,4497 @@
+{
+  "schema": "copper-review-scene/v1",
+  "board": {
+    "name": "emi-buck",
+    "filename": "emi-buck.kicad_pcb",
+    "sha256": "1340e54a438855f1d1477261da52c8207e9e2bab0b1aae6b904c6ff0669ca37f",
+    "stage": "fully_routed",
+    "stage_evidence": "reviewer-declared; not connectivity validation",
+    "source": null,
+    "bounds_mm": [
+      0.0,
+      0.0,
+      100.0,
+      80.0
+    ],
+    "coordinates": {
+      "units": "mm",
+      "origin": "native PCB file origin",
+      "x_axis": "right",
+      "y_axis": "down",
+      "view": "front (back layers are not mirrored)",
+      "positive_rotation": "counterclockwise"
+    },
+    "layers": [
+      "F.Cu",
+      "In1.Cu",
+      "In2.Cu",
+      "B.Cu"
+    ]
+  },
+  "components": [
+    {
+      "id": "8cd438c9-4762-4de0-8e29-ed853de7941d",
+      "reference": "CBOOT",
+      "source_path": "CBOOT",
+      "value": "100 nF",
+      "footprint": "CopperScript:C_0402_319a789b69__58f2677de6bb3c9b0893",
+      "position_mm": [
+        24.0,
+        25.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "e78d9390-e243-4bcd-b104-6cd087629c11",
+          "number": "1",
+          "net": "BOOT",
+          "pin_name": "",
+          "position_mm": [
+            23.0,
+            25.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "01117235-25d7-44e1-9e10-8bfd1aac6503",
+          "number": "2",
+          "net": "SW",
+          "pin_name": "",
+          "position_mm": [
+            25.0,
+            25.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              23.2,
+              24.6
+            ],
+            [
+              24.8,
+              24.6
+            ],
+            [
+              24.8,
+              25.4
+            ],
+            [
+              23.2,
+              25.4
+            ],
+            [
+              23.2,
+              24.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/C_0402_319a789b69__58f2677de6bb3c9b0893.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/C_0402_319a789b69__58f2677de6bb3c9b0893.wrl",
+      "body_input": {
+        "name": "CopperScript:C_0402_319a789b69__58f2677de6bb3c9b0893",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        22.5,
+        24.5,
+        25.5,
+        25.5
+      ]
+    },
+    {
+      "id": "75f62104-13e6-4a98-a06f-03739786deba",
+      "reference": "CIN",
+      "source_path": "CIN",
+      "value": "10 uF",
+      "footprint": "CopperScript:C_0805_c031770aba__1ec4d6ade0683a1ceece",
+      "position_mm": [
+        24.5,
+        29.0
+      ],
+      "rotation_deg": 180.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "ec94b9e4-90c6-4be1-9346-fd23094f85f2",
+          "number": "1",
+          "net": "VIN",
+          "pin_name": "",
+          "position_mm": [
+            25.5,
+            29.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 180.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "369ae53a-aa6b-47ca-bbbf-31fec2ec697f",
+          "number": "2",
+          "net": "GND",
+          "pin_name": "",
+          "position_mm": [
+            23.5,
+            29.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 180.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              25.3,
+              29.4
+            ],
+            [
+              23.7,
+              29.4
+            ],
+            [
+              23.7,
+              28.6
+            ],
+            [
+              25.3,
+              28.6
+            ],
+            [
+              25.3,
+              29.4
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/C_0805_c031770aba__1ec4d6ade0683a1ceece.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/C_0805_c031770aba__1ec4d6ade0683a1ceece.wrl",
+      "body_input": {
+        "name": "CopperScript:C_0805_c031770aba__1ec4d6ade0683a1ceece",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        23.0,
+        28.5,
+        26.0,
+        29.5
+      ]
+    },
+    {
+      "id": "d82afed3-1711-4de5-918a-ba2df9d487b8",
+      "reference": "COUT",
+      "source_path": "COUT",
+      "value": "22 uF",
+      "footprint": "CopperScript:C_0805_c031770aba__1ec4d6ade0683a1ceece",
+      "position_mm": [
+        36.0,
+        38.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "dc102c39-cd2b-4cb1-b97f-cd67d781d9a7",
+          "number": "1",
+          "net": "VOUT",
+          "pin_name": "",
+          "position_mm": [
+            35.0,
+            38.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "23e469c2-2c6d-48a6-92b4-12076ea8f2cd",
+          "number": "2",
+          "net": "GND",
+          "pin_name": "",
+          "position_mm": [
+            37.0,
+            38.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              35.2,
+              37.6
+            ],
+            [
+              36.8,
+              37.6
+            ],
+            [
+              36.8,
+              38.4
+            ],
+            [
+              35.2,
+              38.4
+            ],
+            [
+              35.2,
+              37.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/C_0805_c031770aba__1ec4d6ade0683a1ceece.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/C_0805_c031770aba__1ec4d6ade0683a1ceece.wrl",
+      "body_input": {
+        "name": "CopperScript:C_0805_c031770aba__1ec4d6ade0683a1ceece",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        34.5,
+        37.5,
+        37.5,
+        38.5
+      ]
+    },
+    {
+      "id": "24a430d2-d371-4541-9402-d16003ea51c7",
+      "reference": "D1",
+      "source_path": "D1",
+      "value": "Diode",
+      "footprint": "CopperScript:SOD_123_463054056f__f90e3be13c9360126425",
+      "position_mm": [
+        24.0,
+        34.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "5acf38d6-8a92-48b8-b168-1fc14eb53bb5",
+          "number": "1",
+          "net": "GND",
+          "pin_name": "",
+          "position_mm": [
+            23.0,
+            34.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "87914803-ea5f-4c7f-be35-ab12569866ab",
+          "number": "2",
+          "net": "SW",
+          "pin_name": "",
+          "position_mm": [
+            25.0,
+            34.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              23.2,
+              33.6
+            ],
+            [
+              24.8,
+              33.6
+            ],
+            [
+              24.8,
+              34.4
+            ],
+            [
+              23.2,
+              34.4
+            ],
+            [
+              23.2,
+              33.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/SOD_123_463054056f__f90e3be13c9360126425.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/SOD_123_463054056f__f90e3be13c9360126425.wrl",
+      "body_input": {
+        "name": "CopperScript:SOD_123_463054056f__f90e3be13c9360126425",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        22.5,
+        33.5,
+        25.5,
+        34.5
+      ]
+    },
+    {
+      "id": "a2a191ff-15bc-4fdd-a6f7-ad7db346a668",
+      "reference": "J1",
+      "source_path": "J1",
+      "value": "Conn",
+      "footprint": "CopperScript:PinHeader_1x02_2a7c6393d3__3d_ae730b169e22__7bf14a1eef909aa7235b",
+      "position_mm": [
+        70.0,
+        30.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "1ad310e4-2388-4d0d-8346-bd5c1728e0e6",
+          "number": "1",
+          "net": "VOUT",
+          "pin_name": "",
+          "position_mm": [
+            69.0,
+            30.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "203368e3-1b9c-4042-8156-a18489d25c9c",
+          "number": "2",
+          "net": "GND",
+          "pin_name": "",
+          "position_mm": [
+            71.0,
+            30.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              69.2,
+              29.6
+            ],
+            [
+              70.8,
+              29.6
+            ],
+            [
+              70.8,
+              30.4
+            ],
+            [
+              69.2,
+              30.4
+            ],
+            [
+              69.2,
+              29.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/PinHeader_1x02_2a7c6393d3__3d_ae730b169e22__7bf14a1eef909aa7235b.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/PinHeader_1x02_2a7c6393d3__3d_ae730b169e22__7bf14a1eef909aa7235b.wrl",
+      "body_input": {
+        "name": "CopperScript:PinHeader_1x02_2a7c6393d3__3d_ae730b169e22__7bf14a1eef909aa7235b",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ],
+        "body_kind": "connector"
+      },
+      "bounds_mm": [
+        68.5,
+        29.5,
+        71.5,
+        30.5
+      ]
+    },
+    {
+      "id": "564f0a82-fab2-45bf-ace4-66f7989bc8f2",
+      "reference": "L1",
+      "source_path": "L1",
+      "value": "4.7 uH",
+      "footprint": "CopperScript:L_1210_ae6afbd5a7__c462db8df63e6d82ad8f",
+      "position_mm": [
+        30.0,
+        38.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "b642af5d-b30e-4423-9094-28cca9d63932",
+          "number": "1",
+          "net": "SW",
+          "pin_name": "",
+          "position_mm": [
+            29.0,
+            38.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "08a67d6f-1eb7-47d9-b512-2ca58f3bde3f",
+          "number": "2",
+          "net": "VOUT",
+          "pin_name": "",
+          "position_mm": [
+            31.0,
+            38.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              29.2,
+              37.6
+            ],
+            [
+              30.8,
+              37.6
+            ],
+            [
+              30.8,
+              38.4
+            ],
+            [
+              29.2,
+              38.4
+            ],
+            [
+              29.2,
+              37.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/L_1210_ae6afbd5a7__c462db8df63e6d82ad8f.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/L_1210_ae6afbd5a7__c462db8df63e6d82ad8f.wrl",
+      "body_input": {
+        "name": "CopperScript:L_1210_ae6afbd5a7__c462db8df63e6d82ad8f",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        28.5,
+        37.5,
+        31.5,
+        38.5
+      ]
+    },
+    {
+      "id": "96e70a8b-9c6a-42bf-9874-f4f2a036136a",
+      "reference": "R1",
+      "source_path": "R1",
+      "value": "100 kohm",
+      "footprint": "CopperScript:R_0402_45521d2bcd__488496eda3cd49d8c580",
+      "position_mm": [
+        33.0,
+        40.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "b769614a-0a1a-4600-9082-16bf0f9a43a7",
+          "number": "1",
+          "net": "VOUT",
+          "pin_name": "",
+          "position_mm": [
+            32.0,
+            40.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "ce241e76-c82d-4201-91f3-d5a66b75dca6",
+          "number": "2",
+          "net": "FB",
+          "pin_name": "",
+          "position_mm": [
+            34.0,
+            40.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              32.2,
+              39.6
+            ],
+            [
+              33.8,
+              39.6
+            ],
+            [
+              33.8,
+              40.4
+            ],
+            [
+              32.2,
+              40.4
+            ],
+            [
+              32.2,
+              39.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/R_0402_45521d2bcd__488496eda3cd49d8c580.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/R_0402_45521d2bcd__488496eda3cd49d8c580.wrl",
+      "body_input": {
+        "name": "CopperScript:R_0402_45521d2bcd__488496eda3cd49d8c580",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        31.5,
+        39.5,
+        34.5,
+        40.5
+      ]
+    },
+    {
+      "id": "553964b2-2966-4b94-a053-d0178861fb00",
+      "reference": "R2",
+      "source_path": "R2",
+      "value": "33 kohm",
+      "footprint": "CopperScript:R_0402_45521d2bcd__488496eda3cd49d8c580",
+      "position_mm": [
+        60.0,
+        60.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "becf8586-b4cd-4578-9c95-de897dd31b71",
+          "number": "1",
+          "net": "FB",
+          "pin_name": "",
+          "position_mm": [
+            59.0,
+            60.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "1812e970-7e44-4a78-b806-348168429ad7",
+          "number": "2",
+          "net": "GND",
+          "pin_name": "",
+          "position_mm": [
+            61.0,
+            60.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              59.2,
+              59.6
+            ],
+            [
+              60.8,
+              59.6
+            ],
+            [
+              60.8,
+              60.4
+            ],
+            [
+              59.2,
+              60.4
+            ],
+            [
+              59.2,
+              59.6
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/R_0402_45521d2bcd__488496eda3cd49d8c580.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/R_0402_45521d2bcd__488496eda3cd49d8c580.wrl",
+      "body_input": {
+        "name": "CopperScript:R_0402_45521d2bcd__488496eda3cd49d8c580",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": 1.0,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        58.5,
+        59.5,
+        61.5,
+        60.5
+      ]
+    },
+    {
+      "id": "2afba8e2-3282-40f2-b718-058d6cccdf69",
+      "reference": "U1",
+      "source_path": "U1",
+      "value": "Buck",
+      "footprint": "CopperScript:QFN_5_bccb3b6db4__a0be85da01b5000b1b32",
+      "position_mm": [
+        30.0,
+        30.0
+      ],
+      "rotation_deg": 0.0,
+      "side": "front",
+      "locked": false,
+      "pads": [
+        {
+          "id": "a45969f0-313c-4f87-bc49-7c7972915f9d",
+          "number": "1",
+          "net": "VIN",
+          "pin_name": "",
+          "position_mm": [
+            27.5,
+            28.73
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "a3c0a7ba-1023-46c8-89b1-7b100633a69b",
+          "number": "2",
+          "net": "BOOT",
+          "pin_name": "",
+          "position_mm": [
+            27.5,
+            30.0
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "a390f704-ac3e-4acc-b0e1-3895eb86b0a0",
+          "number": "3",
+          "net": "SW",
+          "pin_name": "",
+          "position_mm": [
+            27.5,
+            31.27
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "e70395dc-ddfe-43b6-9fdb-2affd4f0f704",
+          "number": "4",
+          "net": "FB",
+          "pin_name": "",
+          "position_mm": [
+            32.5,
+            29.365
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        },
+        {
+          "id": "b32a4b95-f5e2-4aca-a6c3-d83532b80361",
+          "number": "5",
+          "net": "GND",
+          "pin_name": "",
+          "position_mm": [
+            32.5,
+            30.635
+          ],
+          "size_mm": [
+            1.0,
+            1.0
+          ],
+          "rotation_deg": 0.0,
+          "shape": "roundrect",
+          "kind": "smd",
+          "layers": [
+            "F.Cu"
+          ],
+          "paste_layers": [
+            "F.Paste"
+          ],
+          "mask_layers": [
+            "F.Mask"
+          ],
+          "drill_mm": [],
+          "roundrect_ratio": 0.25
+        }
+      ],
+      "graphics": [
+        {
+          "points": [
+            [
+              28.0,
+              28.095
+            ],
+            [
+              32.0,
+              28.095
+            ],
+            [
+              32.0,
+              31.905
+            ],
+            [
+              28.0,
+              31.905
+            ],
+            [
+              28.0,
+              28.095
+            ]
+          ],
+          "layer": "F.SilkS",
+          "width_mm": 0.15,
+          "filled": false
+        }
+      ],
+      "models": [
+        {
+          "path": "${KIPRJMOD}/CopperScript.3dshapes/QFN_5_bccb3b6db4__a0be85da01b5000b1b32.wrl",
+          "offset_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            0.39370078740157477,
+            0.39370078740157477,
+            0.39370078740157477
+          ],
+          "rotate_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "body_model": "${KIPRJMOD}/CopperScript.3dshapes/QFN_5_bccb3b6db4__a0be85da01b5000b1b32.wrl",
+      "body_input": {
+        "name": "CopperScript:QFN_5_bccb3b6db4__a0be85da01b5000b1b32",
+        "pads": [
+          {
+            "number": "1",
+            "x_mm": -2.5,
+            "y_mm": -1.27,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "2",
+            "x_mm": -2.5,
+            "y_mm": 0.0,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "3",
+            "x_mm": -2.5,
+            "y_mm": 1.27,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "4",
+            "x_mm": 2.5,
+            "y_mm": -0.635,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          },
+          {
+            "number": "5",
+            "x_mm": 2.5,
+            "y_mm": 0.635,
+            "w_mm": 1.0,
+            "h_mm": 1.0,
+            "rotation_deg": 0.0,
+            "kind": "smd"
+          }
+        ]
+      },
+      "bounds_mm": [
+        27.0,
+        28.095,
+        33.0,
+        31.905
+      ]
+    }
+  ],
+  "nets": [
+    {
+      "name": "BOOT",
+      "pads": [
+        {
+          "component": "CBOOT",
+          "source_path": "CBOOT",
+          "number": "1",
+          "pin_name": "",
+          "id": "e78d9390-e243-4bcd-b104-6cd087629c11",
+          "position_mm": [
+            23.0,
+            25.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U1",
+          "source_path": "U1",
+          "number": "2",
+          "pin_name": "",
+          "id": "a3c0a7ba-1023-46c8-89b1-7b100633a69b",
+          "position_mm": [
+            27.5,
+            30.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "FB",
+      "pads": [
+        {
+          "component": "R1",
+          "source_path": "R1",
+          "number": "2",
+          "pin_name": "",
+          "id": "ce241e76-c82d-4201-91f3-d5a66b75dca6",
+          "position_mm": [
+            34.0,
+            40.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "R2",
+          "source_path": "R2",
+          "number": "1",
+          "pin_name": "",
+          "id": "becf8586-b4cd-4578-9c95-de897dd31b71",
+          "position_mm": [
+            59.0,
+            60.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U1",
+          "source_path": "U1",
+          "number": "4",
+          "pin_name": "",
+          "id": "e70395dc-ddfe-43b6-9fdb-2affd4f0f704",
+          "position_mm": [
+            32.5,
+            29.365
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GND",
+      "pads": [
+        {
+          "component": "CIN",
+          "source_path": "CIN",
+          "number": "2",
+          "pin_name": "",
+          "id": "369ae53a-aa6b-47ca-bbbf-31fec2ec697f",
+          "position_mm": [
+            23.5,
+            29.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "COUT",
+          "source_path": "COUT",
+          "number": "2",
+          "pin_name": "",
+          "id": "23e469c2-2c6d-48a6-92b4-12076ea8f2cd",
+          "position_mm": [
+            37.0,
+            38.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "D1",
+          "source_path": "D1",
+          "number": "1",
+          "pin_name": "",
+          "id": "5acf38d6-8a92-48b8-b168-1fc14eb53bb5",
+          "position_mm": [
+            23.0,
+            34.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "J1",
+          "source_path": "J1",
+          "number": "2",
+          "pin_name": "",
+          "id": "203368e3-1b9c-4042-8156-a18489d25c9c",
+          "position_mm": [
+            71.0,
+            30.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "R2",
+          "source_path": "R2",
+          "number": "2",
+          "pin_name": "",
+          "id": "1812e970-7e44-4a78-b806-348168429ad7",
+          "position_mm": [
+            61.0,
+            60.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U1",
+          "source_path": "U1",
+          "number": "5",
+          "pin_name": "",
+          "id": "b32a4b95-f5e2-4aca-a6c3-d83532b80361",
+          "position_mm": [
+            32.5,
+            30.635
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SW",
+      "pads": [
+        {
+          "component": "CBOOT",
+          "source_path": "CBOOT",
+          "number": "2",
+          "pin_name": "",
+          "id": "01117235-25d7-44e1-9e10-8bfd1aac6503",
+          "position_mm": [
+            25.0,
+            25.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "D1",
+          "source_path": "D1",
+          "number": "2",
+          "pin_name": "",
+          "id": "87914803-ea5f-4c7f-be35-ab12569866ab",
+          "position_mm": [
+            25.0,
+            34.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "L1",
+          "source_path": "L1",
+          "number": "1",
+          "pin_name": "",
+          "id": "b642af5d-b30e-4423-9094-28cca9d63932",
+          "position_mm": [
+            29.0,
+            38.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U1",
+          "source_path": "U1",
+          "number": "3",
+          "pin_name": "",
+          "id": "a390f704-ac3e-4acc-b0e1-3895eb86b0a0",
+          "position_mm": [
+            27.5,
+            31.27
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VIN",
+      "pads": [
+        {
+          "component": "CIN",
+          "source_path": "CIN",
+          "number": "1",
+          "pin_name": "",
+          "id": "ec94b9e4-90c6-4be1-9346-fd23094f85f2",
+          "position_mm": [
+            25.5,
+            29.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "U1",
+          "source_path": "U1",
+          "number": "1",
+          "pin_name": "",
+          "id": "a45969f0-313c-4f87-bc49-7c7972915f9d",
+          "position_mm": [
+            27.5,
+            28.73
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VOUT",
+      "pads": [
+        {
+          "component": "COUT",
+          "source_path": "COUT",
+          "number": "1",
+          "pin_name": "",
+          "id": "dc102c39-cd2b-4cb1-b97f-cd67d781d9a7",
+          "position_mm": [
+            35.0,
+            38.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "J1",
+          "source_path": "J1",
+          "number": "1",
+          "pin_name": "",
+          "id": "1ad310e4-2388-4d0d-8346-bd5c1728e0e6",
+          "position_mm": [
+            69.0,
+            30.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "L1",
+          "source_path": "L1",
+          "number": "2",
+          "pin_name": "",
+          "id": "08a67d6f-1eb7-47d9-b512-2ca58f3bde3f",
+          "position_mm": [
+            31.0,
+            38.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        },
+        {
+          "component": "R1",
+          "source_path": "R1",
+          "number": "1",
+          "pin_name": "",
+          "id": "b769614a-0a1a-4600-9082-16bf0f9a43a7",
+          "position_mm": [
+            32.0,
+            40.0
+          ],
+          "layers": [
+            "F.Cu"
+          ]
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "id": "fb1b3b45-67d0-476c-bf0e-dba423ae6ca6",
+      "net": "VIN",
+      "points_mm": [
+        [
+          27.5,
+          28.73
+        ],
+        [
+          27.23,
+          29.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "c157cead-f1a9-4a5d-ad6f-a008e013fb9a",
+      "net": "VIN",
+      "points_mm": [
+        [
+          27.23,
+          29.0
+        ],
+        [
+          25.5,
+          29.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "d6012883-1ce8-4f1b-aaf1-a3ba6de7dfa9",
+      "net": "GND",
+      "points_mm": [
+        [
+          23.5,
+          29.0
+        ],
+        [
+          22.5,
+          29.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "9d2f6fde-ab18-4b5e-8ddc-c9e4e745aeb2",
+      "net": "GND",
+      "points_mm": [
+        [
+          37.0,
+          38.0
+        ],
+        [
+          38.0,
+          38.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "a0703e42-1f85-43d4-bbde-f0bb4ce427ba",
+      "net": "GND",
+      "points_mm": [
+        [
+          23.0,
+          34.0
+        ],
+        [
+          22.0,
+          34.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "032b5228-4c4d-479f-8e82-05a0c16be0c1",
+      "net": "GND",
+      "points_mm": [
+        [
+          71.0,
+          30.0
+        ],
+        [
+          72.0,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "9e14f1d7-a340-4807-8356-73ceb94bd460",
+      "net": "GND",
+      "points_mm": [
+        [
+          61.0,
+          60.0
+        ],
+        [
+          62.0,
+          60.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "54bbe05a-4b6e-4f57-9c9d-88389e91600b",
+      "net": "GND",
+      "points_mm": [
+        [
+          32.5,
+          30.635
+        ],
+        [
+          33.5,
+          30.635
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "803a133a-4d93-4e25-8240-ab44e0156b78",
+      "net": "SW",
+      "points_mm": [
+        [
+          27.5,
+          31.27
+        ],
+        [
+          26.5,
+          31.27
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "a7c4a6ec-aa6b-420f-ad11-1bb890931c10",
+      "net": "FB",
+      "points_mm": [
+        [
+          32.5,
+          29.365
+        ],
+        [
+          33.5,
+          29.365
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "7777d86b-fdff-4209-b5cc-ae3bb3d839ff",
+      "net": "FB",
+      "points_mm": [
+        [
+          33.5,
+          29.365
+        ],
+        [
+          33.5,
+          29.5
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "B.Cu"
+    },
+    {
+      "id": "6afecaa2-8970-4ba2-9dc8-07bba4991cd8",
+      "net": "FB",
+      "points_mm": [
+        [
+          34.25,
+          39.0
+        ],
+        [
+          34.25,
+          30.25
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "B.Cu"
+    },
+    {
+      "id": "5286022d-1937-4d25-b4f3-b910dbef5fad",
+      "net": "FB",
+      "points_mm": [
+        [
+          34.25,
+          30.25
+        ],
+        [
+          33.5,
+          29.5
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "B.Cu"
+    },
+    {
+      "id": "5f73a46f-46fd-4800-87ec-dfc21bd4e1e6",
+      "net": "FB",
+      "points_mm": [
+        [
+          34.0,
+          40.0
+        ],
+        [
+          34.25,
+          39.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "1d9af621-cd83-407d-9c77-69a1163c7b06",
+      "net": "FB",
+      "points_mm": [
+        [
+          34.25,
+          39.75
+        ],
+        [
+          34.25,
+          39.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "11342d2e-2766-4dc5-82f5-d3f4bfce9d2b",
+      "net": "FB",
+      "points_mm": [
+        [
+          59.0,
+          60.0
+        ],
+        [
+          58.75,
+          60.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "23dfd747-8acc-4e60-a6e4-9516d7b0c853",
+      "net": "FB",
+      "points_mm": [
+        [
+          34.25,
+          39.75
+        ],
+        [
+          38.5,
+          39.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "26238e8f-2eb4-4352-8014-6519a80d1aec",
+      "net": "FB",
+      "points_mm": [
+        [
+          38.5,
+          39.75
+        ],
+        [
+          58.75,
+          60.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "7d080955-0b17-47d7-9df6-aead88290d42",
+      "net": "SW",
+      "points_mm": [
+        [
+          26.5,
+          31.27
+        ],
+        [
+          26.5,
+          31.25
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "B.Cu"
+    },
+    {
+      "id": "4a68c747-f3e2-41d7-8219-b2afec18b58f",
+      "net": "SW",
+      "points_mm": [
+        [
+          25.0,
+          27.75
+        ],
+        [
+          25.0,
+          29.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "B.Cu"
+    },
+    {
+      "id": "a3a6cc81-6646-4aa6-8ac7-cddec9a0d890",
+      "net": "SW",
+      "points_mm": [
+        [
+          25.0,
+          29.75
+        ],
+        [
+          26.5,
+          31.25
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "B.Cu"
+    },
+    {
+      "id": "6efd9cd9-aa09-427f-b6c3-4b958e5a1287",
+      "net": "SW",
+      "points_mm": [
+        [
+          25.0,
+          25.0
+        ],
+        [
+          25.0,
+          25.25
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "3713d5c5-5d40-443c-8af1-0fda1cfc1650",
+      "net": "SW",
+      "points_mm": [
+        [
+          25.0,
+          25.25
+        ],
+        [
+          25.0,
+          27.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "7656a0d3-2aba-4f2d-8ce9-85de70bec73d",
+      "net": "SW",
+      "points_mm": [
+        [
+          26.5,
+          31.27
+        ],
+        [
+          26.5,
+          31.5
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "1349f27b-c1e6-44bf-90cd-2674c19e5e26",
+      "net": "SW",
+      "points_mm": [
+        [
+          25.0,
+          34.0
+        ],
+        [
+          25.0,
+          33.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "3513e81d-b214-4d4e-80b7-da6d8f109fee",
+      "net": "SW",
+      "points_mm": [
+        [
+          26.5,
+          31.5
+        ],
+        [
+          26.5,
+          32.25
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "6ab8412a-d898-4bb2-898e-f009ee80bb97",
+      "net": "SW",
+      "points_mm": [
+        [
+          26.5,
+          32.25
+        ],
+        [
+          25.0,
+          33.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "ceef5bb5-ad94-44e9-b491-f4019f7abd2d",
+      "net": "SW",
+      "points_mm": [
+        [
+          29.0,
+          38.0
+        ],
+        [
+          28.75,
+          37.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "0425d9a0-3e9a-4969-9872-bbb7cc48ae8b",
+      "net": "SW",
+      "points_mm": [
+        [
+          25.0,
+          34.0
+        ],
+        [
+          28.75,
+          37.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "ec262cb0-6249-40dd-9696-ff0496f87003",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          31.0,
+          38.0
+        ],
+        [
+          31.25,
+          38.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "a20d9bd5-c7b5-4dcd-8be5-a1604810e157",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          31.5,
+          37.75
+        ],
+        [
+          31.25,
+          38.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "fb6c6a1a-0aca-4552-bfad-340b1a2def2c",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          32.0,
+          37.75
+        ],
+        [
+          31.5,
+          37.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "c38b724c-44eb-45cb-a07e-49ab44fdd933",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          32.0,
+          37.75
+        ],
+        [
+          32.0,
+          39.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "a532ddf5-8d8f-496f-afbb-e5ef53be7a3f",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          32.0,
+          40.0
+        ],
+        [
+          32.0,
+          39.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "704aadaa-b5d2-4c33-a5d5-ad2dff6408dd",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          32.0,
+          37.75
+        ],
+        [
+          35.5,
+          37.75
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "1e9ba249-b827-4f9a-9c83-bba9ea73e3ef",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          35.5,
+          37.75
+        ],
+        [
+          43.25,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "2e3dced5-0068-4a0f-bc1c-9c79282465e3",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          43.25,
+          30.0
+        ],
+        [
+          68.75,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "8ae37f1a-e9a6-4fc5-9121-74251d319159",
+      "net": "VOUT",
+      "points_mm": [
+        [
+          68.75,
+          30.0
+        ],
+        [
+          69.0,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "010f64f7-b81f-4dcf-a6bb-c28900e6c65c",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          27.5,
+          30.0
+        ],
+        [
+          26.5,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "1c822c9d-31d7-45f8-a969-1414c2a94683",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          23.0,
+          25.0
+        ],
+        [
+          23.0,
+          25.25
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "ab4df135-5940-4ede-954c-60577df8a5d8",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          26.5,
+          30.0
+        ],
+        [
+          26.25,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "dbd7590d-51f1-49d7-91c7-94716bb2ec6e",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          23.0,
+          25.25
+        ],
+        [
+          23.0,
+          27.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "d073485d-2092-466b-bcf0-c9d1e591712f",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          23.0,
+          27.0
+        ],
+        [
+          24.5,
+          28.5
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "952328df-f20f-4e95-b60c-ebed68c2f656",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          24.5,
+          28.5
+        ],
+        [
+          24.5,
+          29.5
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "3bd8f43f-296b-4d05-9f6c-ef6e2395c2e8",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          24.5,
+          29.5
+        ],
+        [
+          25.0,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    },
+    {
+      "id": "596173cb-7eb8-4edf-b91e-22e328a42536",
+      "net": "BOOT",
+      "points_mm": [
+        [
+          25.0,
+          30.0
+        ],
+        [
+          26.25,
+          30.0
+        ]
+      ],
+      "width_mm": 0.25,
+      "layer": "F.Cu"
+    }
+  ],
+  "vias": [
+    {
+      "id": "6336fd45-1664-4219-a9bf-9cb63dd44716",
+      "net": "GND",
+      "position_mm": [
+        22.5,
+        29.0
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "a363feda-82cd-4aa4-ad10-bcd4ef6b658b",
+      "net": "GND",
+      "position_mm": [
+        38.0,
+        38.0
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "89a46797-c0bf-41a1-9f51-286c9a352886",
+      "net": "GND",
+      "position_mm": [
+        22.0,
+        34.0
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "3d77c08b-49f9-4f2e-a72f-81ec1c861314",
+      "net": "GND",
+      "position_mm": [
+        72.0,
+        30.0
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "86b816f7-90bb-4f47-94f6-6ead373ae604",
+      "net": "GND",
+      "position_mm": [
+        62.0,
+        60.0
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "916c5fe8-e105-4ff9-9208-7d4eb10a310a",
+      "net": "GND",
+      "position_mm": [
+        33.5,
+        30.635
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "c8efbdae-72a1-4e88-beb8-f2e5fc0b0d91",
+      "net": "SW",
+      "position_mm": [
+        26.5,
+        31.27
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "d01b0481-d193-499d-a457-01421212652b",
+      "net": "FB",
+      "position_mm": [
+        33.5,
+        29.365
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "18f468a1-769e-43d2-ac5c-29331d1cf892",
+      "net": "FB",
+      "position_mm": [
+        34.25,
+        39.0
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    },
+    {
+      "id": "a779b5f5-8f00-4c75-a8ea-c79c1781bbb7",
+      "net": "SW",
+      "position_mm": [
+        25.0,
+        27.75
+      ],
+      "size_mm": 0.8,
+      "drill_mm": 0.4,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ]
+    }
+  ],
+  "zones": [
+    {
+      "id": "5cad4d05-3bb8-4ffb-b75d-8ffed994b084:0",
+      "net": "GND",
+      "points_mm": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          100.0,
+          0.0
+        ],
+        [
+          100.0,
+          80.0
+        ],
+        [
+          0.0,
+          80.0
+        ]
+      ],
+      "layers": [
+        "In1.Cu"
+      ],
+      "kind": "intent"
+    }
+  ],
+  "drawings": [
+    {
+      "points": [
+        [
+          2.873631,
+          4.563702
+        ],
+        [
+          2.826405,
+          4.562738
+        ],
+        [
+          2.779943,
+          4.559843
+        ],
+        [
+          2.734244,
+          4.555019
+        ],
+        [
+          2.689308,
+          4.548266
+        ],
+        [
+          2.645135,
+          4.539584
+        ],
+        [
+          2.601724,
+          4.528973
+        ],
+        [
+          2.559076,
+          4.516433
+        ],
+        [
+          2.51719,
+          4.501964
+        ],
+        [
+          2.476353,
+          4.485662
+        ],
+        [
+          2.436851,
+          4.467623
+        ],
+        [
+          2.398684,
+          4.447845
+        ],
+        [
+          2.361853,
+          4.42633
+        ],
+        [
+          2.326356,
+          4.403078
+        ],
+        [
+          2.292195,
+          4.378087
+        ],
+        [
+          2.25937,
+          4.351359
+        ],
+        [
+          2.227881,
+          4.322893
+        ],
+        [
+          2.198468,
+          4.293319
+        ],
+        [
+          2.170658,
+          4.262045
+        ],
+        [
+          2.14445,
+          4.22907
+        ],
+        [
+          2.119845,
+          4.194396
+        ],
+        [
+          2.096843,
+          4.158021
+        ],
+        [
+          2.075443,
+          4.119948
+        ],
+        [
+          2.055647,
+          4.080174
+        ],
+        [
+          2.037452,
+          4.038702
+        ],
+        [
+          2.021143,
+          3.995852
+        ],
+        [
+          2.007008,
+          3.951952
+        ],
+        [
+          1.995048,
+          3.907002
+        ],
+        [
+          1.985263,
+          3.861003
+        ],
+        [
+          1.977653,
+          3.813953
+        ],
+        [
+          1.972217,
+          3.765853
+        ],
+        [
+          1.968956,
+          3.716702
+        ],
+        [
+          1.967869,
+          3.6665
+        ],
+        [
+          1.968966,
+          3.616548
+        ],
+        [
+          1.972257,
+          3.567531
+        ],
+        [
+          1.977742,
+          3.51945
+        ],
+        [
+          1.98542,
+          3.472305
+        ],
+        [
+          1.995291,
+          3.426096
+        ],
+        [
+          2.007355,
+          3.380822
+        ],
+        [
+          2.021611,
+          3.336485
+        ],
+        [
+          2.03806,
+          3.293083
+        ],
+        [
+          2.056495,
+          3.250862
+        ],
+        [
+          2.076705,
+          3.210074
+        ],
+        [
+          2.098687,
+          3.170719
+        ],
+        [
+          2.122443,
+          3.132798
+        ],
+        [
+          2.147973,
+          3.096309
+        ],
+        [
+          2.175276,
+          3.061253
+        ],
+        [
+          2.204352,
+          3.02763
+        ],
+        [
+          2.235202,
+          2.99544
+        ],
+        [
+          2.267114,
+          2.965448
+        ],
+        [
+          2.300589,
+          2.937193
+        ],
+        [
+          2.335627,
+          2.910675
+        ],
+        [
+          2.372229,
+          2.885894
+        ],
+        [
+          2.410395,
+          2.862851
+        ],
+        [
+          2.450124,
+          2.841545
+        ],
+        [
+          2.491417,
+          2.821975
+        ],
+        [
+          2.534274,
+          2.804143
+        ],
+        [
+          2.578298,
+          2.788243
+        ],
+        [
+          2.623084,
+          2.774464
+        ],
+        [
+          2.668633,
+          2.762805
+        ],
+        [
+          2.714943,
+          2.753266
+        ],
+        [
+          2.762017,
+          2.745848
+        ],
+        [
+          2.809852,
+          2.740549
+        ],
+        [
+          2.85845,
+          2.737369
+        ],
+        [
+          2.90781,
+          2.73631
+        ],
+        [
+          2.943422,
+          2.736863
+        ],
+        [
+          2.978232,
+          2.738522
+        ],
+        [
+          3.01224,
+          2.741287
+        ],
+        [
+          3.045446,
+          2.745158
+        ],
+        [
+          3.077852,
+          2.750135
+        ],
+        [
+          3.109456,
+          2.756218
+        ],
+        [
+          3.140259,
+          2.763407
+        ],
+        [
+          3.170262,
+          2.771702
+        ],
+        [
+          3.199293,
+          2.780688
+        ],
+        [
+          3.227179,
+          2.789939
+        ],
+        [
+          3.253921,
+          2.799457
+        ],
+        [
+          3.279519,
+          2.809241
+        ],
+        [
+          3.303973,
+          2.819292
+        ],
+        [
+          3.327281,
+          2.82961
+        ],
+        [
+          3.349445,
+          2.840195
+        ],
+        [
+          3.370464,
+          2.851048
+        ],
+        [
+          3.446143,
+          2.783917
+        ],
+        [
+          3.552345,
+          2.783917
+        ],
+        [
+          3.563333,
+          3.416238
+        ],
+        [
+          3.455905,
+          3.416238
+        ],
+        [
+          3.432476,
+          3.346161
+        ],
+        [
+          3.407903,
+          3.280901
+        ],
+        [
+          3.382186,
+          3.220459
+        ],
+        [
+          3.355326,
+          3.164835
+        ],
+        [
+          3.327322,
+          3.114028
+        ],
+        [
+          3.298175,
+          3.068039
+        ],
+        [
+          3.267885,
+          3.026867
+        ],
+        [
+          3.236452,
+          2.990512
+        ],
+        [
+          3.203571,
+          2.958683
+        ],
+        [
+          3.168937,
+          2.931099
+        ],
+        [
+          3.13255,
+          2.907758
+        ],
+        [
+          3.094411,
+          2.888662
+        ],
+        [
+          3.054519,
+          2.87381
+        ],
+        [
+          3.012875,
+          2.863201
+        ],
+        [
+          2.96948,
+          2.856836
+        ],
+        [
+          2.924333,
+          2.854714
+        ],
+        [
+          2.868745,
+          2.857876
+        ],
+        [
+          2.816585,
+          2.867361
+        ],
+        [
+          2.767856,
+          2.88317
+        ],
+        [
+          2.722555,
+          2.905302
+        ],
+        [
+          2.680684,
+          2.933757
+        ],
+        [
+          2.642241,
+          2.968535
+        ],
+        [
+          2.607228,
+          3.009636
+        ],
+        [
+          2.575643,
+          3.05706
+        ],
+        [
+          2.547636,
+          3.110199
+        ],
+        [
+          2.523363,
+          3.168439
+        ],
+        [
+          2.502826,
+          3.231779
+        ],
+        [
+          2.486024,
+          3.300219
+        ],
+        [
+          2.472956,
+          3.373759
+        ],
+        [
+          2.463622,
+          3.452398
+        ],
+        [
+          2.458021,
+          3.536137
+        ],
+        [
+          2.456155,
+          3.624976
+        ],
+        [
+          2.456793,
+          3.675687
+        ],
+        [
+          2.458708,
+          3.724506
+        ],
+        [
+          2.4619,
+          3.771433
+        ],
+        [
+          2.466368,
+          3.81647
+        ],
+        [
+          2.472112,
+          3.859616
+        ],
+        [
+          2.479132,
+          3.900872
+        ],
+        [
+          2.487428,
+          3.940238
+        ],
+        [
+          2.497,
+          3.977714
+        ],
+        [
+          2.507601,
+          4.013353
+        ],
+        [
+          2.518984,
+          4.047214
+        ],
+        [
+          2.531149,
+          4.079299
+        ],
+        [
+          2.544095,
+          4.109607
+        ],
+        [
+          2.557823,
+          4.138138
+        ],
+        [
+          2.572331,
+          4.164893
+        ],
+        [
+          2.587621,
+          4.189871
+        ],
+        [
+          2.60369,
+          4.213071
+        ],
+        [
+          2.62177,
+          4.23553
+        ],
+        [
+          2.64065,
+          4.25644
+        ],
+        [
+          2.660331,
+          4.275802
+        ],
+        [
+          2.680812,
+          4.293616
+        ],
+        [
+          2.702094,
+          4.309882
+        ],
+        [
+          2.724176,
+          4.3246
+        ],
+        [
+          2.747057,
+          4.337771
+        ],
+        [
+          2.770738,
+          4.349393
+        ],
+        [
+          2.795147,
+          4.359567
+        ],
+        [
+          2.820202,
+          4.368384
+        ],
+        [
+          2.845906,
+          4.375844
+        ],
+        [
+          2.872256,
+          4.381948
+        ],
+        [
+          2.899254,
+          4.386695
+        ],
+        [
+          2.926899,
+          4.390085
+        ],
+        [
+          2.955191,
+          4.39212
+        ],
+        [
+          2.984131,
+          4.392798
+        ],
+        [
+          3.02622,
+          4.391348
+        ],
+        [
+          3.067149,
+          4.386999
+        ],
+        [
+          3.106916,
+          4.37975
+        ],
+        [
+          3.145522,
+          4.369603
+        ],
+        [
+          3.182967,
+          4.356556
+        ],
+        [
+          3.219251,
+          4.340611
+        ],
+        [
+          3.254373,
+          4.321767
+        ],
+        [
+          3.288333,
+          4.300024
+        ],
+        [
+          3.321345,
+          4.275344
+        ],
+        [
+          3.353613,
+          4.247687
+        ],
+        [
+          3.385136,
+          4.217055
+        ],
+        [
+          3.415915,
+          4.183446
+        ],
+        [
+          3.445951,
+          4.146863
+        ],
+        [
+          3.475242,
+          4.107304
+        ],
+        [
+          3.503791,
+          4.06477
+        ],
+        [
+          3.531595,
+          4.019262
+        ],
+        [
+          3.636571,
+          4.082738
+        ],
+        [
+          3.623222,
+          4.109242
+        ],
+        [
+          3.609413,
+          4.13504
+        ],
+        [
+          3.595146,
+          4.160131
+        ],
+        [
+          3.580421,
+          4.184516
+        ],
+        [
+          3.565238,
+          4.208196
+        ],
+        [
+          3.549597,
+          4.231169
+        ],
+        [
+          3.533497,
+          4.253437
+        ],
+        [
+          3.51694,
+          4.275
+        ],
+        [
+          3.499834,
+          4.295838
+        ],
+        [
+          3.482079,
+          4.315931
+        ],
+        [
+          3.463674,
+          4.33528
+        ],
+        [
+          3.444621,
+          4.353885
+        ],
+        [
+          3.424918,
+          4.371747
+        ],
+        [
+          3.404566,
+          4.388864
+        ],
+        [
+          3.383566,
+          4.405238
+        ],
+        [
+          3.361917,
+          4.420869
+        ],
+        [
+          3.337491,
+          4.437197
+        ],
+        [
+          3.312437,
+          4.45261
+        ],
+        [
+          3.286754,
+          4.467107
+        ],
+        [
+          3.260442,
+          4.480689
+        ],
+        [
+          3.233501,
+          4.493355
+        ],
+        [
+          3.205932,
+          4.505105
+        ],
+        [
+          3.177733,
+          4.515939
+        ],
+        [
+          3.148905,
+          4.525857
+        ],
+        [
+          3.1191,
+          4.534726
+        ],
+        [
+          3.08798,
+          4.542413
+        ],
+        [
+          3.055545,
+          4.548917
+        ],
+        [
+          3.021795,
+          4.55424
+        ],
+        [
+          2.986728,
+          4.558379
+        ],
+        [
+          2.950346,
+          4.561336
+        ],
+        [
+          2.912647,
+          4.563111
+        ],
+        [
+          2.873631,
+          4.563702
+        ],
+        [
+          2.873631,
+          4.563702
+        ]
+      ],
+      "layer": "F.SilkS",
+      "width_mm": 0.0,
+      "filled": true
+    },
+    {
+      "points": [
+        [
+          5.332131,
+          4.490452
+        ],
+        [
+          4.749857,
+          4.525857
+        ],
+        [
+          4.731548,
+          4.508762
+        ],
+        [
+          4.731548,
+          4.348857
+        ],
+        [
+          4.724238,
+          4.348857
+        ],
+        [
+          4.713905,
+          4.358288
+        ],
+        [
+          4.703629,
+          4.367663
+        ],
+        [
+          4.69341,
+          4.37698
+        ],
+        [
+          4.683249,
+          4.38624
+        ],
+        [
+          4.673144,
+          4.395442
+        ],
+        [
+          4.663098,
+          4.404586
+        ],
+        [
+          4.653109,
+          4.413673
+        ],
+        [
+          4.643179,
+          4.422702
+        ],
+        [
+          4.633035,
+          4.431601
+        ],
+        [
+          4.622415,
+          4.44029
+        ],
+        [
+          4.61132,
+          4.448768
+        ],
+        [
+          4.599749,
+          4.457036
+        ],
+        [
+          4.587701,
+          4.465094
+        ],
+        [
+          4.575178,
+          4.472942
+        ],
+        [
+          4.562178,
+          4.480582
+        ],
+        [
+          4.548702,
+          4.488012
+        ],
+        [
+          4.533267,
+          4.495986
+        ],
+        [
+          4.518041,
+          4.503425
+        ],
+        [
+          4.503025,
+          4.51033
+        ],
+        [
+          4.488219,
+          4.516701
+        ],
+        [
+          4.473621,
+          4.522538
+        ],
+        [
+          4.459233,
+          4.527841
+        ],
+        [
+          4.445054,
+          4.53261
+        ],
+        [
+          4.431083,
+          4.536845
+        ],
+        [
+          4.416427,
+          4.540562
+        ],
+        [
+          4.400188,
+          4.543785
+        ],
+        [
+          4.382369,
+          4.546512
+        ],
+        [
+          4.362969,
+          4.548744
+        ],
+        [
+          4.341987,
+          4.550481
+        ],
+        [
+          4.319425,
+          4.551721
+        ],
+        [
+          4.295283,
+          4.552466
+        ],
+        [
+          4.26956,
+          4.552714
+        ],
+        [
+          4.224889,
+          4.550978
+        ],
+        [
+          4.182903,
+          4.54577
+        ],
+        [
+          4.143603,
+          4.537091
+        ],
+        [
+          4.106988,
+          4.52494
+        ],
+        [
+          4.073058,
+          4.509319
+        ],
+        [
+          4.041814,
+          4.490227
+        ],
+        [
+          4.013255,
+          4.467664
+        ],
+        [
+          3.987381,
+          4.441631
+        ],
+        [
+          3.964383,
+          4.412428
+        ],
+        [
+          3.944452,
+          4.380365
+        ],
+        [
+          3.927588,
+          4.345441
+        ],
+        [
+          3.91379,
+          4.307656
+        ],
+        [
+          3.903059,
+          4.26701
+        ],
+        [
+          3.895394,
+          4.223503
+        ],
+        [
+          3.890795,
+          4.177135
+        ],
+        [
+          3.889262,
+          4.127905
+        ],
+        [
+          3.889262,
+          3.578595
+        ],
+        [
+          3.888977,
+          3.566966
+        ],
+        [
+          3.888124,
+          3.555892
+        ],
+        [
+          3.886701,
+          3.545371
+        ],
+        [
+          3.88471,
+          3.535405
+        ],
+        [
+          3.88215,
+          3.525992
+        ],
+        [
+          3.879021,
+          3.517132
+        ],
+        [
+          3.875325,
+          3.508825
+        ],
+        [
+          3.87106,
+          3.501071
+        ],
+        [
+          3.866321,
+          3.493699
+        ],
+        [
+          3.861202,
+          3.486538
+        ],
+        [
+          3.855705,
+          3.479586
+        ],
+        [
+          3.849827,
+          3.472845
+        ],
+        [
+          3.843571,
+          3.466314
+        ],
+        [
+          3.836935,
+          3.459992
+        ],
+        [
+          3.829919,
+          3.45388
+        ],
+        [
+          3.822524,
+          3.447976
+        ],
+        [
+          3.81623,
+          3.443559
+        ],
+        [
+          3.809481,
+          3.439467
+        ],
+        [
+          3.802278,
+          3.4357
+        ],
+        [
+          3.794621,
+          3.432257
+        ],
+        [
+          3.786508,
+          3.429139
+        ],
+        [
+          3.777941,
+          3.426345
+        ],
+        [
+          3.768918,
+          3.423874
+        ],
+        [
+          3.75944,
+          3.421726
+        ],
+        [
+          3.749845,
+          3.419829
+        ],
+        [
+          3.740478,
+          3.418104
+        ],
+        [
+          3.731339,
+          3.416549
+        ],
+        [
+          3.722429,
+          3.415167
+        ],
+        [
+          3.713745,
+          3.413956
+        ],
+        [
+          3.70529,
+          3.412917
+        ],
+        [
+          3.697061,
+          3.412051
+        ],
+        [
+          3.68906,
+          3.411357
+        ],
+        [
+          3.68906,
+          3.322238
+        ],
+        [
+          4.278714,
+          3.2905
+        ],
+        [
+          4.292095,
+          3.30881
+        ],
+        [
+          4.292095,
+          4.120583
+        ],
+        [
+          4.292849,
+          4.150986
+        ],
+        [
+          4.295109,
+          4.179329
+        ],
+        [
+          4.298875,
+          4.205612
+        ],
+        [
+          4.304149,
+          4.229835
+        ],
+        [
+          4.310929,
+          4.251998
+        ],
+        [
+          4.319216,
+          4.272102
+        ],
+        [
+          4.329009,
+          4.290146
+        ],
+        [
+          4.34031,
+          4.306131
+        ],
+        [
+          4.352926,
+          4.320148
+        ],
+        [
+          4.366669,
+          4.332296
+        ],
+        [
+          4.381537,
+          4.342576
+        ],
+        [
+          4.39753,
+          4.350987
+        ],
+        [
+          4.414648,
+          4.357529
+        ],
+        [
+          4.432891,
+          4.362202
+        ],
+        [
+          4.452258,
+          4.365006
+        ],
+        [
+          4.47275,
+          4.36594
+        ],
+        [
+          4.494143,
+          4.365235
+        ],
+        [
+          4.514982,
+          4.363119
+        ],
+        [
+          4.535268,
+          4.359591
+        ],
+        [
+          4.555,
+          4.354652
+        ],
+        [
+          4.574179,
+          4.348301
+        ],
+        [
+          4.592804,
+          4.340538
+        ],
+        [
+          4.610875,
+          4.331362
+        ],
+        [
+          4.628393,
+          4.320774
+        ],
+        [
+          4.645052,
+          4.309388
+        ],
+        [
+          4.660549,
+          4.297812
+        ],
+        [
+          4.674883,
+          4.286044
+        ],
+        [
+          4.688054,
+          4.274086
+        ],
+        [
+          4.700061,
+          4.261937
+        ],
+        [
+          4.710906,
+          4.249597
+        ],
+        [
+          4.720588,
+          4.237067
+        ],
+        [
+          4.729107,
+          4.224345
+        ],
+        [
+          4.729107,
+          3.566381
+        ],
+        [
+          4.728859,
+          3.556139
+        ],
+        [
+          4.728114,
+          3.546164
+        ],
+        [
+          4.726873,
+          3.536456
+        ],
+        [
+          4.725137,
+          3.527015
+        ],
+        [
+          4.722905,
+          3.51784
+        ],
+        [
+          4.720177,
+          3.508932
+        ],
+        [
+          4.716955,
+          3.500291
+        ],
+        [
+          4.713238,
+          3.491917
+        ],
+        [
+          4.709041,
+          3.48387
+        ],
+        [
+          4.704385,
+          3.476205
+        ],
+        [
+          4.699273,
+          3.46892
+        ],
+        [
+          4.693702,
+          3.462016
+        ],
+        [
+          4.687674,
+          3.455494
+        ],
+        [
+          4.681189,
+          3.449352
+        ],
+        [
+          4.674246,
+          3.443593
+        ],
+        [
+          4.666845,
+          3.438214
+        ],
+        [
+          4.661058,
+          3.434702
+        ],
+        [
+          4.654678,
+          3.431496
+        ],
+        [
+          4.647706,
+          3.428595
+        ],
+        [
+          4.640143,
+          3.426
+        ],
+        [
+          4.631988,
+          3.423711
+        ],
+        [
+          4.623241,
+          3.421728
+        ],
+        [
+          4.613904,
+          3.42005
+        ],
+        [
+          4.603976,
+          3.418679
+        ],
+        [
+          4.593724,
+          3.417494
+        ],
+        [
+          4.583416,
+          3.416386
+        ],
+        [
+          4.57305,
+          3.415355
+        ],
+        [
+          4.562626,
+          3.414402
+        ],
+        [
+          4.552146,
+          3.413525
+        ],
+        [
+          4.541607,
+          3.412725
+        ],
+        [
+          4.531011,
+          3.412003
+        ],
+        [
+          4.520357,
+          3.411357
+        ],
+        [
+          4.520357,
+          3.322238
+        ],
+        [
+          5.113583,
+          3.2905
+        ],
+        [
+          5.131929,
+          3.30881
+        ],
+        [
+          5.131929,
+          4.251202
+        ],
+        [
+          5.132194,
+          4.261681
+        ],
+        [
+          5.132991,
+          4.27176
+        ],
+        [
+          5.134319,
+          4.281439
+        ],
+        [
+          5.136177,
+          4.290719
+        ],
+        [
+          5.138566,
+          4.299598
+        ],
+        [
+          5.141486,
+          4.308077
+        ],
+        [
+          5.144936,
+          4.316155
+        ],
+        [
+          5.148917,
+          4.323833
+        ],
+        [
+          5.153409,
+          4.331164
+        ],
+        [
+          5.158394,
+          4.33821
+        ],
+        [
+          5.163873,
+          4.344971
+        ],
+        [
+          5.169845,
+          4.351446
+        ],
+        [
+          5.176311,
+          4.357636
+        ],
+        [
+          5.183269,
+          4.36354
+        ],
+        [
+          5.190721,
+          4.369157
+        ],
+        [
+          5.198667,
+          4.374488
+        ],
+        [
+          5.204648,
+          4.378006
+        ],
+        [
+          5.211064,
+          4.381238
+        ],
+        [
+          5.217917,
+          4.384185
+        ],
+        [
+          5.225205,
+          4.386845
+        ],
+        [
+          5.23293,
+          4.38922
+        ],
+        [
+          5.241092,
+          4.39131
+        ],
+        [
+          5.24969,
+          4.393113
+        ],
+        [
+          5.258726,
+          4.394631
+        ],
+        [
+          5.267971,
+          4.395935
+        ],
+        [
+          5.277195,
+          4.397106
+        ],
+        [
+          5.2864,
+          4.398145
+        ],
+        [
+          5.295585,
+          4.399051
+        ],
+        [
+          5.30475,
+          4.399823
+        ],
+        [
+          5.313896,
+          4.400464
+        ],
+        [
+          5.323023,
+          4.400971
+        ],
+        [
+          5.332131,
+          4.401345
+        ],
+        [
+          5.332131,
+          4.490452
+        ]
+      ],
+      "layer": "F.SilkS",
+      "width_mm": 0.0,
+      "filled": true
+    },
+    {
+      "points": [
+        [
+          1.507143,
+          1.209524
+        ],
+        [
+          5.792857,
+          1.209524
+        ],
+        [
+          6.090476,
+          1.507143
+        ],
+        [
+          6.090476,
+          5.792857
+        ],
+        [
+          5.792857,
+          6.090476
+        ],
+        [
+          1.507143,
+          6.090476
+        ],
+        [
+          1.209524,
+          5.792857
+        ],
+        [
+          1.209524,
+          1.507143
+        ],
+        [
+          1.507143,
+          1.209524
+        ]
+      ],
+      "layer": "F.SilkS",
+      "width_mm": 0.15,
+      "filled": false
+    },
+    {
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          100.0,
+          0.0
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.05,
+      "filled": false
+    },
+    {
+      "points": [
+        [
+          100.0,
+          0.0
+        ],
+        [
+          100.0,
+          80.0
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.05,
+      "filled": false
+    },
+    {
+      "points": [
+        [
+          100.0,
+          80.0
+        ],
+        [
+          0.0,
+          80.0
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.05,
+      "filled": false
+    },
+    {
+      "points": [
+        [
+          0.0,
+          80.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "layer": "Edge.Cuts",
+      "width_mm": 0.05,
+      "filled": false
+    }
+  ],
+  "texts": [
+    {
+      "text": "29",
+      "position_mm": [
+        2.102381,
+        2.102381
+      ],
+      "rotation_deg": 0.0,
+      "size_mm": [
+        0.8,
+        0.8
+      ],
+      "thickness_mm": 0.1,
+      "bold": false,
+      "layer": "F.SilkS",
+      "justify": [],
+      "mirror": false
+    },
+    {
+      "text": "CopperScript",
+      "position_mm": [
+        13.411905,
+        3.054762
+      ],
+      "rotation_deg": 0.0,
+      "size_mm": [
+        1.0,
+        1.0
+      ],
+      "thickness_mm": 0.15,
+      "bold": false,
+      "layer": "F.SilkS",
+      "justify": [],
+      "mirror": false
+    },
+    {
+      "text": "v0.1.0",
+      "position_mm": [
+        13.411905,
+        4.483333
+      ],
+      "rotation_deg": 0.0,
+      "size_mm": [
+        1.0,
+        1.0
+      ],
+      "thickness_mm": 0.15,
+      "bold": false,
+      "layer": "F.SilkS",
+      "justify": [],
+      "mirror": false
+    }
+  ],
+  "warnings": [
+    "Curves are sampled to a maximum 0.01 mm chord error for display and region queries."
+  ]
+}
