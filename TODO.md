@@ -63,3 +63,16 @@ and the Infineon FX10 kit board `fx10-dvk.kicad_pcb` (KiCad 10, 19 MB).
   159 parts) they overlap into an unreadable mass.
 - [x] Load CopperScript run issues (`copperscript.run-issues/v1` from
   `copper issues RUN --json`) as markers, and let annotations cite issue ids.
+
+## Open items
+
+- EMI layer (docs/emi-review.md): `tests/emi-browser.mjs` is written but was not run where it was
+  made (no Playwright installed); the same steps were driven with headless Chrome over the DevTools
+  protocol. `docs/review.schema.json` gained the EMI fields, but `jsonschema` was not installed there,
+  so `examples/emi-buck.review.json` is checked by the Node tests, not against the schema.
+- EMI layer: the report records no board hash, so a report can only be matched to a board by the
+  part references it names. Ask CopperScript to write the board's SHA-256 into the `emi` section.
+- EMI layer: a proximity finding stores no pad positions (only a message naming the pads), so the
+  victim line is found by searching the board for the closest source and victim pads; the report's own
+  distance may be measured differently. A stored pad pair would make the line exact.
+- EMI layer: no z-to-layer table, so a dashed hot-loop leg cannot be named by layer or hidden with it.

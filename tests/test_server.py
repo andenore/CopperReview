@@ -180,3 +180,66 @@ class BoardAssetTests(unittest.TestCase):
             (root / "Board.3dshapes" / "b.STP").write_bytes(b"stp")
             self.assertEqual(board_asset(root, "Board.3dshapes/b.STP"), b"stp")
             self.assertIsNone(board_asset(None, "Board.3dshapes/a.wrl"))
+
+
+class RouteReportTests(unittest.TestCase):
+    """`--route-report`: only the `emi` section of a run report travels to the page."""
+
+    def report(self, directory, **changes):
+        report = json.loads((Path(__file__).parent.parent / "examples" / "emi-buck.route-report.json").read_text(encoding="utf-8"))
+        report["summary"] = {"report_path": "/home/someone/run/route-report.json"}
+        report.update(changes)
+        path = Path(directory) / "route-report.json"
+        path.write_text(json.dumps(report), encoding="utf-8")
+        return path
+
+    def test_the_section_is_served_with_the_file_name_and_hash_but_nothing_else_of_the_report(self):
+        import tempfile
+        from copper_review.__main__ import load_route_report
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.report(directory)
+            served = load_route_report(path)
+            self.assertEqual(sorted(served), ["emi", "file", "schema", "sha256"])
+            self.assertEqual(served["file"], "route-report.json")
+            self.assertEqual(served["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertEqual(served["emi"]["schema"], "copperscript-emi-check/v0.1")
+            self.assertNotIn("someone", json.dumps(served))
+            server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "test-token", route_report=served))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                url = f"http://127.0.0.1:{server.server_port}/api/route-report"
+                with urlopen(Request(url, headers={"X-Copper-Token": "test-token"})) as response:
+                    body = json.load(response)
+                self.assertEqual(len(body["emi"]["findings"]), 5)
+                with self.assertRaises(HTTPError) as ctx:
+                    urlopen(url)
+                self.assertEqual(ctx.exception.code, 403)
+            finally:
+                server.shutdown(); server.server_close(); thread.join()
+
+    def test_a_report_without_the_section_is_served_without_it_and_other_json_is_refused(self):
+        import tempfile
+        from copper_review.__main__ import load_route_report
+        with tempfile.TemporaryDirectory() as directory:
+            bare = self.report(directory)
+            data = json.loads(bare.read_text(encoding="utf-8")); del data["emi"]; bare.write_text(json.dumps(data), encoding="utf-8")
+            self.assertNotIn("emi", load_route_report(bare))
+            other = Path(directory) / "other.json"
+            other.write_text(json.dumps({"schema": "copperscript-ir/v0.1"}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_route_report(other)
+            other.write_text("{not json", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_route_report(other)
+
+    def test_no_report_means_an_empty_answer_not_an_error(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "test-token"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = Request(f"http://127.0.0.1:{server.server_port}/api/route-report", headers={"X-Copper-Token": "test-token"})
+            with urlopen(request) as response:
+                self.assertIsNone(json.load(response))
+        finally:
+            server.shutdown(); server.server_close(); thread.join()
