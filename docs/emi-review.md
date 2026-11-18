@@ -38,7 +38,12 @@ panel says that this is not proof the two belong together.
 
 ## The panel
 
-**EMI** (toolbar button, shown once a report is open) opens a panel under the board, with:
+**EMI** (toolbar button, shown once a report is open) opens a panel under the board. Its list
+groups the findings by what they are about, as `copper issues RUN --stage emi` does: **Converters**
+(per cell), **Signals and pairs** (per net or pair, `LANE_B_P/N`) and **Cable connectors**. A last
+group, **Examined, nothing reported**, names the subjects a check looked at and reported nothing for
+(the per-subject coverage entries, such as `EMI-RETURN-PATH:CLK_S`); each row says "not a pass" and
+its tooltip is the report's own sentence. The panel has:
 
 - the converter cells and their findings, each with one headline number (hot-loop inductance
   and radiated margin, worst conducted harmonic with its margin, switch-node copper area,
@@ -62,6 +67,23 @@ quasi-peak and average limit lines (class A or B, as the report states) are draw
 harmonic lines). Otherwise the chart shows line amplitudes, says so, and draws no limit and no
 margin. The limit tables are transcribed by CopperScript and marked unverified there as well; a
 mains-port limit is only a reference for a DC input.
+
+### Return paths
+
+An `EMI-RETURN-PATH` finding lists what the report located on the board, numbered as on the board
+and in CopperScript's own return-path map (`copper emi-check --plot-summary`): a circle for a gap
+in the reference copper under the trace ("slot 76 mm, 1.12 GHz"), a diamond for a via that changes
+reference with no return path within the threshold ("return 7.2 mm > 2.0 mm"), a square for a point
+within the edge limit of the reference copper and a triangle for one within it of the board edge
+("1.0 mm < 4.7 mm"). The merging rules are CopperScript's: marks of one kind within 1 mm of each
+other are one mark that names every subject, and a plane-edge mark on a gap of the same subject is
+dropped because the gap already says it. Clicking a row shows that point on the board. The chart is
+the routed length per net and layer, with the part that has no reference copper in the warning
+colour. The slot ranking score is a ranking only: it is not a field and is never set against a
+limit. A finding with no located cause says so; that is not a pass.
+
+Mode-conversion and cable common-mode findings are listed with their headline number and the
+report's text; they have no chart and no board marks yet.
 
 ## The board overlay
 
@@ -94,6 +116,8 @@ itself stays an observation: the brief is evidence for the next iteration, not a
 ## Limits
 
 - Screening evidence only; no margin is a pass or fail.
+- Return-path marks are the positions the report states. The viewer does not check them against
+  the copper of the open board.
 - The report names no board hash and no source revision, so nothing proves the report belongs to the
   open board.
 - Conducted levels are differential mode; common mode is not modelled. The radiated estimate is

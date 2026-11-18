@@ -106,7 +106,7 @@ export function readEmi(value, scene = null, {name = null, sha256 = null} = {}) 
   if (scene) {
     const have = new Set(scene.components.flatMap(c => [c.reference, c.source_path, c.native_reference].filter(Boolean)));
     const nets = new Set(scene.nets.map(x => x.name));
-    const refs = new Set([...model.cells.flatMap(c => [c.controller, c.magnetic, c.catch_diode, ...strings(c.hot_capacitors)]), ...model.findings.flatMap(f => [f.cell, ...f.objects.filter(o => !nets.has(o))])].filter(x => typeof x === 'string' && x));
+    const refs = new Set([...model.cells.flatMap(c => [c.controller, c.magnetic, c.catch_diode, ...strings(c.hot_capacitors)]), ...model.findings.flatMap(f => [f.cell, ...(SIGNAL_CODES.includes(f.code) ? [] : f.objects.filter(o => !nets.has(o)))])].filter(x => typeof x === 'string' && x));
     const missing = [...refs].filter(r => !have.has(r));
     if (missing.length) notes.push(`${missing.length} part${missing.length === 1 ? '' : 's'} named in the report (${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', …' : ''}) are not on this board: it may not be the board this report describes. The report carries no board hash, so nothing was verified.`);
     else notes.push('Report and board agree on part references. The report carries no board hash, so this is not proof they match.');
@@ -121,7 +121,155 @@ export function groupByCell(model) {
   return [...groups.values()];
 }
 export const findingById = (model, id) => model?.findings.find(f => f.id === id) || null;
-const CODE_TEXT = {'EMI-HOT-LOOP': 'Hot loop', 'EMI-CONDUCTED': 'Conducted emission', 'EMI-SWITCH-NODE': 'Switch node', 'EMI-PROXIMITY': 'Proximity', 'EMI-FIELD': 'Field', 'EMI-RETURN-PATH': 'Return path', 'EMI-DECOUPLING-PATH': 'Decoupling path'};
+
+// ---- Subjects: converter cells, signals and pairs, cable connectors ----------------------------
+const SIGNAL_CODES = ['EMI-RETURN-PATH', 'EMI-MODE-CONVERSION'];
+/** What a finding is about, as `copper issues --stage emi` groups them: 'cell', 'signal' or 'connector'. */
+export function subjectKind(f) {
+  if (f.code === 'EMI-CABLE-COMMON-MODE') return 'connector';
+  if (SIGNAL_CODES.includes(f.code)) return 'signal';
+  return 'cell';
+}
+/** `A_P/N` for the nets `A_P` and `A_N`, else both names (CopperScript's pair label). */
+export function pairLabel(positive, negative) {
+  const p = String(positive), q = String(negative);
+  if (p.length && q.length && p.slice(0, -1) === q.slice(0, -1) && ((p.endsWith('P') && q.endsWith('N')) || (p.endsWith('p') && q.endsWith('n')))) return `${p}/${q.slice(-1)}`;
+  return `${p}/${q}`;
+}
+/** The name a finding's subject goes by: the cell, the pair or net, or the connector. */
+export function subjectLabel(f) {
+  const kind = subjectKind(f), m = f.measures;
+  if (kind === 'connector') return typeof m.connector === 'string' && m.connector ? m.connector : f.objects[0] || '';
+  if (kind === 'cell') return f.cell;
+  if (f.nets.length === 2) return pairLabel(f.nets[0], f.nets[1]);
+  if (f.nets.length === 1) return f.nets[0];
+  return typeof m.subject === 'string' && m.subject ? m.subject : f.nets.join('/');
+}
+const SUBJECT_TITLES = {cell: 'Converters', signal: 'Signals and pairs', connector: 'Cable connectors'};
+/** The key a per-subject coverage entry (`EMI-RETURN-PATH:LANE_A_P`) uses for a finding of that check. */
+const coverageKey = f => subjectKind(f) === 'connector' ? subjectLabel(f) : typeof f.measures.subject === 'string' ? f.measures.subject : f.nets[0] || '';
+/**
+ * The findings by subject kind and subject, in report order within a subject, plus the subjects a check
+ * examined without reporting anything (from the per-subject coverage entries). Those are not passes.
+ */
+export function groupBySubject(model) {
+  const kinds = ['cell', 'signal', 'connector'].map(kind => ({kind, title: SUBJECT_TITLES[kind], groups: []}));
+  const of = kind => kinds.find(k => k.kind === kind);
+  for (const c of model.cells) of('cell').groups.push({name: c.controller, cell: c, findings: []});
+  for (const f of model.findings) {
+    const k = of(subjectKind(f)), name = subjectLabel(f);
+    let g = k.groups.find(x => x.name === name);
+    if (!g) { g = {name, cell: null, findings: []}; k.groups.push(g); }
+    g.findings.push(f);
+  }
+  const examined = [];
+  for (const c of model.coverage) {
+    const check = typeof c.check === 'string' ? c.check : '', at = check.indexOf(':');
+    if (at < 0 || c.status !== 'executed') continue;
+    const code = check.slice(0, at), key = check.slice(at + 1);
+    if (model.findings.some(f => f.code === code && coverageKey(f) === key)) continue;
+    const detail = typeof c.detail === 'string' ? c.detail : '', colon = detail.indexOf(': ');
+    const named = colon > 0 && colon < 80 ? detail.slice(0, colon) : key, pair = named.split("/");
+    examined.push({code, key, label: pair.length === 2 ? pairLabel(pair[0], pair[1]) : named, detail});
+  }
+  return {kinds: kinds.filter(k => k.groups.length), examined};
+}
+
+// ---- Return paths: located causes and the marks drawn for them ---------------------------------
+const pointOf = v => Array.isArray(v) && v.length >= 2 && num(v[0]) !== null && num(v[1]) !== null ? [v[0], v[1]] : null;
+const sig3 = v => String(Number(v.toPrecision(3)));
+const one = v => v.toFixed(1);
+const hertz = hz => hz >= 1e9 ? `${sig3(hz / 1e9)} GHz` : hz >= 1e6 ? `${sig3(hz / 1e6)} MHz` : `${sig3(hz / 1e3)} kHz`;
+export const CAUSE_KINDS = ['gap', 'reference_change_without_return_path', 'plane_edge', 'board_edge'];
+export const CAUSE_NAMES = {gap: 'gap', reference_change_without_return_path: 'via', plane_edge: 'plane edge', board_edge: 'board edge'};
+/**
+ * The located causes of an EMI-RETURN-PATH finding, as CopperScript's own map lists them: gaps, reference changes
+ * with no return path within the threshold, then plane-edge and board-edge points within the limit. A point is
+ * listed once per kind. `short` is the legend wording ("slot 76 mm, 1.12 GHz"), `text` the full one.
+ */
+export function returnPathCauses(f) {
+  if (f.code !== 'EMI-RETURN-PATH') return [];
+  const m = f.measures, found = [];
+  const add = (kind, at, text, short, distance_mm, layer = null) => { if (!found.some(c => c.kind === kind && c.at[0] === at[0] && c.at[1] === at[1])) found.push({kind, at, text, short, distance_mm, layer}); };
+  for (const gap of list(m.gaps).filter(isObject)) {
+    const at = pointOf(gap.position_mm); if (!at) continue;
+    const parts = [], short = [];
+    if (num(gap.slot_length_mm) !== null) { parts.push(`slot ${n(gap.slot_length_mm)} mm`); short.push(`slot ${sig3(gap.slot_length_mm)} mm`); }
+    if (num(gap.resonance_hz) !== null) { parts.push(`resonance ${n(gap.resonance_hz / 1e6)} MHz`); short.push(hertz(gap.resonance_hz)); }
+    add('gap', at, parts.join(', ') + (gap.kind === 'cut_to_plane_edge' ? ' (cut to the plane edge)' : ''), short.join(', '), null, typeof gap.signal_layer === 'string' ? gap.signal_layer : null);
+  }
+  for (const change of list(m.reference_changes).filter(isObject)) {
+    if (change.within_threshold !== false) continue;
+    const at = pointOf(change.position_mm); if (!at) continue;
+    const name = typeof change.via === 'string' ? change.via : 'via', distance = num(change.return_distance_mm), threshold = num(change.threshold_mm);
+    add('reference_change_without_return_path', at,
+      `${name}: ${distance !== null ? `nearest return path ${n(distance)} mm` : 'no return path found'}${threshold !== null ? `, threshold ${n(threshold)} mm` : ''}`,
+      `${distance !== null ? `return ${one(distance)} mm` : 'no return path'}${threshold !== null ? ` > ${one(threshold)} mm` : ''}`, distance);
+  }
+  for (const [key, name] of [['plane_edge', 'reference copper edge'], ['board_edge', 'board edge']]) {
+    for (const member of list(m.members).filter(isObject)) for (const layer of list(member.layers).filter(isObject)) {
+      const edge = layer[key]; if (!isObject(edge) || edge.within_limit !== true) continue;
+      const at = pointOf(edge.at_mm); if (!at) continue;
+      const nearest = num(edge.nearest_mm), limit = num(edge.limit_mm), layerName = typeof layer.layer === 'string' ? layer.layer : '';
+      add(key, at, `${layerName}: trace ${nearest !== null ? n(nearest) : ''} mm from the ${name}${limit !== null ? ` (limit ${n(limit)} mm)` : ''}`,
+        nearest !== null ? `${one(nearest)} mm${limit !== null ? ` < ${one(limit)} mm` : ''}` : '', nearest, layerName || null);
+    }
+  }
+  return found;
+}
+const MERGE_MM = 1;
+const apart = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+/**
+ * The numbered marks of all return-path findings, by CopperScript's rules: marks of one kind within a millimetre
+ * are one (an edge keeps the smaller distance, every subject is listed), a plane-edge mark whose subjects all have
+ * a gap within a millimetre is dropped (the gap says it), and the order is gaps, vias, plane edges, board edges.
+ */
+export function returnPathMarks(findings) {
+  const merged = [];
+  for (const f of findings) {
+    const label = subjectLabel(f);
+    for (const c of returnPathCauses(f)) {
+      const mark = merged.find(x => x.kind === c.kind && apart(x.at, c.at) <= MERGE_MM);
+      if (!mark) { merged.push({kind: c.kind, at: c.at, findings: [f.id], subjects: [label], short: c.short, text: c.text, distance_mm: c.distance_mm, layer: c.layer}); continue; }
+      if (!mark.findings.includes(f.id)) mark.findings.push(f.id);
+      if (!mark.subjects.includes(label)) mark.subjects.push(label);
+      if (c.kind.endsWith('_edge') && c.distance_mm !== null && mark.distance_mm !== null && c.distance_mm < mark.distance_mm) Object.assign(mark, {at: c.at, short: c.short, text: c.text, distance_mm: c.distance_mm, layer: c.layer});
+    }
+  }
+  const gaps = merged.filter(x => x.kind === 'gap');
+  const kept = merged.filter(x => x.kind !== 'plane_edge' || !x.findings.every(id => gaps.some(g => g.findings.includes(id) && apart(g.at, x.at) <= MERGE_MM)));
+  kept.sort((a, b) => CAUSE_KINDS.indexOf(a.kind) - CAUSE_KINDS.indexOf(b.kind));
+  return kept.map((x, i) => ({...x, number: i + 1}));
+}
+/** Routed and uncovered length per net and layer of a return-path finding, for the coverage chart. */
+export function coverageModel(f) {
+  if (f.code !== 'EMI-RETURN-PATH') return null;
+  const rows = [];
+  for (const member of list(f.measures.members).filter(isObject)) for (const layer of list(member.layers).filter(isObject)) {
+    const routed = num(layer.routed_length_mm), uncovered = num(layer.uncovered_length_mm) ?? 0;
+    if (routed === null || routed <= 0) continue;
+    const ref = list(f.measures.reference).filter(isObject).find(r => r.signal_layer === layer.layer);
+    rows.push({net: String(member.net ?? ''), layer: String(layer.layer ?? ''), routed_mm: routed, uncovered_mm: Math.min(uncovered, routed), reference: ref && typeof ref.reference_layer === 'string' ? ref.reference_layer : null});
+  }
+  return rows.length ? {subject: subjectLabel(f), rows, window_h: num(f.measures.thresholds?.coverage_window_h)} : null;
+}
+/** The coverage chart: one bar per net and layer, its routed length, the uncovered part in the warning colour. */
+export function coverageSvg(cov) {
+  const W = 560, left = 150, right = 110, row = 22, top = 8, H = top + cov.rows.length * row + 30, max = Math.max(...cov.rows.map(r => r.routed_mm)), scale = (W - left - right) / max;
+  const out = [`<svg class="emi-coverage" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`Routed length of ${cov.subject} per net and layer, with the part that has no reference copper`)}">`];
+  cov.rows.forEach((r, i) => {
+    const y = top + i * row, open = r.uncovered_mm > 0 ? Math.max(r.uncovered_mm * scale, 2) : 0, covered = r.routed_mm * scale - open;
+    out.push(`<text class="emi-tick" x="${left - 8}" y="${y + 13}" text-anchor="end">${esc(`${r.net} · ${r.layer}`)}</text>`);
+    out.push(`<rect class="emi-covered" x="${left}" y="${y + 3}" width="${round2(covered)}" height="13"><title>${esc(`${n(r.routed_mm - r.uncovered_mm)} mm over reference copper${r.reference ? ` (${r.reference})` : ''}`)}</title></rect>`);
+    if (open > 0) out.push(`<rect class="emi-uncovered" x="${round2(left + covered)}" y="${y + 3}" width="${round2(open)}" height="13"><title>${esc(`${n(r.uncovered_mm)} mm with no reference copper`)}</title></rect>`);
+    out.push(`<text class="emi-tick" x="${round2(left + covered + open + 6)}" y="${y + 13}">${esc(r.uncovered_mm > 0 ? `${n(r.uncovered_mm)} of ${n(r.routed_mm)} mm` : `${n(r.routed_mm)} mm`)}</text>`);
+  });
+  const ly = top + cov.rows.length * row + 10;
+  out.push(`<rect class="emi-covered" x="${left}" y="${ly}" width="10" height="10"/><text class="emi-tick" x="${left + 15}" y="${ly + 9}">over reference copper</text>`);
+  out.push(`<rect class="emi-uncovered" x="${left + 160}" y="${ly}" width="10" height="10"/><text class="emi-tick" x="${left + 175}" y="${ly + 9}">no reference copper</text></svg>`);
+  return out.join('');
+}
+const CODE_TEXT = {'EMI-HOT-LOOP': 'Hot loop', 'EMI-CONDUCTED': 'Conducted emission', 'EMI-SWITCH-NODE': 'Switch node', 'EMI-PROXIMITY': 'Proximity', 'EMI-FIELD': 'Field', 'EMI-RETURN-PATH': 'Return path', 'EMI-DECOUPLING-PATH': 'Decoupling path', 'EMI-MODE-CONVERSION': 'Mode conversion', 'EMI-CABLE-COMMON-MODE': 'Cable common mode'};
 export const codeText = code => CODE_TEXT[code] || code.replace(/^EMI-/, '').toLowerCase().replace(/-/g, ' ').replace(/^./, c => c.toUpperCase());
 const limitName = model => model.limits.standard ? String(model.limits.standard) : null;
 const worstOf = f => isObject(f.measures.worst_harmonic) ? f.measures.worst_harmonic : null;
@@ -157,6 +305,15 @@ export function findingFacts(f, model) {
     add('Anti-resonances', ar.length ? `${ar.length} between 150 kHz and 30 MHz${ar.some(a => a.significant) ? `, ${ar.filter(a => a.significant).length} significant` : ', none significant'}` : Array.isArray(m.anti_resonances) ? 'none between 150 kHz and 30 MHz' : null);
     if (num(m.hot_loop_inductance_nh) !== null) add('Hot-loop inductance used', `${n(m.hot_loop_inductance_nh)} nH`);
     if (m.scenario) add('Current', String(m.scenario).replace(/_/g, ' '));
+  } else if (f.code === 'EMI-RETURN-PATH') {
+    if (num(m.routed_length_mm) !== null) add('Routed length', `${n(m.routed_length_mm)} mm`);
+    if (num(m.uncovered_length_mm) !== null) add('Without reference copper', `${n(m.uncovered_length_mm)} mm${num(m.thresholds?.coverage_window_h) !== null ? ` (within ${n(m.thresholds.coverage_window_h)} H of the trace)` : ''}`);
+    for (const r of list(m.reference).filter(isObject)) add(`Reference of ${r.signal_layer}`, `${r.reference_layer}${strings(r.reference_nets).length ? ` (${strings(r.reference_nets).join(', ')})` : ''}${num(r.height_mm) !== null ? `, H ${n(r.height_mm)} mm` : ''}${r.structure ? `, ${r.structure}` : ''}`);
+    const without = strings(list(m.members).filter(isObject).flatMap(x => list(x.layers_without_reference_plane)));
+    if (without.length) add('Layers with no plane', [...new Set(without)].join(', '));
+    const changes = list(m.reference_changes).filter(isObject);
+    if (num(m.via_transitions_examined)) add('Reference changes at vias', `${changes.length} of ${m.via_transitions_examined} transition${m.via_transitions_examined === 1 ? '' : 's'}, ${changes.filter(c => c.within_threshold === false).length} without a return path within the threshold`);
+    if (e && num(e.value) !== null) add('Slot ranking score', `${n(e.value)} dB${num(e.frequency_hz) ? ` at ${hertz(e.frequency_hz)}` : ''}, ranking only (not a field, no limit)`);
   } else if (f.code === 'EMI-SWITCH-NODE') {
     if (num(m.copper_area_mm2) !== null) add('Switch-node copper', `${n(m.copper_area_mm2)} mm²${num(m.pad_area_mm2) !== null ? ` (pads ${n(m.pad_area_mm2)} mm²)` : ''}`);
     if (num(m.capacitance_to_plane_pf) !== null) add('Capacitance to the plane', `${n(m.capacitance_to_plane_pf)} pF`);
@@ -355,11 +512,22 @@ export function netBounds(scene, name) {
   return boundsOf(pts);
 }
 const pad = (b, r) => b ? [b[0] - r, b[1] - r, b[2] + r, b[3] + r] : null;
+/** A return-path finding on the board: its nets and, once `overlayAll` has numbered them, its marks. */
+function returnPathOverlay(f, scene) {
+  const subjectNets = f.nets.filter(x => scene.nets.some(net => net.name === x)), notes = [];
+  const causes = returnPathCauses(f);
+  if (!causes.length) notes.push('The report locates no cause for this finding (no gap, via or edge point with a position), so only its nets are highlighted.');
+  if (f.nets.length && !subjectNets.length) notes.push('The nets of this finding are not on this board.');
+  const points = causes.map(c => c.at);
+  const bounds = points.length ? pad(boundsOf(points), 2) : pad(joinBounds(subjectNets.map(x => netBounds(scene, x))), 0.5);
+  return {loop: null, switchNets: [], victims: [], bounds, notes, marks: [], subjectNets};
+}
 /**
  * What the overlay draws for one finding on the open board, with a bounding window for zooming and for the
  * annotation's region. Never throws: a finding with nothing drawable gives `loop: null` and an empty list.
  */
 export function overlayGeometry(f, scene, model) {
+  if (f.code === 'EMI-RETURN-PATH') return returnPathOverlay(f, scene);
   const m = f.measures, cell = model.cells.find(c => c.controller === f.cell), notes = [];
   let loop = null;
   if (f.code === 'EMI-HOT-LOOP') {
@@ -413,11 +581,19 @@ export function overlayGeometry(f, scene, model) {
   }
   if (f.code === 'EMI-HOT-LOOP' && victims.length) notes.push('Teal rings and dashed lines mark pads of sensitive nets and cable connectors that the report lists as field victims, with their distance from the loop measured on this board.');
   const bounds = pad(joinBounds(boxes), 0.5);
-  return {loop, switchNets, victims, bounds, notes};
+  return {loop, switchNets, victims, bounds, notes, marks: [], subjectNets: []};
 }
 /** Every finding's geometry on the board, for drawing and picking. Computed once per board and report. */
 export function overlayAll(scene, model) {
-  return new Map(model.findings.map(f => [f.id, overlayGeometry(f, scene, model)]));
+  const overlays = new Map(model.findings.map(f => [f.id, overlayGeometry(f, scene, model)]));
+  for (const mark of returnPathMarks(model.findings.filter(f => f.code === 'EMI-RETURN-PATH'))) for (const id of mark.findings) overlays.get(id).marks.push(mark);
+  return overlays;
+}
+/** Every return-path mark of the overlays once, in number order. */
+export function allMarks(overlays) {
+  const seen = new Map();
+  for (const o of overlays.values()) for (const mark of o.marks) seen.set(mark.number, mark);
+  return [...seen.values()].sort((a, b) => a.number - b.number);
 }
 /** The finding whose overlay line passes within `tolerance` mm of `point`, nearest first, else null. */
 export function pickFinding(point, overlays, tolerance, {switchCopper = null} = {}) {
@@ -428,6 +604,7 @@ export function pickFinding(point, overlays, tolerance, {switchCopper = null} = 
     if (o.loop) for (const v of o.loop.vias) consider(id, Math.hypot(point[0] - v.at[0], point[1] - v.at[1]) - 0.3);
     for (const v of o.victims) { if (v.from) consider(id, distanceToSegment(point, v.from, v.to)); consider(id, Math.hypot(point[0] - v.to[0], point[1] - v.to[1]) - 0.4); }
     if (switchCopper) for (const net of o.switchNets) if (switchCopper(net, point)) consider(id, 0);
+    for (const mark of o.marks) if (mark.findings[0] === id) consider(id, Math.max(0, apart(point, mark.at) - tolerance * 0.5));
   }
   return best?.id ?? null;
 }
@@ -440,6 +617,9 @@ export function emiBrief(f, overlay = null) {
   for (const k of ['loop_inductance_nh', 'loop_area_mm2', 'traced_path_length_mm', 'distance_mm', 'threshold_mm', 'copper_area_mm2', 'capacitance_to_plane_pf', 'hot_loop_inductance_nh']) if (num(m[k]) !== null) key[k] = m[k];
   const w = f.code === 'EMI-CONDUCTED' ? worstOf(f) : null;
   if (w) key.worst_harmonic = {frequency_hz: w.frequency_hz, level_dbuv: w.total_dbuv, margin_avg_db: num(w.margin_avg_db), margin_qp_db: num(w.margin_qp_db)};
+  for (const k of ['routed_length_mm', 'uncovered_length_mm']) if (f.code === 'EMI-RETURN-PATH' && num(m[k]) !== null) key[k] = m[k];
+  const causes = returnPathCauses(f);
+  if (causes.length) key.causes = causes.map(c => ({kind: c.kind, at_mm: c.at, text: c.text}));
   return {id: f.id, cell: f.cell, code: f.code, severity: f.severity, message: f.message.length > 600 ? `${f.message.slice(0, 597)}...` : f.message, nets: f.nets, objects: f.objects,
     margin_db: f.margin_db, estimate: e ? {quantity: e.quantity ?? null, value: num(e.value), unit: e.unit ?? null, frequency_hz: num(e.frequency_hz), kind: e.kind ?? null} : null,
     ...(Object.keys(key).length ? {key_measures: key} : {}), tags: f.tags, window_mm: overlay?.bounds ? overlay.bounds.map(v => Math.round(v * 1e6) / 1e6) : null};
@@ -451,8 +631,8 @@ export function emiSource(model) {
     note: 'Screening estimates from copper emi-check, not a compliance measurement. Finding ids (E1, E2, ...) count the findings of this report in order and mean nothing for another run.'};
 }
 
-/** One short number for the list row of a finding. */
-export function findingHeadline(f, model) {
+/** One short number for the list row of a finding. With its overlay, a return path counts the marks drawn for it. */
+export function findingHeadline(f, model, overlay = null) {
   const m = f.measures;
   if (f.code === 'EMI-HOT-LOOP') return num(m.loop_inductance_nh) !== null ? `${n(m.loop_inductance_nh)} nH${f.margin_db !== null ? `, ${marginPhrase(f.margin_db, 'radiated').replace(' limit', '')}` : ''}` : '';
   if (f.code === 'EMI-CONDUCTED') {
@@ -462,6 +642,12 @@ export function findingHeadline(f, model) {
     return s.showLimits && w.limit_avg !== null ? `${frequencyText(w.frequency_hz)}, ${marginPhrase(w.limit_avg - w.level, 'average').replace(' limit', '')}` : `${frequencyText(w.frequency_hz)}, ${n(w.level)} dBuV`;
   }
   if (f.code === 'EMI-SWITCH-NODE') return num(m.copper_area_mm2) !== null ? `${n(m.copper_area_mm2)} mm², ranking` : 'ranking';
+  if (f.code === 'EMI-RETURN-PATH') {
+    const causes = overlay ? overlay.marks.length : returnPathCauses(f).length, open = num(m.uncovered_length_mm);
+    return [causes ? `${causes} located cause${causes === 1 ? '' : 's'}` : 'no located cause', open ? `${n(open)} mm uncovered` : null].filter(Boolean).join(', ');
+  }
+  if (f.code === 'EMI-MODE-CONVERSION') return f.estimate && num(f.estimate.value) !== null ? `${n(f.estimate.value)} dB, ratio` : '';
+  if (f.code === 'EMI-CABLE-COMMON-MODE') return f.estimate && num(f.estimate.value) !== null ? `${n(f.estimate.value)} ${f.estimate.unit || ''}, voltage` : 'ranking only';
   if (f.code === 'EMI-PROXIMITY') return `${m.victim ?? ''}${num(m.distance_mm) !== null ? `, ${n(m.distance_mm)} mm` : ''}`.replace(/^, /, '');
   return f.estimate && num(f.estimate.value) !== null ? `${n(f.estimate.value)} ${f.estimate.unit || ''}`.trim() : '';
 }

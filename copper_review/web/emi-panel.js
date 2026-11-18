@@ -1,33 +1,56 @@
-/* The EMI panel: converter cells, their findings, one finding's numbers and assumptions, and the
- * conducted spectrum. DOM only; the data and wording come from emi.js. */
-import {EMI_SCREENING_LINE,groupByCell,findingById,findingFacts,findingHeadline,assumptionSentences,assumptionDetails,notModelled,codeText,antiResonances,capacitorBranches,conductedOf,spectrumModel,spectrumSvg,spectrumCaption,frequencyText,n} from './emi.js';
+/* The EMI panel: the findings by subject (converter cells, signals and pairs, cable connectors), one
+ * finding's numbers and assumptions, and its chart: the conducted spectrum of a cell, the coverage of a
+ * return path. DOM only; the data and wording come from emi.js. */
+import {EMI_SCREENING_LINE,groupBySubject,subjectKind,subjectLabel,coverageModel,coverageSvg,CAUSE_NAMES,findingById,findingFacts,findingHeadline,assumptionSentences,assumptionDetails,notModelled,codeText,antiResonances,capacitorBranches,conductedOf,spectrumModel,spectrumSvg,spectrumCaption,frequencyText,n} from './emi.js';
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const MAX_ASSUMPTIONS=4;
-export function createEmiPanel(els,{onSelect,onCite}){
+export function createEmiPanel(els,{onSelect,onCite,onFocus}){
   let model=null,selected=null,overlays=null;
   const cellLine=c=>[c.topology,c.frequency_hz?frequencyText(c.frequency_hz):null,c.magnetic?`L ${c.magnetic}`:null,c.catch_diode?`D ${c.catch_diode}`:null].filter(Boolean).join(' · ');
   function renderList(){
     els.list.replaceChildren();
-    for(const g of groupByCell(model)){
-      const head=el('div','emi-cell');head.append(el('strong',null,g.name||'(no cell)'),el('span','quiet',g.cell?cellLine(g.cell):'cell not described in the report'));els.list.append(head);
+    const grouped=groupBySubject(model);
+    for(const kind of grouped.kinds){
+     els.list.append(el('div','emi-kind',kind.title));
+     for(const g of kind.groups){
+      const head=el('div','emi-cell');head.append(el('strong',null,g.name||'(no cell)'));
+      if(kind.kind==='cell')head.append(el('span','quiet',g.cell?cellLine(g.cell):'cell not described in the report'));els.list.append(head);
       for(const f of g.findings){
         const b=el('button','emi-item');b.type='button';b.dataset.id=f.id;b.setAttribute('aria-pressed',String(f.id===selected));
         const dot=el('span',`emi-dot ${f.severity}`);dot.title=f.severity;
-        const text=el('span','emi-item-text');text.append(el('span','emi-item-title',`${f.id} · ${codeText(f.code)}`),el('span','emi-item-note',findingHeadline(f,model)));
+        const text=el('span','emi-item-text');text.append(el('span','emi-item-title',`${f.id} · ${codeText(f.code)}`),el('span','emi-item-note',findingHeadline(f,model,overlays?.get(f.id))));
         b.append(dot,text);b.onclick=e=>onSelect(f.id,{add:e.shiftKey,zoom:true});els.list.append(b);
       }
       if(!g.findings.length)els.list.append(el('p','quiet','No findings.'));
+     }
     }
+    if(grouped.examined.length){
+      els.list.append(el('div','emi-kind','Examined, nothing reported'));
+      for(const x of grouped.examined){const row=el('div','emi-examined');row.title=x.detail;row.append(el('span',null,x.label),el('span','quiet',`${codeText(x.code).toLowerCase()} · not a pass`));els.list.append(row);}
+    }
+  }
+  const GLYPH={gap:'circle',reference_change_without_return_path:'diamond',plane_edge:'square',board_edge:'triangle'};
+  function causeList(f){
+    const marks=overlays?.get(f.id)?.marks||[];if(!marks.length)return null;
+    const box=el('div','emi-causes');box.append(el('h4',null,`Located on the board (${marks.length})`));
+    for(const mark of marks){
+      const b=el('button','emi-cause');b.type='button';b.title='Show this point on the board';
+      b.append(el('span',`emi-mark ${mark.kind} ${GLYPH[mark.kind]}`,String(mark.number)));
+      const text=el('span','emi-item-text');text.append(el('span','emi-item-title',`${CAUSE_NAMES[mark.kind]} · ${mark.short}`),el('span','emi-item-note',`${mark.text}${mark.subjects.length>1?` · also ${mark.subjects.filter(s=>s!==subjectLabel(f)).join(', ')}`:''}`));
+      b.append(text);b.onclick=()=>onFocus(mark.at,f.id);box.append(b);
+    }
+    return box;
   }
   function table(rows,cls){const t=el('table',cls),body=el('tbody');for(const row of rows){const r=el('tr');for(const [i,c] of row.entries())r.append(el(i?'td':'th',null,c));body.append(r);}t.append(body);return t;}
   function folded(summary,items,render){const d=el('details','emi-folded');d.append(el('summary',null,summary));const ul=el('ul');for(const i of items){const li=el('li');if(render)render(li,i);else li.textContent=i;ul.append(li);}d.append(ul);return d;}
   function renderDetail(){
     els.detail.replaceChildren();
     const f=findingById(model,selected);
-    if(!f){els.detail.append(el('p','quiet',model.findings.length?'Choose a finding on the left, or click the loop, a switch-node track or a victim line on the board.':'The report holds no findings.'));return;}
-    const head=el('div','emi-detail-head');head.append(el('h3',null,`${f.id} · ${codeText(f.code)}${f.cell?` · ${f.cell}`:''}`));
+    if(!f){els.detail.append(el('p','quiet',model.findings.length?'Choose a finding on the left, or click a loop, a switch-node track, a victim line or a numbered mark on the board.':'The report holds no findings.'));return;}
+    const head=el('div','emi-detail-head');head.append(el('h3',null,`${f.id} · ${codeText(f.code)}${subjectLabel(f)?` · ${subjectLabel(f)}`:''}`));
     const chips=el('span','emi-chips');chips.append(el('span',`emi-sev ${f.severity}`,f.severity),el('span','emi-sev',f.estimate?.kind==='ranking_score'?'ranking only':'screening estimate'));head.append(chips);els.detail.append(head);
-    if(f.message)els.detail.append(el('p','emi-message',f.message));
+    const causes=causeList(f);if(causes)els.detail.append(causes);
+    if(f.message){if(causes){const d=el('details','emi-folded');d.append(el('summary',null,'The report\'s own words'),el('p','emi-message',f.message));els.detail.append(d);}else els.detail.append(el('p','emi-message',f.message));}
     const rows=findingFacts(f,model);if(rows.length)els.detail.append(table(rows,'emi-facts'));
     if(f.code==='EMI-HOT-LOOP'&&Array.isArray(f.measures.pad_sequence)&&f.measures.pad_sequence.length)els.detail.append(el('p','emi-pads',`Loop pads: ${f.measures.pad_sequence.join(' → ')}`));
     const ov=overlays?.get(f.id);for(const note of ov?.notes||[])els.detail.append(el('p','emi-note',note));
@@ -50,7 +73,14 @@ export function createEmiPanel(els,{onSelect,onCite}){
   }
   function renderChart(){
     els.chart.replaceChildren();
-    const f=findingById(model,selected),cell=f?f.cell:model.findings[0]?.cell,cond=cell!==undefined?conductedOf(model,cell):null;
+    const f=findingById(model,selected);
+    if(f&&subjectKind(f)!=='cell'){
+      const cov=coverageModel(f);
+      if(!cov){els.chart.append(el('p','quiet',f.code==='EMI-RETURN-PATH'?'The report lists no routed length for this return path.':`No chart for ${codeText(f.code).toLowerCase()} findings yet; the numbers are in the detail column.`));return;}
+      const wrap=el('div','emi-svg');wrap.innerHTML=coverageSvg(cov);// built from numbers and escaped text only
+      els.chart.append(el('h4',null,`${cov.subject}: routed length over reference copper`),el('p','quiet',`per net and layer, mm${cov.window_h!==null?`; covered means reference copper within ${n(cov.window_h)} H of the trace`:''}`),wrap);return;
+    }
+    const cell=f?f.cell:model.findings.find(x=>subjectKind(x)==='cell')?.cell,cond=cell!==undefined?conductedOf(model,cell):null;
     const spec=cond&&spectrumModel(cond,model);
     if(!spec){els.chart.append(el('p','quiet',`No conducted spectrum for ${cell||'this cell'} in the report${model.findings.some(x=>x.code==='EMI-CONDUCTED')?' (its conducted finding lists no harmonics).':' (no EMI-CONDUCTED finding).'}`));return;}
     const cap=spectrumCaption(spec),title=el('h4',null,cap.title),sub=el('p','quiet',cap.subtitle);

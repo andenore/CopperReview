@@ -132,6 +132,9 @@ non-HTTPS network addresses.
 `copper-review run/board.kicad_pcb --route-report run/route-report.json`. Try
 `python -m copper_review examples/emi-buck.kicad_pcb --route-report examples/emi-buck.route-report.json`
 (CopperScript's `examples/emi_buck`, routed; the report trimmed to its `emi` section). `examples/emi-buck.review.json` is a review with a cited finding.
+`examples/emi-return-path.kicad_pcb` with `examples/emi-return-path.route-report.json` is a board with no converter
+(CopperScript's `examples/emi_return_path`, routed by `route-board` and left incomplete): its findings are return
+paths, shown under **Signals and pairs** with numbered marks on the board.
 
 The **EMI** button opens a panel with the converter cells, each finding's key numbers
 (hot-loop inductance, worst conducted harmonic with its margin, anti-resonances, switch-node

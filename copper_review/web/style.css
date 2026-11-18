@@ -220,8 +220,8 @@ body[data-mode=assembly] #pcb-review>.explorer,body[data-mode=assembly] #pcb-rev
 .assembly-mpn{font:600 13px ui-monospace,Consolas,monospace;color:var(--label);overflow-wrap:anywhere}
 .view-gizmo{position:absolute;right:12px;top:12px;z-index:2;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px var(--shadow)}
 /* ---- EMI screening panel and spectrum chart (screening estimates, never compliance) ---- */
-:root{--emi-level:#1d5fa8;--emi-warn:#c8321a;--emi-limit:#1c2427;--emi-limit-soft:#5c6b72;--emi-band:#1d5fa833;--emi-ok:#2e7d5b}
-:root[data-theme=dark]{--emi-level:#7db4ee;--emi-warn:#ff8a6b;--emi-limit:#e6ecee;--emi-limit-soft:#94a3aa;--emi-band:#7db4ee33;--emi-ok:#84d4c0}
+:root{--emi-gap:#d4380d;--emi-via:#c2410c;--emi-plane-edge:#0e7490;--emi-board-edge:#7c3aed;--emi-level:#1d5fa8;--emi-warn:#c8321a;--emi-limit:#1c2427;--emi-limit-soft:#5c6b72;--emi-band:#1d5fa833;--emi-ok:#2e7d5b}
+:root[data-theme=dark]{--emi-gap:#e2532a;--emi-via:#d9642a;--emi-plane-edge:#1493b0;--emi-board-edge:#8f5cf0;--emi-level:#7db4ee;--emi-warn:#ff8a6b;--emi-limit:#e6ecee;--emi-limit-soft:#94a3aa;--emi-band:#7db4ee33;--emi-ok:#84d4c0}
 .emi-panel{flex:none;height:min(350px,40vh);display:flex;flex-direction:column;min-height:0;background:var(--panel);border-top:2px solid var(--copper)}
 .emi-panel[hidden]{display:none}
 .emi-head{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--border);flex:none}
@@ -233,6 +233,12 @@ body[data-mode=assembly] #pcb-review>.explorer,body[data-mode=assembly] #pcb-rev
 .emi-body{display:grid;grid-template-columns:minmax(180px,220px) minmax(260px,1fr) minmax(380px,1.2fr);flex:1;min-height:0;border-top:1px solid var(--border)}
 .emi-list,.emi-detail,.emi-chart{min-height:0;overflow:auto;padding:8px 12px}
 .emi-list{border-right:1px solid var(--border);padding:6px}.emi-detail{border-right:1px solid var(--border)}
+.emi-kind{padding:8px 6px 2px;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-top:1px solid var(--border);margin-top:4px}.emi-kind:first-child{border-top:0;margin-top:0;padding-top:2px}
+.emi-examined{display:flex;flex-direction:column;padding:3px 6px;font-size:12px}.emi-examined .quiet{font-size:11px}
+.emi-causes{margin:2px 0 8px}.emi-cause{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;border-color:transparent;background:transparent;padding:4px 4px;white-space:normal}.emi-cause:hover{border-color:var(--border)}
+.emi-mark{flex:none;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font:700 10px ui-monospace,Consolas,monospace;color:#fff;background:var(--emi-gap)}
+.emi-mark.circle{border-radius:50%}.emi-mark.diamond{background:var(--emi-via);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}.emi-mark.square{background:var(--emi-plane-edge)}.emi-mark.triangle{background:var(--emi-board-edge);clip-path:polygon(50% 0,100% 100%,0 100%);align-items:flex-end;padding-bottom:1px}
+.emi-coverage{display:block;width:100%;height:auto;max-height:290px}.emi-coverage .emi-covered{fill:var(--emi-level)}.emi-coverage .emi-uncovered{fill:var(--emi-warn)}.emi-coverage .emi-tick{fill:var(--muted);font:11px ui-monospace,Consolas,monospace}
 .emi-cell{display:flex;flex-direction:column;padding:6px 6px 2px;font-size:12px}.emi-cell .quiet{font-size:11px}
 .emi-item{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;border-color:transparent;background:transparent;padding:5px 6px;white-space:normal}
 .emi-item[aria-pressed=true]{border-color:var(--copper);background:var(--selected-bg)}

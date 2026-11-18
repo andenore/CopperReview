@@ -15,7 +15,7 @@ import {generateBodies} from './bodies.js';
 import {buildAssembly,validateSheet,sheetFromLock,isAssemblyLock,reconcileProgress,emptyProgress,updateEntry,entryOf,statusOf,lineDone,summarize,validateProgress,makeProgress,pinOne,phaseLabel,phaseHint,ASSEMBLY_SHEET_SCHEMA,ASSEMBLY_PROGRESS_SCHEMA} from './assembly.js';
 for(const id of ['category','priority','note-status','assembly-part-status','assembly-filter'])chipify(document.getElementById(id));
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
-import {readEmi,overlayAll,pickFinding,emiBrief,emiSource,emiDocumentKind,findingById,n as emiNumber} from './emi.js';
+import {readEmi,overlayAll,allMarks,pickFinding,emiBrief,emiSource,emiDocumentKind,findingById,n as emiNumber} from './emi.js';
 import {createEmiPanel} from './emi-panel.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
@@ -256,10 +256,10 @@ $('compiler-example').onclick=guarded(async()=>{const response=await fetch(new U
 const BOARD_COLORS={
   dark:{layers:['#e5906d','#77a9dd','#be96dd','#75c9a5','#d0be76','#69c6cf'],board:'#0d171b',padText:'#2a2721',focus:'#fff0b6',label:'#c1d0d5',
     cited:'#ffd27a',issue:'#ff7a7a',grid:'#26353d',edge:'#9abfba',keepout:'#d486ac',graphic:'#779099',courtyard:'#8c829c',fab:'#a7b8bd',padless:'#27363b',
-    outline:'#ffe9a6',done:'#7fd18b',via:'#bba5d7',guideFocus:'#c6fff0',guide:'#6e9eab',regionDone:'#526662',region:'#c19562',selectFill:'#82d5c019',selectLine:'#84d4c0',emiLoop:'#ff4d6d',emiLeg:'#5eb0ff',emiSwitch:'#ffb000',emiVictim:'#3ee6d0',emiHalo:'#0d171b'},
+    outline:'#ffe9a6',done:'#7fd18b',via:'#bba5d7',guideFocus:'#c6fff0',guide:'#6e9eab',regionDone:'#526662',region:'#c19562',selectFill:'#82d5c019',selectLine:'#84d4c0',emiLoop:'#ff4d6d',emiLeg:'#5eb0ff',emiSwitch:'#ffb000',emiVictim:'#3ee6d0',emiHalo:'#0d171b',emiGap:'#ff7043',emiVia:'#ff9d4d',emiPlaneEdge:'#3cc6e0',emiBoardEdge:'#b79cff',emiSignal:'#7db4ee'},
   light:{layers:['#c4502f','#2f6fb8','#8350bd','#23885e','#9c7c12','#178892'],board:'#eef1ec',padText:'#ffffff',focus:'#e07b00',label:'#2c393e',
     cited:'#b07d00',issue:'#cc3a3a',grid:'#d9dfdb',edge:'#3f5e59',keepout:'#ad3f78',graphic:'#7c8f95',courtyard:'#8577a3',fab:'#62757b',padless:'#c3ccd0',
-    outline:'#c46d00',done:'#2e8b4a',via:'#6f55a0',guideFocus:'#0f7c66',guide:'#7fa3ac',regionDone:'#9aaba7',region:'#b06b2c',selectFill:'#16806a1f',selectLine:'#16806a',emiLoop:'#d1002f',emiLeg:'#0b5cc7',emiSwitch:'#d98200',emiVictim:'#007c91',emiHalo:'#eef1ec'}};
+    outline:'#c46d00',done:'#2e8b4a',via:'#6f55a0',guideFocus:'#0f7c66',guide:'#7fa3ac',regionDone:'#9aaba7',region:'#b06b2c',selectFill:'#16806a1f',selectLine:'#16806a',emiLoop:'#d1002f',emiLeg:'#0b5cc7',emiSwitch:'#d98200',emiVictim:'#007c91',emiHalo:'#eef1ec',emiGap:'#d4380d',emiVia:'#c2410c',emiPlaneEdge:'#0e7490',emiBoardEdge:'#7c3aed',emiSignal:'#1d5fa8'}};
 const darkTheme=()=>document.documentElement.dataset.theme==='dark';
 let colors=BOARD_COLORS[darkTheme()?'dark':'light'];
 function setTheme(dark){
@@ -414,8 +414,8 @@ function drawIssues() {
   ctx.setLineDash([]);ctx.globalAlpha=1;
 }
 // EMI screening overlay: the selected finding in full, the others faint so they can be picked on the board.
-function strokeNetCopper(net,width,alpha){
-  const scene=state.scene;ctx.globalAlpha=alpha;ctx.strokeStyle=colors.emiSwitch;ctx.fillStyle=colors.emiSwitch;
+function strokeNetCopper(net,width,alpha,color=colors.emiSwitch){
+  const scene=state.scene;ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.fillStyle=color;
   for(const t of scene.tracks){if(t.net!==net||!state.layers.includes(t.layer))continue;ctx.lineWidth=t.width_mm+width;path(t.points_mm);ctx.stroke();}
   for(const v of scene.vias){if(v.net!==net||!visible(v.layers))continue;ctx.lineWidth=width;ctx.beginPath();ctx.arc(...v.position_mm,v.size_mm/2+width/2,0,Math.PI*2);ctx.stroke();}
   for(const c of scene.components)for(const p of c.pads){if(p.net!==net||(p.layers.length&&!visible(p.layers)))continue;ctx.lineWidth=width;path(padCorners(p),true);ctx.stroke();}
@@ -425,11 +425,26 @@ function emiLabel(text,x,y,color){
   ctx.font=`600 ${11/state.zoom}px ui-monospace,Consolas,monospace`;ctx.textAlign='left';ctx.textBaseline='bottom';ctx.lineJoin='round';ctx.lineWidth=3/state.zoom;
   upright(x,y,(a,b)=>{ctx.strokeStyle=colors.emiHalo;ctx.strokeText(text,a,b);ctx.fillStyle=color;ctx.fillText(text,a,b);});
 }
+const EMI_MARK_COLOR={gap:'emiGap',reference_change_without_return_path:'emiVia',plane_edge:'emiPlaneEdge',board_edge:'emiBoardEdge'};
+/** A numbered return-path mark: circle for a gap, diamond for a via, square for a plane edge, triangle for a board edge. */
+function drawEmiMark(mark,on){
+  const px=1/state.zoom,r=(on?9:7)*px,[x,y]=mark.at,color=colors[EMI_MARK_COLOR[mark.kind]];
+  ctx.setLineDash([]);ctx.globalAlpha=on?1:.6;ctx.fillStyle=color;ctx.strokeStyle=colors.emiHalo;ctx.lineWidth=(on?2:1.2)*px;ctx.beginPath();
+  if(mark.kind==='gap')ctx.arc(x,y,r,0,Math.PI*2);
+  else if(mark.kind==='plane_edge')ctx.rect(x-r*.9,y-r*.9,r*1.8,r*1.8);
+  else if(mark.kind==='board_edge'){upright(x,y,(a,b)=>{ctx.moveTo(a,b-r*1.15);ctx.lineTo(a+r*1.1,b+r*.8);ctx.lineTo(a-r*1.1,b+r*.8);ctx.closePath();});}
+  else{ctx.moveTo(x,y-r*1.2);ctx.lineTo(x+r*1.2,y);ctx.lineTo(x,y+r*1.2);ctx.lineTo(x-r*1.2,y);ctx.closePath();}
+  ctx.fill();ctx.stroke();
+  ctx.font=`700 ${(on?11:9)/state.zoom}px ui-monospace,Consolas,monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';
+  upright(x,y,(a,b)=>ctx.fillText(String(mark.number),a,b+(mark.kind==='board_edge'?r*.15:0)));
+  if(on)emiLabel(mark.short,x+r+4*px,y-r*.4,color);
+}
 function drawEmi(){
   if(!state.emi||!$('show-emi').checked)return;
   const px=1/state.zoom,selected=state.emiSelected;ctx.save();ctx.lineJoin='round';ctx.lineCap='round';ctx.setLineDash([]);
   const one=(id,o)=>{
     const on=id===selected,loop=o.loop;
+    if(on)for(const net of o.subjectNets)strokeNetCopper(net,3*px,.45,colors.emiSignal);
     if(on||o.switchNets.length)for(const net of o.switchNets)strokeNetCopper(net,on?3.5*px:2*px,on?.5:.22);
     if(loop){
       const estimate=loop.source!=='loop_path_3d_mm';
@@ -458,6 +473,9 @@ function drawEmi(){
   };
   for(const [id,o] of state.emi.overlays)if(id!==selected)one(id,o);
   if(selected&&state.emi.overlays.has(selected))one(selected,state.emi.overlays.get(selected));
+  const marks=allMarks(state.emi.overlays);
+  for(const mark of marks)if(!mark.findings.includes(selected))drawEmiMark(mark,false);
+  for(const mark of marks)if(mark.findings.includes(selected))drawEmiMark(mark,true);
   ctx.restore();
 }
 function citedIssueIds(){return $('issue-ids').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);}
@@ -758,7 +776,7 @@ function openSource(kind,id){
 $('source-close').onclick=()=>$('source-dialog').close();
 // ---- EMI screening (route-report.json `emi`): panel, overlay, picking and citing ------------------
 const emiPanel=createEmiPanel({list:$('emi-list'),detail:$('emi-detail'),chart:$('emi-chart'),notes:$('emi-notes'),source:$('emi-source'),disclaimer:$('emi-disclaimer')},
-  {onSelect:(id,opts)=>selectEmi(id,opts),onCite:id=>citeEmi(id)});
+  {onSelect:(id,opts)=>selectEmi(id,opts),onCite:id=>citeEmi(id),onFocus:(at,id)=>{if(state.emiSelected!==id)selectEmi(id);requestAnimationFrame(()=>requestAnimationFrame(()=>fit([at[0]-6,at[1]-6,at[0]+6,at[1]+6])));}});
 const citedEmiIds=()=>$('emi-ids').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
 function emiSourceRecord(){return state.emi?emiSource(state.emi.model):state.emiSource||null;}
 function setEmiOpen(open){const on=open&&!!state.emi;$('emi-panel').hidden=!on;$('emi-toggle').setAttribute('aria-pressed',String(on));$('emi-toggle').classList.toggle('active',on);$('pcb-review').classList.toggle('emi-open',on);}
@@ -787,7 +805,7 @@ function citeEmi(id){
   if(!s.components.length&&!s.nets.length&&!s.region&&b){state.selection.region=b.map(round);updateSelection();}
   message(`${id} cited in the layout note. Describe what you observe and press Add annotation.`);$('observation').focus();
 }
-/** Clicking the loop, a victim line or switch-node copper selects its finding; a pad keeps its normal meaning. */
+/** Clicking the loop, a victim line, switch-node copper or a numbered mark selects its finding; a pad keeps its normal meaning. */
 function emiPick(point,found){
   if(!state.emi||!$('show-emi').checked||state.mode==='region'||found.pad)return false;
   const tol=6/state.zoom,scene=state.scene;

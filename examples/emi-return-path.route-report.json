@@ -1,0 +1,581 @@
+{
+ "emi": {
+  "board": "EmiReturnPath",
+  "cells": [],
+  "coverage": [
+   {
+    "check": "EMI-CELLS",
+    "detail": "no switching cell: no component has a switch pin (declared emi_role or the structural fallback for unannotated regulators)",
+    "status": "not_applicable"
+   },
+   {
+    "check": "EMI-MARGIN",
+    "detail": "no emission constraint: findings are ranked against each other at 3 m and carry no margin",
+    "status": "not_applicable"
+   },
+   {
+    "check": "EMI-RETURN-PATH",
+    "detail": "3 of 5 subject net(s) examined on the routed board with its native zone fills (2 layer(s) with fills): reference coverage within 3 H, slot crossings with their half-wave resonance, reference changes at vias with the nearest return path, plane-edge and board-edge distance against 20 H; screening evidence from the filled copper, never a pass or a fail, and the plane-pair cavity, slot radiation efficiency and enclosure are not modelled",
+    "status": "executed"
+   },
+   {
+    "check": "EMI-RETURN-PATH:CLK_E",
+    "detail": "CLK_E: 90.03 mm routed, 2.00 mm without reference copper within 3 H, 1 gap(s), 0 reference change(s) of 0 via transition(s), F.Cu over In1.Cu (GND, H 0.235 mm); see the EMI-RETURN-PATH finding",
+    "status": "executed"
+   },
+   {
+    "check": "EMI-RETURN-PATH:CLK_S",
+    "detail": "CLK_S: 89.38 mm routed, 2.00 mm without reference copper within 3 H, 1 gap(s), 0 reference change(s) of 0 via transition(s), F.Cu over In1.Cu (GND, H 0.235 mm); see the EMI-RETURN-PATH finding",
+    "status": "executed"
+   },
+   {
+    "check": "EMI-RETURN-PATH:CLK_U",
+    "detail": "CLK_U: 89.82 mm routed, 2.00 mm without reference copper within 3 H, 1 gap(s), 0 reference change(s) of 0 via transition(s), F.Cu over In1.Cu (GND, H 0.235 mm); see the EMI-RETURN-PATH finding",
+    "status": "executed"
+   },
+   {
+    "check": "EMI-RETURN-PATH:LANE_A_P",
+    "detail": "LANE_A_P/LANE_A_N: no routed copper (tracks, arcs or vias) on the net: the return path of an unrouted net is not examined",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-RETURN-PATH:LANE_B_P",
+    "detail": "LANE_B_P/LANE_B_N: no routed copper (tracks, arcs or vias) on the net: the return path of an unrouted net is not examined",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-MODE-CONVERSION",
+    "detail": "no differential pair has a routed section with copper on both legs: the skew and the conversion are not estimated",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-MODE-CONVERSION:LANE_A_P",
+    "detail": "LANE_A_P/LANE_A_N: no section has routed copper on both legs: the skew of an unrouted or half-routed pair is unknown and the conversion is not estimated",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-MODE-CONVERSION:LANE_B_P",
+    "detail": "LANE_B_P/LANE_B_N: no section has routed copper on both legs: the skew of an unrouted or half-routed pair is unknown and the conversion is not estimated",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-DECOUPLING-PATH",
+    "detail": "needs routed copper: the copper path length from each decoupling capacitor pad to its target pin and return via is not traced",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-COPPER-TRACE",
+    "detail": "no routed copper (tracks, arcs, vias or polygons, macro copper included; zone outlines alone are not routed copper) on the nets of any hot loop: loops use the pad-centre polygon",
+    "status": "unsupported"
+   },
+   {
+    "check": "EMI-CABLE-COMMON-MODE",
+    "detail": "common-mode radiation from cables and attached conductors (cable_length 1 m) is not estimated: the board model has no cable, chassis or return structure, so EMI-SWITCH-NODE reports a coupling-risk score, not a field",
+    "status": "unsupported"
+   }
+  ],
+  "evidence_grade": "screening",
+  "findings": [
+   {
+    "cell": null,
+    "code": "EMI-RETURN-PATH",
+    "estimate": {
+     "definition": "20 log10(V(f_res) L / (1 V * 1 mm)): f_res the half-wave resonance c / (2 L sqrt(eps_eff)) of the gap's slot, L the slot length perpendicular to the crossing in mm, V the continuous-bound amplitude (volts, single-sided peak) of the signal's spectrum at f_res for its swing and its shorter edge. The headline uses the continuous bound because it is the one of the three spectrum quantities that needs no assumption about the data pattern; the named pattern lines and random data in a resolution bandwidth are carried beside it, each with its own score. Not a field, no distance, no limit: it ranks the slots of one board against each other",
+     "frequency_hz": 1101344332,
+     "kind": "ranking_score",
+     "method": "ranking score of the worst gap: slot 76.000 mm, half-wave resonance 1101.3 MHz, continuous-bound amplitude 0.4857 V of a 3.300 V swing with a 1.250 ns ramp",
+     "not_modelled": [
+      "whether a cut that reaches the plane edge is a notch open at one end, which resonates at a quarter wave (half the frequency the score uses; carried as quarter_wave_resonance_hz), or a cut through the plane",
+      "slot radiation efficiency (how much of the power a slot of this length takes up and radiates depends on how it is fed, its width and the structure around it)",
+      "plane-pair cavity modes (a pair of planes resonates as a cavity; a slot, a cut or a row of vias only perturbs it)",
+      "enclosure, chassis and cable coupling (the field outside the board, and what the slot's voltage drives)",
+      "the common-mode part of a differential pair: the score uses the whole signal, a balanced pair excites a slot only through the part that is converted (mode conversion is a later check)",
+      "return current outside the coverage window, current crowding at a slot's ends and the inductance of the detour",
+      "the plane of a stripline other than the nearer one, and a reference net that changes inside one plane layer"
+     ],
+     "numerical_sensitivity": null,
+     "quantity": "slot_ranking_score",
+     "unit": "dB",
+     "value": 31.34
+    },
+    "layers": [
+     "F.Cu"
+    ],
+    "measured_nm": null,
+    "measures": {
+     "drc_return_via_reported": [],
+     "gaps": [
+      {
+       "crossings": [
+        {
+         "length_mm": 2,
+         "net": "CLK_E",
+         "segments": 1
+        }
+       ],
+       "effective_permittivity": 3.2071,
+       "kind": "cut_to_plane_edge",
+       "nets": [
+        "CLK_E"
+       ],
+       "position_mm": [
+        40,
+        72.75
+       ],
+       "quarter_wave_resonance_hz": 550672166,
+       "reference_layer": "In1.Cu",
+       "resonance_hz": 1101344332,
+       "signal_layer": "F.Cu",
+       "slot_length_mm": 76,
+       "structure": "microstrip",
+       "via_antipads_in_void": 0
+      }
+     ],
+     "inputs_text": [
+      "reference window: return current taken within 3 H each side of a trace (79.5 % of a thin trace's return current over an infinite plane; derived, band 2 H to 5 H)",
+      "edge distance: plane and board edges kept 20 H from a trace (the 20 H rule of EMC design guides; band 10 H to 100 H; no verified citation)"
+     ],
+     "members": [
+      {
+       "layers": [
+        {
+         "board_edge": {
+          "at_mm": [
+           96.5,
+           72.635
+          ],
+          "length_within_limit_mm": 1.589,
+          "limit_mm": 4.7,
+          "nearest_mm": 3.5,
+          "within_limit": true
+         },
+         "layer": "F.Cu",
+         "outer_layer_unguarded_edge_length_mm": 0,
+         "plane_edge": {
+          "at_mm": [
+           41,
+           72.75
+          ],
+          "length_within_limit_mm": 18.495,
+          "limit_mm": 4.7,
+          "nearest_mm": 0,
+          "within_limit": true
+         },
+         "routed_length_mm": 90.027,
+         "segments": 8,
+         "uncovered_length_mm": 2
+        }
+       ],
+       "layers_without_reference_plane": [],
+       "net": "CLK_E",
+       "routed_length_mm": 90.027,
+       "uncovered_length_mm": 2
+      }
+     ],
+     "ranking": {
+      "slot_mm": 76,
+      "spectrum": {
+       "clock_lines": {
+        "amplitude_v": 0.040847,
+        "line_hz": 1100000000,
+        "score_db": 9.84
+       },
+       "continuous_bound": {
+        "amplitude_v": 0.485748,
+        "note": "upper bound on any line of any two-level waveform with this swing and edge; loose by construction",
+        "score_db": 31.34
+       },
+       "frequency_hz": 1101344332
+      },
+      "worst_gap_position_mm": [
+       40,
+       72.75
+      ]
+     },
+     "reference": [
+      {
+       "effective_permittivity": 3.2071,
+       "height_mm": 0.235,
+       "other_plane": null,
+       "reference_layer": "In1.Cu",
+       "reference_nets": [
+        "GND"
+       ],
+       "signal_layer": "F.Cu",
+       "structure": "microstrip"
+      }
+     ],
+     "reference_changes": [],
+     "routed_length_mm": 90.027,
+     "subject": "CLK_E",
+     "thresholds": {
+      "coverage_window_fraction_of_return_current": 0.7952,
+      "coverage_window_h": 3,
+      "edge_distance_h": 20,
+      "return_via_lambda_fraction": 20
+     },
+     "uncovered_length_mm": 2,
+     "via_transitions_examined": 0
+    },
+    "message": "CLK_E: return path: 2.00 mm of 90.03 mm routed has no reference copper within 3 H of its centre line; 1 gap(s) crossed, longest slot 76.00 mm at (40.00, 72.75) mm on F.Cu over In1.Cu, resonance 1101 MHz; trace 0.00 mm from the edge of the reference copper (limit 4.70 mm), 3.50 mm from the board edge (limit 4.70 mm); slot ranking score +31.3 dB (ranking only: not a field, not comparable with an emission limit)",
+    "nets": [
+     "CLK_E"
+    ],
+    "objects": [
+     "CLK_E"
+    ],
+    "provenance": null,
+    "required_nm": null,
+    "severity": "warning",
+    "tags": [
+     "rule_of_thumb_return_window",
+     "rule_of_thumb_edge_distance",
+     "ranking_only"
+    ]
+   },
+   {
+    "cell": null,
+    "code": "EMI-RETURN-PATH",
+    "estimate": {
+     "definition": "20 log10(V(f_res) L / (1 V * 1 mm)): f_res the half-wave resonance c / (2 L sqrt(eps_eff)) of the gap's slot, L the slot length perpendicular to the crossing in mm, V the continuous-bound amplitude (volts, single-sided peak) of the signal's spectrum at f_res for its swing and its shorter edge. The headline uses the continuous bound because it is the one of the three spectrum quantities that needs no assumption about the data pattern; the named pattern lines and random data in a resolution bandwidth are carried beside it, each with its own score. Not a field, no distance, no limit: it ranks the slots of one board against each other",
+     "frequency_hz": 1101344332,
+     "kind": "ranking_score",
+     "method": "ranking score of the worst gap: slot 76.000 mm, half-wave resonance 1101.3 MHz, continuous-bound amplitude 0.4857 V of a 3.300 V swing with a 1.250 ns ramp",
+     "not_modelled": [
+      "whether a cut that reaches the plane edge is a notch open at one end, which resonates at a quarter wave (half the frequency the score uses; carried as quarter_wave_resonance_hz), or a cut through the plane",
+      "slot radiation efficiency (how much of the power a slot of this length takes up and radiates depends on how it is fed, its width and the structure around it)",
+      "plane-pair cavity modes (a pair of planes resonates as a cavity; a slot, a cut or a row of vias only perturbs it)",
+      "enclosure, chassis and cable coupling (the field outside the board, and what the slot's voltage drives)",
+      "the common-mode part of a differential pair: the score uses the whole signal, a balanced pair excites a slot only through the part that is converted (mode conversion is a later check)",
+      "return current outside the coverage window, current crowding at a slot's ends and the inductance of the detour",
+      "the plane of a stripline other than the nearer one, and a reference net that changes inside one plane layer"
+     ],
+     "numerical_sensitivity": null,
+     "quantity": "slot_ranking_score",
+     "unit": "dB",
+     "value": 31.34
+    },
+    "layers": [
+     "F.Cu"
+    ],
+    "measured_nm": null,
+    "measures": {
+     "drc_return_via_reported": [],
+     "gaps": [
+      {
+       "crossings": [
+        {
+         "length_mm": 2,
+         "net": "CLK_S",
+         "segments": 1
+        }
+       ],
+       "effective_permittivity": 3.2071,
+       "kind": "cut_to_plane_edge",
+       "nets": [
+        "CLK_S"
+       ],
+       "position_mm": [
+        40,
+        68.5
+       ],
+       "quarter_wave_resonance_hz": 550672166,
+       "reference_layer": "In1.Cu",
+       "resonance_hz": 1101344332,
+       "signal_layer": "F.Cu",
+       "slot_length_mm": 76,
+       "structure": "microstrip",
+       "via_antipads_in_void": 0
+      }
+     ],
+     "inputs_text": [
+      "reference window: return current taken within 3 H each side of a trace (79.5 % of a thin trace's return current over an infinite plane; derived, band 2 H to 5 H)",
+      "edge distance: plane and board edges kept 20 H from a trace (the 20 H rule of EMC design guides; band 10 H to 100 H; no verified citation)"
+     ],
+     "members": [
+      {
+       "layers": [
+        {
+         "board_edge": {
+          "at_mm": [
+           96.5,
+           70
+          ],
+          "length_within_limit_mm": 1.745,
+          "limit_mm": 4.7,
+          "nearest_mm": 3.5,
+          "within_limit": true
+         },
+         "layer": "F.Cu",
+         "outer_layer_unguarded_edge_length_mm": 0.943,
+         "plane_edge": {
+          "at_mm": [
+           41.0604,
+           68.5
+          ],
+          "length_within_limit_mm": 13.454,
+          "limit_mm": 4.7,
+          "nearest_mm": 0.0604,
+          "within_limit": true
+         },
+         "routed_length_mm": 89.377,
+         "segments": 4,
+         "uncovered_length_mm": 2
+        }
+       ],
+       "layers_without_reference_plane": [],
+       "net": "CLK_S",
+       "routed_length_mm": 89.377,
+       "uncovered_length_mm": 2
+      }
+     ],
+     "ranking": {
+      "slot_mm": 76,
+      "spectrum": {
+       "clock_lines": {
+        "amplitude_v": 0.040847,
+        "line_hz": 1100000000,
+        "score_db": 9.84
+       },
+       "continuous_bound": {
+        "amplitude_v": 0.485748,
+        "note": "upper bound on any line of any two-level waveform with this swing and edge; loose by construction",
+        "score_db": 31.34
+       },
+       "frequency_hz": 1101344332
+      },
+      "worst_gap_position_mm": [
+       40,
+       68.5
+      ]
+     },
+     "reference": [
+      {
+       "effective_permittivity": 3.2071,
+       "height_mm": 0.235,
+       "other_plane": null,
+       "reference_layer": "In1.Cu",
+       "reference_nets": [
+        "GND"
+       ],
+       "signal_layer": "F.Cu",
+       "structure": "microstrip"
+      }
+     ],
+     "reference_changes": [],
+     "routed_length_mm": 89.377,
+     "subject": "CLK_S",
+     "thresholds": {
+      "coverage_window_fraction_of_return_current": 0.7952,
+      "coverage_window_h": 3,
+      "edge_distance_h": 20,
+      "return_via_lambda_fraction": 20
+     },
+     "uncovered_length_mm": 2,
+     "via_transitions_examined": 0
+    },
+    "message": "CLK_S: return path: 2.00 mm of 89.38 mm routed has no reference copper within 3 H of its centre line; 1 gap(s) crossed, longest slot 76.00 mm at (40.00, 68.50) mm on F.Cu over In1.Cu, resonance 1101 MHz; trace 0.06 mm from the edge of the reference copper (limit 4.70 mm), 3.50 mm from the board edge (limit 4.70 mm), 0.94 mm of outer-layer copper along the board edge with no stitched ground via on the edge side; slot ranking score +31.3 dB (ranking only: not a field, not comparable with an emission limit)",
+    "nets": [
+     "CLK_S"
+    ],
+    "objects": [
+     "CLK_S"
+    ],
+    "provenance": null,
+    "required_nm": null,
+    "severity": "warning",
+    "tags": [
+     "rule_of_thumb_return_window",
+     "rule_of_thumb_edge_distance",
+     "ranking_only"
+    ]
+   },
+   {
+    "cell": null,
+    "code": "EMI-RETURN-PATH",
+    "estimate": {
+     "definition": "20 log10(V(f_res) L / (1 V * 1 mm)): f_res the half-wave resonance c / (2 L sqrt(eps_eff)) of the gap's slot, L the slot length perpendicular to the crossing in mm, V the continuous-bound amplitude (volts, single-sided peak) of the signal's spectrum at f_res for its swing and its shorter edge. The headline uses the continuous bound because it is the one of the three spectrum quantities that needs no assumption about the data pattern; the named pattern lines and random data in a resolution bandwidth are carried beside it, each with its own score. Not a field, no distance, no limit: it ranks the slots of one board against each other",
+     "frequency_hz": 1101344332,
+     "kind": "ranking_score",
+     "method": "ranking score of the worst gap: slot 76.000 mm, half-wave resonance 1101.3 MHz, continuous-bound amplitude 0.4857 V of a 3.300 V swing with a 1.250 ns ramp",
+     "not_modelled": [
+      "whether a cut that reaches the plane edge is a notch open at one end, which resonates at a quarter wave (half the frequency the score uses; carried as quarter_wave_resonance_hz), or a cut through the plane",
+      "slot radiation efficiency (how much of the power a slot of this length takes up and radiates depends on how it is fed, its width and the structure around it)",
+      "plane-pair cavity modes (a pair of planes resonates as a cavity; a slot, a cut or a row of vias only perturbs it)",
+      "enclosure, chassis and cable coupling (the field outside the board, and what the slot's voltage drives)",
+      "the common-mode part of a differential pair: the score uses the whole signal, a balanced pair excites a slot only through the part that is converted (mode conversion is a later check)",
+      "return current outside the coverage window, current crowding at a slot's ends and the inductance of the detour",
+      "the plane of a stripline other than the nearer one, and a reference net that changes inside one plane layer"
+     ],
+     "numerical_sensitivity": null,
+     "quantity": "slot_ranking_score",
+     "unit": "dB",
+     "value": 31.34
+    },
+    "layers": [
+     "F.Cu"
+    ],
+    "measured_nm": null,
+    "measures": {
+     "drc_return_via_reported": [],
+     "gaps": [
+      {
+       "crossings": [
+        {
+         "length_mm": 2,
+         "net": "CLK_U",
+         "segments": 1
+        }
+       ],
+       "effective_permittivity": 3.2071,
+       "kind": "cut_to_plane_edge",
+       "nets": [
+        "CLK_U"
+       ],
+       "position_mm": [
+        40,
+        71.365
+       ],
+       "quarter_wave_resonance_hz": 550672166,
+       "reference_layer": "In1.Cu",
+       "resonance_hz": 1101344332,
+       "signal_layer": "F.Cu",
+       "slot_length_mm": 76,
+       "structure": "microstrip",
+       "via_antipads_in_void": 0
+      }
+     ],
+     "inputs_text": [
+      "reference window: return current taken within 3 H each side of a trace (79.5 % of a thin trace's return current over an infinite plane; derived, band 2 H to 5 H)",
+      "edge distance: plane and board edges kept 20 H from a trace (the 20 H rule of EMC design guides; band 10 H to 100 H; no verified citation)"
+     ],
+     "members": [
+      {
+       "layers": [
+        {
+         "board_edge": {
+          "at_mm": [
+           96.5,
+           71.25
+          ],
+          "length_within_limit_mm": 1.779,
+          "limit_mm": 4.7,
+          "nearest_mm": 3.5,
+          "within_limit": true
+         },
+         "layer": "F.Cu",
+         "outer_layer_unguarded_edge_length_mm": 0,
+         "plane_edge": {
+          "at_mm": [
+           38.9564,
+           71.365
+          ],
+          "length_within_limit_mm": 13.68,
+          "limit_mm": 4.7,
+          "nearest_mm": 0.0436,
+          "within_limit": true
+         },
+         "routed_length_mm": 89.819,
+         "segments": 6,
+         "uncovered_length_mm": 2
+        }
+       ],
+       "layers_without_reference_plane": [],
+       "net": "CLK_U",
+       "routed_length_mm": 89.819,
+       "uncovered_length_mm": 2
+      }
+     ],
+     "ranking": {
+      "slot_mm": 76,
+      "spectrum": {
+       "clock_lines": {
+        "amplitude_v": 0.040847,
+        "line_hz": 1100000000,
+        "score_db": 9.84
+       },
+       "continuous_bound": {
+        "amplitude_v": 0.485748,
+        "note": "upper bound on any line of any two-level waveform with this swing and edge; loose by construction",
+        "score_db": 31.34
+       },
+       "frequency_hz": 1101344332
+      },
+      "worst_gap_position_mm": [
+       40,
+       71.365
+      ]
+     },
+     "reference": [
+      {
+       "effective_permittivity": 3.2071,
+       "height_mm": 0.235,
+       "other_plane": null,
+       "reference_layer": "In1.Cu",
+       "reference_nets": [
+        "GND"
+       ],
+       "signal_layer": "F.Cu",
+       "structure": "microstrip"
+      }
+     ],
+     "reference_changes": [],
+     "routed_length_mm": 89.819,
+     "subject": "CLK_U",
+     "thresholds": {
+      "coverage_window_fraction_of_return_current": 0.7952,
+      "coverage_window_h": 3,
+      "edge_distance_h": 20,
+      "return_via_lambda_fraction": 20
+     },
+     "uncovered_length_mm": 2,
+     "via_transitions_examined": 0
+    },
+    "message": "CLK_U: return path: 2.00 mm of 89.82 mm routed has no reference copper within 3 H of its centre line; 1 gap(s) crossed, longest slot 76.00 mm at (40.00, 71.36) mm on F.Cu over In1.Cu, resonance 1101 MHz; trace 0.04 mm from the edge of the reference copper (limit 4.70 mm), 3.50 mm from the board edge (limit 4.70 mm); slot ranking score +31.3 dB (ranking only: not a field, not comparable with an emission limit)",
+    "nets": [
+     "CLK_U"
+    ],
+    "objects": [
+     "CLK_U"
+    ],
+    "provenance": null,
+    "required_nm": null,
+    "severity": "warning",
+    "tags": [
+     "rule_of_thumb_return_window",
+     "rule_of_thumb_edge_distance",
+     "ranking_only"
+    ]
+   }
+  ],
+  "limits": {
+   "band_hz": [
+    30000000,
+    1000000000
+   ],
+   "distance_m": 3,
+   "limit_source": null,
+   "notes": [
+    "screening evidence: ranks likely noise sources, never establishes EMC qualification",
+    "validated: the closed forms, the circuit solver and the receiver emulation against hand calculations and analytic cases (unit tests); not validated: no estimate has been correlated with a measurement, so no accuracy, confidence interval or bound is claimed; margins are screening margins, not pass or fail",
+    "uncertainty is reported as three separate things per estimate: numerical sensitivity (null for closed forms), parameter bands from rule-of-thumb defaults (band_db), and the named mechanisms not modelled (not_modelled)",
+    "common-mode radiation is a relative coupling-risk score (ranking only): it has no distance, no field value and no margin, and is never compared with an emission limit",
+    "hot-loop geometry is the traced copper path where routed copper joins the loop pads (traced_copper, partially_traced) and the pad-centre polygon elsewhere (placement_estimate)",
+    "differential-mode loop field is free space; in the current_limit scenario the radiated sweep is the upper envelope of the trapezoid, in the declared_operating_point scenario it is the harmonic lines of the ramp-on-pedestal switch current; peak against quasi-peak limits",
+    "limit tables are transcribed from the published numbers and must be verified against the standards",
+    "3 of 3 finding(s) rest on rule-of-thumb defaults (tags rule_of_thumb_edge, rule_of_thumb_capacitance, rule_of_thumb_dc_bias, rule_of_thumb_ripple):              their levels are bands with the nominal or the unfavourable end stated, the defaults are listed as `input:` lines and none is a datasheet value;              declare the attribute named in each line to replace a default; the band covers the default inputs only, not the mechanisms listed in `not_modelled`"
+   ],
+   "standard": null,
+   "validation": "validated: the closed forms, the circuit solver and the receiver emulation against hand calculations and analytic cases (unit tests); not validated: no estimate has been correlated with a measurement, so no accuracy, confidence interval or bound is claimed"
+  },
+  "schema": "copperscript-emi-check/v0.1",
+  "summary": {
+   "accepted": 0,
+   "cells": 0,
+   "conducted": 0,
+   "findings": 3,
+   "rule_of_thumb": 3
+  }
+ },
+ "schema": "copperscript-route-board/v0.1"
+}

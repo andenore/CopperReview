@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {webcrypto} from 'node:crypto';
 import {makeAnnotation,makeReview,validateReview,validateScene,refreshContexts} from '../copper_review/web/core.js';
-import {readEmi,emiDocumentKind,assumptionSentences,marginPhrase,findingFacts,findingHeadline,spectrumModel,spectrumSvg,spectrumCaption,loopFromPath,overlayGeometry,overlayAll,pickFinding,emiBrief,emiSource,groupByCell,notModelled,conductedOf,EMI_SCREENING_LINE} from '../copper_review/web/emi.js';
+import {subjectKind,pairLabel,groupBySubject,returnPathCauses,returnPathMarks,allMarks,coverageModel,coverageSvg,readEmi,emiDocumentKind,assumptionSentences,marginPhrase,findingFacts,findingHeadline,spectrumModel,spectrumSvg,spectrumCaption,loopFromPath,overlayGeometry,overlayAll,pickFinding,emiBrief,emiSource,groupByCell,notModelled,conductedOf,EMI_SCREENING_LINE} from '../copper_review/web/emi.js';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 // examples/emi-buck.* come from `copper route-board examples/emi_buck/board.copper --allow-proxy-footprints`
 // (CopperScript), the report trimmed to its `emi` section; the old-schema file is the same report with the
@@ -188,4 +188,80 @@ test('the example review with a cited EMI finding loads against its board',()=>{
   const review=validateReview(json('../examples/emi-buck.review.json'),scene);
   assert.deepEqual(review.annotations[0].emi_findings,['E1']);assert.equal(review.copperscript_emi.board_verified,false);
   assert.equal(refreshContexts(scene,review.annotations)[0].context.emi_findings[0].code,'EMI-HOT-LOOP');
+});
+
+// ---- Signals, pairs and return paths -----------------------------------------------------------
+// tests/fixtures/emi-return-path.emi-check.json is `copper emi-check examples/emi_return_path/board.copper
+// --allow-proxy-footprints --run examples/emi_return_path/routed --json` (CopperScript 6c304c2a): the hand-placed
+// copper with a gap, a via without a return path, a plane edge and a board edge. examples/emi-return-path.* is the
+// same source routed by `copper route-board`, the report trimmed to its `emi` section.
+const rpDoc=json('./fixtures/emi-return-path.emi-check.json');
+const rpScene=validateScene(json('../examples/emi-return-path.scene.json'));
+const rp=readEmi(rpDoc,rpScene,{name:'emi-check.json'});
+test('a report with no switching cell groups its findings by signal or pair',()=>{
+  assert.equal(emiDocumentKind(rpDoc),'emi-section');assert.equal(rp.cells.length,0);assert.equal(rp.findings.length,3);
+  assert(rp.findings.every(f=>f.code==='EMI-RETURN-PATH'&&subjectKind(f)==='signal'&&f.cell===''));
+  const grouped=groupBySubject(rp);
+  assert.deepEqual(grouped.kinds.map(k=>[k.kind,k.title,k.groups.map(g=>g.name)]),[['signal','Signals and pairs',['LANE_B_P/N','CLK_U','CLK_E']]]);
+  // Subjects a check examined and reported nothing for are listed, and are not passes.
+  assert.deepEqual(grouped.examined.map(x=>[x.code,x.label]),[['EMI-RETURN-PATH','CLK_S'],['EMI-RETURN-PATH','LANE_A_P/N'],['EMI-MODE-CONVERSION','LANE_A_P/N'],['EMI-MODE-CONVERSION','LANE_B_P/N']]);
+  assert(grouped.examined.every(x=>/not a pass/.test(x.detail)));
+  // A pair's label is not a part, so the board check does not report it as missing.
+  assert(!rp.notes.some(x=>/are not on this board/.test(x)),rp.notes.join(' | '));
+});
+test('pair labels follow CopperScript',()=>{
+  assert.equal(pairLabel('LANE_B_P','LANE_B_N'),'LANE_B_P/N');assert.equal(pairLabel('usb_dp','usb_dn'),'usb_dp/n');assert.equal(pairLabel('D+','D-'),'D+/D-');
+});
+test('the buck report still groups under its converter cell',()=>{
+  const grouped=groupBySubject(model);
+  assert.deepEqual(grouped.kinds.map(k=>[k.kind,k.groups.map(g=>g.name),k.groups[0].findings.length]),[['cell',['U1'],model.findings.length]]);
+  assert.equal(grouped.examined.length,0);
+});
+test('return-path causes carry positions and CopperScript wording',()=>{
+  const [lane,clkU,clkE]=rp.findings;
+  assert.deepEqual(returnPathCauses(lane).map(c=>[c.kind,c.at,c.short]),[['gap',[40,40],'slot 76 mm, 1.12 GHz'],['plane_edge',[41,40],'0.0 mm < 4.7 mm'],['plane_edge',[41,40.27],'0.0 mm < 4.7 mm']]);
+  assert.deepEqual(returnPathCauses(clkU).map(c=>[c.kind,c.at,c.short]),[['reference_change_without_return_path',[25,62],'return 7.2 mm > 2.0 mm']]);
+  assert.match(returnPathCauses(clkU)[0].text,/^via:2: nearest return path 7\.16 mm, threshold 2 mm$/);
+  assert.deepEqual(returnPathCauses(clkE).map(c=>[c.kind,c.at,c.short]),[['plane_edge',[3,30],'1.0 mm < 4.7 mm'],['board_edge',[3,30],'3.0 mm < 4.7 mm']]);
+  assert.deepEqual(returnPathCauses(model.findings[0]),[]);
+});
+test('marks merge and number as in the return-path map CopperScript draws',()=>{
+  // The picture CopperScript draws for this board: 1 gap, 2 via, 3 plane edge, 4 board edge. The two
+  // plane-edge points of the pair sit on its gap and are dropped.
+  const marks=returnPathMarks(rp.findings);
+  assert.deepEqual(marks.map(x=>[x.number,x.kind,x.subjects.join(','),x.short]),[[1,'gap','LANE_B_P/N','slot 76 mm, 1.12 GHz'],[2,'reference_change_without_return_path','CLK_U','return 7.2 mm > 2.0 mm'],[3,'plane_edge','CLK_E','1.0 mm < 4.7 mm'],[4,'board_edge','CLK_E','3.0 mm < 4.7 mm']]);
+  const overlays=overlayAll(rpScene,rp);
+  assert.deepEqual([...overlays].map(([id,o])=>[id,o.marks.map(x=>x.number),o.subjectNets]),[['E1',[1],['LANE_B_P','LANE_B_N']],['E2',[2],['CLK_U']],['E3',[3,4],['CLK_E']]]);
+  assert.deepEqual(allMarks(overlays).map(x=>x.number),[1,2,3,4]);
+  // The window of a finding frames its causes; clicking a mark picks its finding.
+  assert.deepEqual(overlays.get('E2').bounds,[23,60,27,64]);
+  assert.equal(pickFinding([25.2,62.1],overlays,0.5),'E2');assert.equal(pickFinding([40,40],overlays,0.5),'E1');assert.equal(pickFinding([60,10],overlays,0.5),null);
+});
+test('two subjects with an edge point at one place share a mark, the nearer distance kept',()=>{
+  const edge=(net,nearest)=>({code:'EMI-RETURN-PATH',nets:[net],measures:{subject:net,members:[{net,layers:[{layer:'F.Cu',routed_length_mm:10,uncovered_length_mm:0,board_edge:{at_mm:[5,5.4],nearest_mm:nearest,limit_mm:4.7,within_limit:true}}]}]}});
+  const m=readEmi({schema:'copperscript-emi-check/v0.1',findings:[edge('A',3),edge('B',2)]});
+  const marks=returnPathMarks(m.findings);
+  assert.equal(marks.length,1);assert.deepEqual(marks[0].findings,['E1','E2']);assert.deepEqual(marks[0].subjects,['A','B']);assert.equal(marks[0].short,'2.0 mm < 4.7 mm');
+});
+test('return-path facts, headline, coverage chart and cited brief',()=>{
+  const [lane,clkU]=rp.findings;
+  const facts=Object.fromEntries(findingFacts(lane,rp));
+  assert.equal(facts['Routed length'],'40 mm');assert.equal(facts['Without reference copper'],'4 mm (within 3 H of the trace)');
+  assert.equal(facts['Reference of F.Cu'],'In1.Cu (GND), H 0.24 mm, microstrip');
+  assert.match(facts['Slot ranking score'],/^25\.74 dB at 1\.12 GHz, ranking only/);
+  assert.match(Object.fromEntries(findingFacts(clkU,rp))['Reference changes at vias'],/^1 of 1 transition, 1 without a return path/);
+  assert.equal(findingHeadline(lane,rp),'3 located causes, 4 mm uncovered');assert.equal(findingHeadline(lane,rp,overlayAll(rpScene,rp).get('E1')),'1 located cause, 4 mm uncovered');assert.equal(findingHeadline(clkU,rp),'1 located cause');
+  const cov=coverageModel(lane);
+  assert.deepEqual(cov.rows.map(r=>[r.net,r.layer,r.routed_mm,r.uncovered_mm,r.reference]),[['LANE_B_P','F.Cu',20,2,'In1.Cu'],['LANE_B_N','F.Cu',20,2,'In1.Cu']]);
+  const svg=coverageSvg(cov);assert.equal((svg.match(/class="emi-uncovered"/g)||[]).length,3);assert(svg.includes('2 of 20 mm'));assert(!/NaN|undefined/.test(svg));
+  assert.equal(coverageModel(model.findings[0]),null);
+  const brief=emiBrief(clkU,overlayAll(rpScene,rp).get('E2'));
+  assert.deepEqual(brief.key_measures.causes.map(c=>[c.kind,c.at_mm]),[['reference_change_without_return_path',[25,62]]]);assert.deepEqual(brief.window_mm,[23,60,27,64]);
+});
+test('the routed example opens with its board: located causes on the board, nets found',()=>{
+  const report=json('../examples/emi-return-path.route-report.json'),m=readEmi(report,rpScene,{name:'route-report.json'});
+  assert.equal(emiDocumentKind(report),'route-report');assert(m.findings.length>=1&&m.findings.every(f=>f.code==='EMI-RETURN-PATH'));
+  const overlays=overlayAll(rpScene,m);
+  for(const [id,o] of overlays){assert(o.marks.length>=1,id);assert(o.subjectNets.length>=1,id);assert(o.bounds&&o.bounds.every(Number.isFinite),id);}
+  const b=rpScene.board.bounds_mm;for(const mark of allMarks(overlays))assert(mark.at[0]>=b[0]&&mark.at[0]<=b[2]&&mark.at[1]>=b[1]&&mark.at[1]<=b[3],'mark on the board');
 });
