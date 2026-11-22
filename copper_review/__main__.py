@@ -24,6 +24,8 @@ MODEL_TYPES = {".wrl": "model/vrml", ".step": "application/octet-stream", ".stp"
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".svg": "image/svg+xml", ".copper": "text/plain; charset=utf-8",
                 ".wasm": "application/wasm", ".json": "application/json"}
+# The only JSON beside the page: the bundled example of the Simulation view (Open -> Example simulation).
+WEB_JSON = {"example.sim-results.json"}
 
 
 CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; "
@@ -46,7 +48,7 @@ def static_asset(path):
     if not all(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", part) for part in parts):
         return None
     suffix = Path(name).suffix
-    if suffix == ".json" and parts[0] not in ("wasm", "occt"):
+    if suffix == ".json" and parts[0] not in ("wasm", "occt") and name not in WEB_JSON:
         return None
     if suffix == ".txt":
         return (name, "text/plain; charset=utf-8") if parts[0] == "occt" else None
@@ -170,7 +172,32 @@ def load_route_report(path):
     return served
 
 
-def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, route_report=None):
+def load_sim_results(path, public=False):
+    """A `copper sim` results file (sim-results.json) for the Simulation view, as served JSON bytes.
+
+    The page needs the whole document. Served to other machines (`--host`), each bench's source path
+    is cut to its file name, as the project listing leaves out the folder. Raises ValueError for other files.
+    """
+    path = Path(path)
+    if path.stat().st_size > MAX_UPLOAD:
+        raise ValueError("Simulation results exceed 50 MiB")
+    data = path.read_bytes()
+    try:
+        results = json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path.name} is not valid JSON: {exc}") from exc
+    schema = results.get("schema") if isinstance(results, dict) else None
+    if not isinstance(schema, str) or not schema.startswith("copperscript-sim/"):
+        raise ValueError(f"{path.name} is not a copper sim results file (sim-results.json)")
+    if public:
+        for bench in results.get("benches") or []:
+            if isinstance(bench, dict) and isinstance(bench.get("file"), str):
+                bench["file"] = bench["file"].replace("\\", "/").rsplit("/", 1)[-1]
+    served = {"file": path.name, "sha256": hashlib.sha256(data).hexdigest(), "results": results}
+    return json.dumps(served, allow_nan=False).encode()
+
+
+def make_handler(initial_scene, token, project=None, board=None, public=False, board_dir=None, route_report=None, sim_results=None):
     project = Path(project).resolve() if project else None
 
     class Handler(BaseHTTPRequestHandler):
@@ -213,6 +240,9 @@ def make_handler(initial_scene, token, project=None, board=None, public=False, b
                 return
             if path == "/api/route-report":
                 self.send(200, route_report)
+                return
+            if path == "/api/sim-results":
+                self.send(200, sim_results if sim_results is not None else None)
                 return
             if path == "/api/project":
                 if not project:
@@ -297,6 +327,7 @@ def main():
     parser.add_argument("--stage", choices=STAGES, default="unknown", help="Declared review stage, not a verified routing status")
     parser.add_argument("--source", type=Path, help="Optional .copper source whose filename and hash accompany the board")
     parser.add_argument("--route-report", type=Path, help="CopperScript run report (route-report.json) whose `emi` section is shown as an EMI screening layer on the board (screening estimates, not compliance)")
+    parser.add_argument("--sim-results", type=Path, help="copper sim results (sim-results.json) to open in the Simulation view; needs no board")
     parser.add_argument("--project", type=Path, help="CopperScript project folder; the browser compiles it on every page load")
     parser.add_argument("--entry", help="Board source inside --project when the folder has several (e.g. boards/main/board.copper)")
     parser.add_argument("--host", default="127.0.0.1", help="Address to listen on; 0.0.0.0 serves other machines on your network (plain HTTP)")
@@ -319,6 +350,12 @@ def main():
         if args.route_report:
             try:
                 route_report = load_route_report(args.route_report)
+            except ValueError as exc:
+                parser.error(str(exc))
+        sim_results = None
+        if args.sim_results:
+            try:
+                sim_results = load_sim_results(args.sim_results, public=args.host not in ("127.0.0.1", "localhost"))
             except ValueError as exc:
                 parser.error(str(exc))
         if args.entry and not args.project:
@@ -349,7 +386,7 @@ def main():
         public = args.host not in ("127.0.0.1", "localhost")
         entry = args.entry.replace("\\", "/") if args.entry else None
         server = ThreadingHTTPServer((args.host, args.port), make_handler(
-            scene, token, args.project, entry, public=public, route_report=route_report,
+            scene, token, args.project, entry, public=public, route_report=route_report, sim_results=sim_results,
             board_dir=args.board.resolve().parent if args.board and args.board.suffix.lower() == ".kicad_pcb" else None))
         server.daemon_threads = True
         url = f"http://127.0.0.1:{server.server_port}/#token={token}"

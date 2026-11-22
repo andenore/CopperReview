@@ -90,3 +90,19 @@ No input boards or CopperScript sources were modified by these checks.
 - 22 Python tests, 15 Node tests, the browser workflow, viewer and track-joint
   pixel regressions, the issue/label browser test, and real-board imports of the
   FX10 kit (363 components, 12,786 tracks) and CopperProbe passed.
+
+## Simulation view, 22 November 2026
+
+- `tests/sim.test.js` (11 tests) reads the bundled Howland pump results and derived variants: verdicts,
+  analysis wording, engineering units, value/limit/margin per step, failing limits with an unsolved
+  bench first, a file without the optional v1 fields, unknown schema versions and malformed content
+  (a message, no exception), CSV merging of missing vectors (and refusal of a CSV from another run),
+  step styles beyond eight steps, time layouts, spectra in dBc with the integration floor, histograms,
+  noise shares, the pole map and rails that follow `bias_step`. `tests/test_server.py` checks
+  `--sim-results` (whole document, name and hash, paths cut when served to the network) and that the
+  bundled example is the one JSON served beside the page.
+- Rendered in headless Chrome on the impedance analyzer run (31 benches, 19 MB, 192-step and
+  3052-point records) and the bundled example: overview, ac, transient (log time start-up, cursors),
+  distortion spectrum, Monte Carlo, noise, pole map, rails and stress, a failing and an unsolved bench,
+  dark mode and a 390 px window.
+- 47 Python tests (1 skipped) and 131 Node tests passed.

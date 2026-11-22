@@ -243,3 +243,67 @@ class RouteReportTests(unittest.TestCase):
                 self.assertIsNone(json.load(response))
         finally:
             server.shutdown(); server.server_close(); thread.join()
+
+
+class SimResultsTests(unittest.TestCase):
+    """`--sim-results`: a copper sim run for the Simulation view, and its bundled example."""
+
+    def results(self, directory, **changes):
+        data = json.loads((Path(__file__).parent.parent / "copper_review" / "web" / "example.sim-results.json").read_text(encoding="utf-8"))
+        data["benches"][0]["file"] = "C:\\Users\\someone\\board\\benches\\flatness.copper"
+        data.update(changes)
+        path = Path(directory) / "sim-results.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def test_the_results_are_served_whole_with_name_and_hash_and_local_paths_stay_local(self):
+        import tempfile
+        from copper_review.__main__ import load_sim_results
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.results(directory)
+            served = json.loads(load_sim_results(path))
+            self.assertEqual(sorted(served), ["file", "results", "sha256"])
+            self.assertEqual(served["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertEqual(len(served["results"]["benches"]), 8)
+            self.assertIn("someone", served["results"]["benches"][0]["file"])
+            public = json.loads(load_sim_results(path, public=True))
+            self.assertEqual(public["results"]["benches"][0]["file"], "flatness.copper")
+            server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "test-token", sim_results=load_sim_results(path)))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                url = f"http://127.0.0.1:{server.server_port}/api/sim-results"
+                with urlopen(Request(url, headers={"X-Copper-Token": "test-token"})) as response:
+                    self.assertEqual(json.load(response)["results"]["board"], "HowlandPump")
+                with self.assertRaises(HTTPError) as ctx:
+                    urlopen(url)
+                self.assertEqual(ctx.exception.code, 403)
+            finally:
+                server.shutdown(); server.server_close(); thread.join()
+
+    def test_other_json_is_refused_and_no_results_is_an_empty_answer(self):
+        import tempfile
+        from copper_review.__main__ import load_sim_results
+        with tempfile.TemporaryDirectory() as directory:
+            other = Path(directory) / "other.json"
+            other.write_text(json.dumps({"schema": "copperscript-route-board/v1"}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_sim_results(other)
+            other.write_text("{not json", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_sim_results(other)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(None, "test-token"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urlopen(Request(f"http://127.0.0.1:{server.server_port}/api/sim-results", headers={"X-Copper-Token": "test-token"})) as response:
+                self.assertIsNone(json.load(response))
+            # The bundled example is the one JSON file beside the page; other JSON there stays private.
+            with urlopen(f"http://127.0.0.1:{server.server_port}/example.sim-results.json") as response:
+                self.assertEqual(response.headers["Content-Type"], "application/json")
+                self.assertEqual(json.load(response)["schema"], "copperscript-sim/v1")
+        finally:
+            server.shutdown(); server.server_close(); thread.join()
+        from copper_review.__main__ import static_asset
+        self.assertEqual(static_asset("/example.sim-results.json"), ("example.sim-results.json", "application/json"))
+        self.assertIsNone(static_asset("/other.sim-results.json"))
