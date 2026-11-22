@@ -17,6 +17,8 @@ for(const id of ['category','priority','note-status','assembly-part-status','ass
 import {clone,round,padLabel,engineeringText,distanceToSegment,pointInBox,pointInPolygon,padCorners,boxesOverlap,makeAnnotation,makeReview,validateScene,validateReview,validateIssues,refreshContexts,REVIEW_SCHEMA,READABLE_REVIEW_SCHEMAS,ISSUES_SCHEMA} from './core.js';
 import {readEmi,overlayAll,pickFinding,emiBrief,emiSource,emiDocumentKind,findingById,n as emiNumber} from './emi.js';
 import {createEmiPanel} from './emi-panel.js';
+import {readSim,simDocumentKind} from './sim.js';
+import {createSimView} from './sim-panel.js';
 const $ = id => document.getElementById(id);
 const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
 const view3dCanvas=$('view3d-canvas');let view3d=null;
@@ -35,8 +37,10 @@ const electrical=createElectricalReview({message,
   onSelect:sel=>{if(mode==='both')showOnBoard(sel.kind,sel.id,{quiet:true});},
   links:{board:{has:(kind,id)=>!!boardTarget(kind,id),show:(kind,id)=>showOnBoard(kind,id)},
     source:{has:(kind,id)=>!!sourceTarget(kind,id),open:(kind,id)=>openSource(kind,id)}}});
+// Simulation results stand on their own: no board or schematic is needed, and none is checked against them.
+const sim=createSimView({list:$('sim-list'),detail:$('sim-detail'),search:$('sim-search'),filters:$('sim-filters')},{message,onChange:()=>updateHeading()});
 // Both needs a schematic and a board that share parts; an unrelated pair stays apart.
-const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:m==='assembly'?!!state.scene:true;
+const available=m=>m==='electrical'?electrical.hasModel():m==='both'?!!linkSummary()?.both:m==='assembly'?!!state.scene:m==='simulation'?sim.hasModel():true;
 // Side panels fold away per mode; Both starts with the board's panels and the schematic list folded.
 const PANEL_DEFAULTS={both:{'board-left':true,'board-right':true,'schematic-left':true}};
 const folded=(()=>{try{return JSON.parse(localStorage.getItem('copper-review:panels'))||{};}catch{return {};}})();
@@ -53,13 +57,14 @@ for(const button of document.querySelectorAll('.panel-toggle'))button.onclick=()
   applyPanels();
 };
 function setMode(next,{remember=true}={}){
-  if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':'layout';
+  if(!available(next))next=electrical.hasModel()&&!state.scene?'electrical':!state.scene&&sim.hasModel()?'simulation':'layout';
   const changed=next!==mode;mode=next;document.body.dataset.mode=mode;applyPanels();
-  electrical.show(mode==='electrical'||mode==='both');$('pcb-review').hidden=mode==='electrical';$('split').hidden=mode!=='both';
+  electrical.show(mode==='electrical'||mode==='both');$('pcb-review').hidden=mode==='electrical'||mode==='simulation';$('split').hidden=mode!=='both';
+  $('simulation-review').hidden=mode!=='simulation';if(mode==='simulation'&&changed)requestAnimationFrame(()=>sim.redraw());
   if(mode==='assembly'){setTool('component');if(changed)asm.viewSide=null;renderAssembly();}updateRealisticButton();requestDraw();
   for(const b of document.querySelectorAll('#mode-switch [data-mode]')){const m=b.dataset.mode;b.setAttribute('aria-pressed',String(m===mode));b.disabled=!available(m);
     b.title=m==='both'&&b.disabled&&electrical.hasModel()&&state.scene?'The open schematic and board share no part references':'';}
-  $('mode-switch').hidden=!electrical.hasModel()&&!state.scene;
+  $('mode-switch').hidden=!electrical.hasModel()&&!state.scene&&!sim.hasModel();
   updateHeading();
   if(remember)try{localStorage.setItem('copper-review:mode',mode);}catch{}
   // The board canvas changes size with the mode; refit once the layout has settled.
@@ -75,11 +80,14 @@ function linkSummary(){
 }
 function updateHeading(){
   const model=electrical.hasModel()?electrical.model():null,scene=state.scene;
-  const name=model?.name||scene?.board.name;
+  const results=sim.hasModel()?sim.model():null;
+  const name=mode==='simulation'&&results?results.board||results.file:model?.name||scene?.board.name;
   $('board-name').textContent=name||'Open a design to begin';
-  showProjectOrigin(mode==='layout'||mode==='assembly'?scene?.board?.origin||null:electricalOrigin||(mode==='both'?scene?.board?.origin:null)||null);
+  showProjectOrigin(mode==='simulation'?null:mode==='layout'||mode==='assembly'?scene?.board?.origin||null:electricalOrigin||(mode==='both'?scene?.board?.origin:null)||null);
   let meta='';
-  if(mode==='both'){const l=linkSummary();meta=`Linked by reference and net name · ${l.both} parts on both${l.schematicOnly?` · ${l.schematicOnly} schematic only`:''}${l.boardOnly?` · ${l.boardOnly} board only`:''} · not checked against source`;}
+  if(mode==='simulation'&&results){const fails=results.benches.filter(b=>b.verdict==='fail'||b.verdict==='error').length;meta=`Simulation · ${results.benches.length} benches · ${fails?`${fails} failing`:results.status==='pass'?'all pass':results.status} · ${results.file||'sim-results.json'}${results.sha256?` ${results.sha256.slice(0,12)}`:''}${sim.selected()?` · ${sim.selected()}`:''}`;}
+  if(mode==='simulation');
+  else if(mode==='both'){const l=linkSummary();meta=`Linked by reference and net name · ${l.both} parts on both${l.schematicOnly?` · ${l.schematicOnly} schematic only`:''}${l.boardOnly?` · ${l.boardOnly} board only`:''} · not checked against source`;}
   else if(mode==='electrical'&&model)meta=`${model.components.size} components · ${model.nets.size} nets · IR ${electrical.input().sha256.slice(0,12)}`;
   else if(scene)meta=`${scene.components.length} components · ${scene.nets.length} nets · ${scene.tracks.length} tracks · ${scene.vias.length} vias · ${scene.board.sha256.slice(0,12)}`;
   $('board-meta').textContent=meta;$('board-meta').title=meta;
@@ -107,6 +115,7 @@ $('show-about').onclick=()=>{const box=document.createElement('div');
     'Layout review shows board placement and routing from a CopperScript board export. Routing completeness is never inferred from track counts, and net guides show membership, not verified connections.',
     'In Both, the schematic and the board are linked by reference and net name. Nothing proves the board was built from that exact source.',
     'EMI screening shows the findings stored in a CopperScript run report (route-report.json): hot loop, switch-node copper, victim pads and the conducted spectrum. They are screening estimates that rank likely noise sources, not a compliance measurement and never a pass or fail; the report names no board hash, so nothing proves it belongs to the open board.',
+    'Simulation shows the results of a copper sim run (sim-results.json): each bench\'s plots, measures against their limits, noise, poles, Monte Carlo runs, rails and stress, as the solver wrote them. Nothing is simulated again here, and nothing checks the results against an open board or schematic.',
     'Assembly tracks a manual build part by part, from the board and an optional CopperScript assembly sheet. Ticks record what was done at the bench; they do not verify placement, orientation or solder joints.',
     'Everything is processed in this browser (or by the local server you started). Notes save in this browser per design revision; export them to keep or share.'])
     {const p=document.createElement('p');p.textContent=text;box.append(p);}
@@ -129,6 +138,7 @@ async function openDesignFile(file,{origin=null,prepared=null,revision=beginOpen
       value.sources={files:{[`workspace/${file.name}`]:new TextDecoder().decode(bytes)},root:'',entry:file.name};
     }else if(file.name.toLowerCase().endsWith('.json')){
       value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+      if(simDocumentKind(value)){if(revision!==documentRevision)return false;await openSimResults(value,file.name,bytes);return true;}
       if(value.schema==='copperscript-ir/v0.1')value=await electricalInput(bytes,file.name);
       // Notes and issue lists belong to an open design (openFiles adds them); a URL can still name one.
       else if(emiDocumentKind(value))throw Error(`${file.name} is a CopperScript run report, not a design. Open its board first, then add it with Open → File….`);
@@ -189,16 +199,24 @@ $('project-open').onclick=()=>{const file=projectFiles[Number($('project-files')
 async function openFiles(list){
   const files=[...list];if(!files.length)return;
   const kinds=await Promise.all(files.map(async file=>{
-    const lower=file.name.toLowerCase();if(!lower.endsWith('.json')&&!lower.endsWith('.lock'))return {file,kind:'design'};
+    const lower=file.name.toLowerCase();
+    if(lower.endsWith('.csv'))return {file,kind:'sim-csv'};
+    if(!lower.endsWith('.json')&&!lower.endsWith('.lock'))return {file,kind:'design'};
     if(file.size>50*1024*1024)throw Error(`${file.name} exceeds 50 MiB.`);
     const bytes=await file.arrayBuffer();
     let value;try{value=JSON.parse(new TextDecoder().decode(bytes));}catch{throw Error(`${file.name} is not valid JSON.`);}
     if(lower.endsWith('.lock')){if(!isAssemblyLock(value))throw Error(`${file.name} is not a CopperScript assembly.lock.`);return {file,kind:'assembly-lock',value,sha256:await sha256(bytes)};}
+    if(simDocumentKind(value))return {file,kind:'sim',value,bytes};
     const kind=emiDocumentKind(value)?'emi':value?.schema===ISSUES_SCHEMA?'issues':value?.schema&&isAssemblyLock(value)?'assembly-lock':value?.schema===ASSEMBLY_SHEET_SCHEMA?'assembly-sheet':value?.schema===ASSEMBLY_PROGRESS_SCHEMA?'assembly-progress':READABLE_REVIEW_SCHEMAS.includes(value?.schema)?'layout-review':value?.schema==='copper-electrical-review/v1'?'electrical-review':'design';
     return {file,kind,value,...(kind==='emi'?{sha256:await sha256(bytes)}:{})};
   }));
   for(const {file}of kinds.filter(k=>k.kind==='design'))await openDesignFile(file);
-  for(const {file,kind,value,sha256:digest}of kinds.filter(k=>k.kind!=='design')){
+  // Simulation results first, then the CSVs beside them (which only fill vectors the results lack).
+  for(const {file,value,bytes}of kinds.filter(k=>k.kind==='sim'))await openSimResults(value,file.name,bytes);
+  for(const {file}of kinds.filter(k=>k.kind==='sim-csv')){
+    const r=sim.addCsv(file.name,await file.text());setMode('simulation');
+    message(r.filled?`${file.name}: drew ${r.filled} vector(s) of ${r.bench.name} that sim-results.json lacks.`:`${file.name}: sim-results.json already carries every vector of ${r.bench.name}; nothing to add.`);}
+  for(const {file,kind,value,sha256:digest}of kinds.filter(k=>!['design','sim','sim-csv'].includes(k.kind))){
     if(kind==='emi'){if(!state.scene)throw Error(`Open the board before the run report ${file.name}.`);loadEmi(value,file.name,digest);if(mode==='electrical')setMode('layout');}
     else if(kind==='issues'){if(!state.scene)throw Error(`Open the board before the issue list ${file.name}.`);loadIssues(value);}
     else if(kind.startsWith('assembly-')){const what={'assembly-sheet':'sheet','assembly-lock':'lock','assembly-progress':'progress'}[kind];
@@ -251,6 +269,20 @@ $('folder-boards').ondblclick=()=>$('folder-open').click();
 $('folder-close').onclick=()=>$('folder-dialog').close();
 $('compiler-cancel').onclick=()=>{beginOpen();$('compiler-cancel').hidden=true;message('Compilation cancelled. Previous design remains open.');};
 $('empty-example').onclick=()=>$('compiler-example').click();
+$('empty-sim-example').onclick=()=>$('sim-example').click();
+$('sim-example').onclick=guarded(async()=>{const response=await fetch(new URL('./example.sim-results.json',import.meta.url));if(!response.ok)throw Error('Example is unavailable.');const bytes=await response.arrayBuffer();await openSimResults(JSON.parse(new TextDecoder().decode(bytes)),'example.sim-results.json',bytes);});
+/** Open a parsed sim-results.json in the Simulation view; another schema version is refused with the reason, keeping what is open. */
+let simRevision=0;
+async function openSimResults(value,name,bytes,{remember=true,digest=null}={}){
+  // The latest request wins: results opened while the served or remembered ones still load replace them, not the other way round.
+  const revision=++simRevision;
+  const model=readSim(value,{name,sha256:digest||(bytes?await sha256(bytes):null)});
+  if(revision!==simRevision)return;
+  if(model.error)throw Error(`${model.error}${sim.hasModel()?' The open results remain.':''}`);
+  sim.load(model);setMode('simulation');
+  message(`Opened ${name} · ${model.benches.length} benches${model.notes.length?` · ${model.notes.length} note(s)`:''}`);
+  if(remember)try{await rememberDocument({name,sha256:model.sha256,value},documentBaseline,'simulation');}catch{message('The results could not be saved in browser storage; open the file again after a reload.',true);}
+}
 $('compiler-example').onclick=guarded(async()=>{const response=await fetch(new URL('./example.copper',import.meta.url));if(!response.ok)throw Error('Example is unavailable.');await openDesignFile(new File([await response.arrayBuffer()],'example.copper'));});
 // Board colours per theme. The canvas cannot read the stylesheet, so they sit here beside its tokens.
 const BOARD_COLORS={
@@ -1037,7 +1069,7 @@ function endDrag(e){if(state.drag && state.mode==='region' && !state.drag.pan &&
 canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
 canvas.addEventListener('pointerleave',clearHover);
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.ctrlKey || e.metaKey || e.altKey)return;
-  if(mode==='electrical'||mode==='assembly'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
+  if(mode==='electrical'||mode==='assembly'||mode==='simulation'||mode==='both'&&!e.target.closest?.('#pcb-review')||document.querySelector('dialog[open]'))return;
   const keys={c:'component',n:'net',r:'region'};if(keys[e.key.toLowerCase()])setTool(keys[e.key.toLowerCase()]);if(e.key.toLowerCase()==='v')toggleRealistic();if(e.key.toLowerCase()==='t')setFlipped(!state.flipped);if(e.key.toLowerCase()==='f')$('fit').click();if(e.key==='Escape'){clearSelection();resetForm();deselectEmi();}});
 // A resize (panel folded, splitter, window) refits a fitted board and otherwise keeps the middle of the view in place.
 new ResizeObserver(()=>{const rect=canvas.parentElement.getBoundingClientRect();if(!rect.width||!rect.height)return;const first=state.width===0;
@@ -1317,9 +1349,9 @@ document.addEventListener('keydown',e=>{
   if(document.querySelector('dialog[open]')||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='o'){e.preventDefault();$('any-file').click();return;}
   if(e.ctrlKey||e.metaKey||e.altKey)return;
-  const key=e.key.toLowerCase(),modes={e:'electrical',l:'layout',b:'both',a:'assembly'};
+  const key=e.key.toLowerCase(),modes={e:'electrical',l:'layout',b:'both',a:'assembly',m:'simulation'};
   if(modes[key]&&available(modes[key])){e.preventDefault();setMode(modes[key]);return;}
-  if(key==='s'&&mode!=='assembly'){const inBoard=mode==='layout'||mode==='both'&&e.target.closest?.('#pcb-review');
+  if(key==='s'&&mode!=='assembly'&&mode!=='simulation'){const inBoard=mode==='layout'||mode==='both'&&e.target.closest?.('#pcb-review');
     if(inBoard)showInSchematic();else{const sel=electrical.selection();if(sel)showOnBoard(sel.kind,sel.id);}e.preventDefault();}
 });
 // ---- The divider between schematic and board ----------------------------------------------------
@@ -1351,6 +1383,12 @@ startupReady=guarded(async()=>{const revision=documentRevision;let data=null,pro
   // Opening waits for startup to finish; this is startup, so release that wait first.
   if(project){startupReady=null;await openServedProject(project);}
   else{const schematic=await remembered('electrical')||(isSchematic(legacy)?legacy:null)||(isSchematic(data)?data:null);if(schematic&&revision===documentRevision)loadDocument(schematic);}
+  // Simulation results served with --sim-results win over those remembered here.
+  const simStart=simRevision;let served=null;if(localServer)try{const response=await fetch('./api/sim-results',{headers:{'X-Copper-Token':token},cache:'no-store'});const doc=await response.json();if(response.ok&&doc)served=doc;}catch(error){message(`The served simulation results could not be read (${error.message}).`,true);}
+  if(revision===documentRevision&&simRevision===simStart&&!sim.hasModel()){
+    const saved=served?{name:served.file,sha256:served.sha256,value:served.results}:await remembered('simulation');
+    if(saved?.value)try{await openSimResults(saved.value,saved.name||'sim-results.json',null,{remember:!served,digest:saved.sha256||null});}catch(error){message(error.message,true);}
+  }
   // A served schematic and board open side by side; otherwise the mode last chosen here, if any.
-  if(data&&project)setMode('both',{remember:false});else if(preferred)setMode(preferred,{remember:false});
+  if(data&&project)setMode('both',{remember:false});else if(served&&!data)setMode('simulation',{remember:false});else if(preferred)setMode(preferred,{remember:false});
 })();

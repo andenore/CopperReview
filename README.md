@@ -16,7 +16,9 @@ A review tool for CopperScript designs with two halves that can be open at once:
 [Assembly tracking](#assembly-tracking). A CopperScript run's `route-report.json` adds an
 **EMI screening** layer to the board: hot loop, switch-node copper and victim pads with the
 findings' numbers and conducted spectrum, all screening estimates; see
-[EMI screening](#emi-screening).
+[EMI screening](#emi-screening). **Simulation** (M) reads a `copper sim` run's
+`sim-results.json` on its own, no board needed: benches with their verdicts, failing limits first,
+and each bench's plots drawn interactively; see [Simulation results](#simulation-results).
 
 The **Electrical · Layout · Both** switch in the top bar picks what is shown (E, L, B).
 **Both** puts the schematic and the board side by side with a draggable divider;
@@ -30,8 +32,8 @@ GitHub** at the pinned commit or **Open in VS Code** for a project served locall
 
 Everything opens from one **Open** menu, or by dropping files on the page:
 **File…** (Ctrl+O) recognizes a board export, compiled IR, `.copper` source, saved
-scene, layout review, electrical review, CopperScript issue list or run report
-(`route-report.json`) by its contents,
+scene, layout review, electrical review, CopperScript issue list, run report
+(`route-report.json`) or simulation results (`sim-results.json` and its CSVs) by its contents,
 and accepts several at once. Opening a board keeps the open schematic, and the other
 way round. **Project folder…** compiles a local project (the folder holding
 `board.copper` and `copper.mod`) in the browser: sources never leave the computer,
@@ -63,6 +65,7 @@ make serve PROJECT=../BysseControl-32 HOST=0.0.0.0 OPEN=no   # reachable from ot
 make serve PROJECT=../BysseControl-32 BOARD=../BysseControl-32/build/board.kicad_pcb   # schematic and board, linked
 make serve IR=build/electrical.ir.json       # or a compiled IR; BOARD=… alone for a PCB
 make serve BOARD=run/board.kicad_pcb REPORT=run/route-report.json   # board with its EMI screening
+make serve SIM=build/sim/sim-results.json    # a copper sim run in the Simulation view
 make test
 ```
 
@@ -145,6 +148,27 @@ These are **screening estimates, not a compliance measurement**: they rank likel
 are never a pass or fail. A report without an `emi` section, or from an older CopperScript, opens
 with a note saying what is missing. See [EMI screening review](docs/emi-review.md) and the
 [review contract](docs/review-format.md#emi-findings).
+
+## Simulation results
+
+`copper sim BOARD` writes `sim-results.json` (schema `copperscript-sim/v1`) with a page and CSV per
+bench. Open the JSON (**Open → File…**, or drop it; also in the static build), serve it with
+`copper-review --sim-results build/sim/sim-results.json`, or try **Open → Example simulation**
+(CopperScript's `examples/simulation/howland_pump` run, self-written models, bundled as
+`copper_review/web/example.sim-results.json`).
+
+The **Simulation** mode lists the benches with pass, fail, error or *no limits* (nothing judged) and
+opens on an overview with the failing limits first. A bench shows its plots on a shared axis (Bode
+magnitude and phase, noise densities, transient waveforms, stepped families), with a cursor readout,
+cursors A and B with their difference, box zoom, pan and log axes where the data is log, steps and
+plots toggled from the legend; then spectra (dBc against the fundamental, integration floor shaded),
+the measures with value, limit and margin per step, noise contributors, the pole map, Monte Carlo
+histograms or worst-case corners, rail currents, component stress and the solver's notes (such as a
+steady-state fallback). Light and dark themes and narrow windows are supported.
+
+The JSON already carries every vector the CSVs hold; a CSV is only needed for a file that lacks some,
+and the bench then names it. A file of another schema version is refused with a message. Nothing is
+re-simulated or checked against an open design. See [Simulation results review](docs/simulation-review.md).
 
 ## Review workflow
 
@@ -385,7 +409,7 @@ IR; it supplies no PCB geometry. `.copper` source files must be compiled externa
 
 ```powershell
 python -m unittest discover -s tests -v
-node --test tests/core.test.js tests/emi.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js
+node --test tests/core.test.js tests/emi.test.js tests/sim.test.js tests/electrical.test.js tests/topology.test.js tests/compiler.test.js
 ```
 
 Browser integration test (optional Playwright installation, not a runtime
